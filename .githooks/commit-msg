@@ -1,0 +1,14 @@
+#!/bin/sh
+# shipshape: rejects commits that change code without updating the project memory docs.
+# Enabled per clone with:  git config core.hooksPath .githooks
+# Bypass for a change with no behaviour change: put [no-docs] anywhere in the commit message.
+
+msg_file="$1"
+grep -q '\[no-docs\]' "$msg_file" 2>/dev/null && exit 0
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+git_dir=$(git rev-parse --git-dir 2>/dev/null)
+[ -f "$git_dir/MERGE_HEAD" ] && exit 0   # merges carry the docs of the branches they merge
+[ -f "$root/.shipshape/docs-gate.sh" ] || exit 0
+
+git diff --cached --name-only | sh "$root/.shipshape/docs-gate.sh"

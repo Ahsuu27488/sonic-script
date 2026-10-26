@@ -1,0 +1,31 @@
+# Secrets: API keys live in eval/.env (see eval/.env.example). Never commit them.
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Voice recordings are personal data: kept local until the owner decides to publish them (D-004).
+spec/fixtures/audio/
+# Benchmark runs (raw results + generated reports) are local; the summary goes into docs.
+eval/results/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Rust / Android (later milestones)
+target/
+android/.gradle/
+android/build/
+android/local.properties

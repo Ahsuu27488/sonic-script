@@ -1,0 +1,4 @@
+# Personal and per-run files; the rest of .shipshape/ is shared and committed.
+local.json
+last-report.md
+runs/

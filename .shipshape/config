@@ -1,0 +1,18 @@
+# shipshape project settings. Plain key=value, one per line (the last line for a key wins).
+# Read by .githooks/*, .shipshape/context.sh, .shipshape/docs-gate.sh, shipshape-run and the agents.
+
+# Folders or files whose changes count as code (space-separated prefixes, relative to the repo root).
+code_paths=eval/ spec/ design/ desktop/ android/
+
+# Docs that must be committed together with any code change.
+docs_required=docs/STATUS.md docs/CHANGELOG.md
+
+# Commands that prove the code works. Run by people, agents, CI and shipshape-run. Join with &&.
+check_commands=cd eval && python -m ruff check . && python -m pytest -q
+
+# The branch nobody commits to directly.
+default_branch=main
+
+# Commands that touch a live system (deploys, production DB, restarting a running service).
+# Agents ask before running them; unattended runs never run them. Extended regex alternatives, separated by |.
+live_commands=

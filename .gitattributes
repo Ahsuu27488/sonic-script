@@ -1,0 +1,4 @@
+# shipshape: hook and script files must keep LF line endings, or sh fails on Windows checkouts (CRLF).
+.githooks/* text eol=lf
+.shipshape/* text eol=lf
+*.sh text eol=lf

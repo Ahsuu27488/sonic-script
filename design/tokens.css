@@ -1,0 +1,100 @@
+/* SonicScript design tokens: the source of truth for every surface (see DESIGN.md).
+   Native apps (Rust/Tauri, Kotlin) copy these values; keep them in sync when one changes. */
+
+:root {
+  color-scheme: dark;
+
+  --bg: oklch(0.14 0.01 270);
+  --surface-1: oklch(0.17 0.01 270);
+  --surface-2: oklch(0.20 0.012 270);
+  --surface-3: oklch(0.23 0.014 270);
+  --border: oklch(1 0 0 / 0.08);
+  --border-strong: oklch(1 0 0 / 0.14);
+  --text-1: oklch(1 0 0 / 0.92);
+  --text-2: oklch(1 0 0 / 0.64);
+  --text-3: oklch(1 0 0 / 0.44);
+
+  --accent: oklch(0.80 0.14 70);
+  --accent-soft: oklch(0.80 0.14 70 / 0.16);
+  --on-accent: oklch(0.18 0.03 60);
+  --ok: oklch(0.78 0.13 160);
+  --ok-soft: oklch(0.78 0.13 160 / 0.14);
+  --warn: oklch(0.82 0.13 95);
+  --warn-soft: oklch(0.82 0.13 95 / 0.14);
+  --danger: oklch(0.70 0.17 25);
+  --danger-soft: oklch(0.70 0.17 25 / 0.14);
+
+  --font-ui: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-urdu: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", serif;
+  --font-devanagari: "Noto Sans Devanagari", "Nirmala UI", sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --text-display: clamp(2.25rem, 1.2rem + 4.5vw, 5.5rem);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-20: 80px;
+
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-pill: 999px;
+
+  --shadow-raise: inset 0 1px 0 oklch(1 0 0 / 0.06), 0 8px 24px oklch(0 0 0 / 0.28);
+  --ring-glow: 0 0 0 1px var(--accent-soft), 0 0 24px var(--accent-soft);
+
+  --dur-fast: 120ms;
+  --dur-ui: 200ms;
+  --dur-exit: 160ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: oklch(0.985 0.004 80);
+    --surface-1: oklch(0.965 0.006 80);
+    --surface-2: oklch(0.94 0.008 80);
+    --surface-3: oklch(0.91 0.01 80);
+    --border: oklch(0 0 0 / 0.09);
+    --border-strong: oklch(0 0 0 / 0.16);
+    --text-1: oklch(0.20 0.01 270);
+    --text-2: oklch(0.20 0.01 270 / 0.68);
+    --text-3: oklch(0.20 0.01 270 / 0.50);
+    --accent: oklch(0.62 0.15 60);
+    --accent-soft: oklch(0.62 0.15 60 / 0.14);
+    --on-accent: oklch(0.99 0.01 80);
+    --ok: oklch(0.55 0.12 160);
+    --ok-soft: oklch(0.55 0.12 160 / 0.12);
+    --warn: oklch(0.60 0.13 85);
+    --warn-soft: oklch(0.60 0.13 85 / 0.14);
+    --danger: oklch(0.55 0.19 25);
+    --danger-soft: oklch(0.55 0.19 25 / 0.12);
+    --shadow-raise: 0 1px 2px oklch(0 0 0 / 0.06), 0 8px 24px oklch(0 0 0 / 0.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-ui: 0ms;
+    --dur-exit: 0ms;
+  }
+}

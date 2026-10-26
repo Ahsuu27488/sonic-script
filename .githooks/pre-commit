@@ -1,0 +1,55 @@
+#!/bin/sh
+# shipshape: keeps commits off the default branch and secrets out of the repository.
+#   - refuses a commit on the default branch (the first commit of a new repository is allowed);
+#     a human who really means it: SHIPSHAPE_ALLOW_MAIN=1 git commit ...
+#   - refuses .env / key files and lines that look like real credentials. A line that only looks like one
+#     (a test fixture) can carry the marker  shipshape:allow-secret  on the same line.
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+config="$root/.shipshape/config"
+cfg() { [ -f "$config" ] && sed -n "s/^$1=//p" "$config" | tail -n 1 | tr -d '\r'; }
+
+# 1. Default branch
+if git rev-parse --verify -q HEAD >/dev/null 2>&1 && [ "${SHIPSHAPE_ALLOW_MAIN:-0}" != "1" ]; then
+    branch=$(git symbolic-ref --short -q HEAD)
+    default=$(cfg default_branch)
+    [ -n "$default" ] || default=main
+    if [ "$branch" = "$default" ] || [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+        if [ ! -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]; then
+            {
+                echo ""
+                echo "shipshape: no commits directly on '$branch'. Make a branch and commit there:"
+                echo "    git switch -c feat/<short-name>"
+                echo "  (A deliberate exception: SHIPSHAPE_ALLOW_MAIN=1 git commit ...)"
+            } >&2
+            exit 1
+        fi
+    fi
+fi
+
+# 2. Secret files
+bad_files=$(git diff --cached --name-only --diff-filter=AM | grep -E '(^|/)(\.env(\..+)?|id_rsa|id_ed25519|.*\.pem|.*\.p12|.*\.pfx)$' | grep -vE '\.env\.(example|sample|template)$')
+if [ -n "$bad_files" ]; then
+    {
+        echo ""
+        echo "shipshape: these files look like secrets and must not be committed:"
+        printf '%s\n' "$bad_files" | sed 's/^/    /'
+        echo "  Unstage them (git restore --staged <file>) and add them to .gitignore."
+    } >&2
+    exit 1
+fi
+
+# 3. Secret-looking lines
+pattern='AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|sk-[A-Za-z0-9_-]{32,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}'
+hits=$(git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++' | grep -E "$pattern" | grep -v 'shipshape:allow-secret')
+if [ -n "$hits" ]; then
+    {
+        echo ""
+        echo "shipshape: the staged changes contain what looks like a real credential:"
+        printf '%s\n' "$hits" | cut -c1-12 | sed 's/^/    /; s/$/... (hidden)/'
+        echo "  Move it to an environment variable or an ignored .env file. If it is a fake value in a test,"
+        echo "  add the comment  shipshape:allow-secret  on that line."
+    } >&2
+    exit 1
+fi
+exit 0

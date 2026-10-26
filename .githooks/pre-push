@@ -1,0 +1,33 @@
+#!/bin/sh
+# shipshape: the default branch only changes through pull requests.
+# Refuses pushing to (or deleting) the default branch on the remote. Creating it for the first time
+# (a new repository's first push) is allowed. A deliberate exception: SHIPSHAPE_ALLOW_MAIN=1 git push ...
+
+[ "${SHIPSHAPE_ALLOW_MAIN:-0}" = "1" ] && exit 0
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+config="$root/.shipshape/config"
+default=""
+[ -f "$config" ] && default=$(sed -n 's/^default_branch=//p' "$config" | tail -n 1 | tr -d '\r')
+[ -n "$default" ] || default=main
+
+zero="0000000000000000000000000000000000000000"
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$remote_ref" in
+        "refs/heads/$default"|refs/heads/main|refs/heads/master) ;;
+        *) continue ;;
+    esac
+    case "$remote_sha" in
+        *[!0]*) ;;            # the branch exists on the remote: protected
+        *) continue ;;        # first push of a new repository's default branch: allowed
+    esac
+    {
+        echo ""
+        echo "shipshape: '${remote_ref#refs/heads/}' only changes through a pull request."
+        echo "  Push your branch instead (git push -u origin <branch>) and open a PR."
+        echo "  (A deliberate exception: SHIPSHAPE_ALLOW_MAIN=1 git push ...)"
+    } >&2
+    status=1
+done
+exit $status
