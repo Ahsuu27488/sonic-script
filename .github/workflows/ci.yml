@@ -1,0 +1,48 @@
+# CI (written by shipshape-adopt, adapted for SonicScript). Runs the M0 benchmark harness checks.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eval
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Tests
+        run: python -m pytest -q
+
+  # shipshape: a pull request that changes code must also update the memory docs (STATUS, CHANGELOG).
+  # Commits whose message contains [no-docs] are left out. Same rule as .githooks/commit-msg, but it also
+  # catches commits made with --no-verify or by tools that skip hooks.
+  docs-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Memory docs updated with the code
+        run: |
+          base="origin/${{ github.base_ref }}"
+          code=$(for c in $(git rev-list --no-merges "$base"..HEAD); do
+                   git log -1 --format=%B "$c" | grep -q '\[no-docs\]' && continue
+                   git diff-tree --no-commit-id --name-only -r "$c"
+                 done | sort -u)
+          docs=$(git diff --name-only "$base"...HEAD | grep '^docs/' || true)
+          printf '%s\n%s\n' "$code" "$docs" | sort -u | sh .shipshape/docs-gate.sh

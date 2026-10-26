@@ -30,6 +30,33 @@ purple AI look and alarm red, and is not a political colour in Pakistan or India
 *Why:* recordings of the owner's voice are personal data and the repo will become public; publishing them is
 the owner's call later. *Where:* `.gitignore`.
 
+**D-005 Benchmark in Python; the Windows app in Rust.** (2026-10-27)
+M0 (`eval/`) is a Python package; the always-on desktop app (M1+) will be Rust with a Tauri shell.
+*Why:* the benchmark only records audio and calls APIs, so Python is fastest to build; the desktop app runs all
+day and must be small, low on memory and less likely to be flagged by antivirus. *Where:* `eval/`,
+`blueprint.md` §5.2.
+
+**D-006 Default hotkey: hold Right Ctrl.** (2026-10-27)
+Push-to-talk on Right Ctrl, configurable (mouse side button offered).
+*Why:* one key, does nothing on its own in almost every app, and avoids the terminal shortcuts that Claude Code
+and Codex users rely on. *Where:* `blueprint.md` §3.1, §12 (implemented in M1).
+
+**D-007 Engines must write nothing when nobody speaks: no-speech marker now, voice detection in the apps.**
+(2026-10-27)
+The Gemini prompt asks for `[no speech]` on silence/noise and `clean_output` turns it into empty text; the test
+set includes two silence clips and the report's "Quiet" column scores them. The apps will gate audio with a
+local voice detector before calling any engine.
+*Why:* in the first probe Gemini invented a full sentence from 1 s of near-silence, and all Whisper engines
+still invent words ("shukriya", "music"); in a dictation app that text would be typed into the user's chat.
+*Where:* `spec/prompts/transcribe-roman-v1.md` rule 8, `eval/sonic_eval/engines.py` `clean_output`,
+`eval/sonic_eval/scoring.py` `score`.
+
+**D-008 Engine candidates follow what free keys can actually use.** (2026-10-27)
+`gemini-2.5-flash-lite` dropped (closed to new users); Groq `llama-3.1-8b-instant` replaced by
+`openai/gpt-oss-120b` (not offered on standard keys); `whisper-large-v3` (full) added next to the turbo model.
+*Why:* found by `probe` with the owner's keys; the benchmark must test engines users can really get.
+*Where:* `spec/providers.json`.
+
 <!-- Template for the next entry:
 
 **D-00N <Decision in one line>.** (YYYY-MM-DD)

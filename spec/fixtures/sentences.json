@@ -1,0 +1,472 @@
+{
+ "version": 1,
+ "about": "M0 test set. Read each 'text' aloud naturally, the way you would say it to a friend or an AI agent (don't read it word by word). 'english' lists words that must come out in English spelling. Audio files go to spec/fixtures/audio/<id>.wav (not committed). Silence items (text empty) check that an engine writes nothing when nobody speaks.",
+ "sentences": [
+  {
+   "id": "ur-01",
+   "category": "urdu",
+   "text": "Aaj mausam bohat acha hai, chalo bahar chalte hain.",
+   "english": []
+  },
+  {
+   "id": "ur-02",
+   "category": "urdu",
+   "text": "Main thori der mein ghar pohanch jaunga, khana garam rakhna.",
+   "english": []
+  },
+  {
+   "id": "ur-03",
+   "category": "urdu",
+   "text": "Ammi ne kaha hai ke shaam ko sabzi le aana.",
+   "english": []
+  },
+  {
+   "id": "ur-04",
+   "category": "urdu",
+   "text": "Yaar tum kal kahan the? Main tumhara intezar karta raha.",
+   "english": []
+  },
+  {
+   "id": "ur-05",
+   "category": "urdu",
+   "text": "Mujhe samajh nahi aa raha ke yeh kaam kaise karna hai.",
+   "english": []
+  },
+  {
+   "id": "ur-06",
+   "category": "urdu",
+   "text": "Shukriya bhai, aap ne bohat madad ki.",
+   "english": []
+  },
+  {
+   "id": "ur-07",
+   "category": "urdu",
+   "text": "Agar barish ruk gayi to hum shaam ko cricket khelenge.",
+   "english": [
+    "cricket"
+   ]
+  },
+  {
+   "id": "ur-08",
+   "category": "urdu",
+   "text": "Kya tum mujhe kal subah das baje utha sakte ho?",
+   "english": []
+  },
+  {
+   "id": "mx-01",
+   "category": "mixed-tech",
+   "text": "PR merge kardo aur deployment check karlo.",
+   "english": [
+    "PR",
+    "merge",
+    "deployment",
+    "check"
+   ]
+  },
+  {
+   "id": "mx-02",
+   "category": "mixed-tech",
+   "text": "Is function ko refactor karo aur tests bhi likh do.",
+   "english": [
+    "function",
+    "refactor",
+    "tests"
+   ]
+  },
+  {
+   "id": "mx-03",
+   "category": "mixed-tech",
+   "text": "Build fail ho raha hai, logs dekh ke batao kya error hai.",
+   "english": [
+    "build",
+    "fail",
+    "logs",
+    "error"
+   ]
+  },
+  {
+   "id": "mx-04",
+   "category": "mixed-tech",
+   "text": "Database ka backup le lo phir migration run karna.",
+   "english": [
+    "database",
+    "backup",
+    "migration",
+    "run"
+   ]
+  },
+  {
+   "id": "mx-05",
+   "category": "mixed-tech",
+   "text": "Login page ka button mobile pe sahi nahi dikh raha.",
+   "english": [
+    "login",
+    "page",
+    "button",
+    "mobile"
+   ]
+  },
+  {
+   "id": "mx-06",
+   "category": "mixed-tech",
+   "text": "API key environment variable mein daal do, code mein hardcode mat karna.",
+   "english": [
+    "API",
+    "key",
+    "environment",
+    "variable",
+    "code",
+    "hardcode"
+   ]
+  },
+  {
+   "id": "mx-07",
+   "category": "mixed-tech",
+   "text": "Main branch pe direct push mat karo, pehle pull request banao.",
+   "english": [
+    "main",
+    "branch",
+    "push",
+    "pull",
+    "request"
+   ]
+  },
+  {
+   "id": "mx-08",
+   "category": "mixed-tech",
+   "text": "Server ki memory bohat zyada use ho rahi hai, restart karna parega.",
+   "english": [
+    "server",
+    "memory",
+    "use",
+    "restart"
+   ]
+  },
+  {
+   "id": "mx-09",
+   "category": "mixed-tech",
+   "text": "Is component ki styling dark mode mein kharab ho jaati hai.",
+   "english": [
+    "component",
+    "styling",
+    "dark",
+    "mode"
+   ]
+  },
+  {
+   "id": "mx-10",
+   "category": "mixed-tech",
+   "text": "Meeting ko kal tak postpone kar do, client ne abhi feedback nahi diya.",
+   "english": [
+    "meeting",
+    "postpone",
+    "client",
+    "feedback"
+   ]
+  },
+  {
+   "id": "mx-11",
+   "category": "mixed-tech",
+   "text": "Laptop slow chal raha hai, shayad RAM upgrade karni paregi.",
+   "english": [
+    "laptop",
+    "slow",
+    "RAM",
+    "upgrade"
+   ]
+  },
+  {
+   "id": "mx-12",
+   "category": "mixed-tech",
+   "text": "Invoice email kar do aur payment ka status update kar dena.",
+   "english": [
+    "invoice",
+    "email",
+    "payment",
+    "status",
+    "update"
+   ]
+  },
+  {
+   "id": "mx-13",
+   "category": "mixed-tech",
+   "text": "Docker container start nahi ho raha, port already use mein hai.",
+   "english": [
+    "Docker",
+    "container",
+    "start",
+    "port",
+    "already",
+    "use"
+   ]
+  },
+  {
+   "id": "mx-14",
+   "category": "mixed-tech",
+   "text": "Yeh feature next release mein daalte hain, abhi bug fix pe focus karo.",
+   "english": [
+    "feature",
+    "next",
+    "release",
+    "bug",
+    "fix",
+    "focus"
+   ]
+  },
+  {
+   "id": "ag-01",
+   "category": "agent",
+   "text": "Claude, is repo ka structure samjhao aur batao main entry point kahan hai.",
+   "english": [
+    "Claude",
+    "repo",
+    "structure",
+    "main",
+    "entry",
+    "point"
+   ]
+  },
+  {
+   "id": "ag-02",
+   "category": "agent",
+   "text": "Saare console logs hata do aur unused imports bhi saaf kar do.",
+   "english": [
+    "console",
+    "logs",
+    "unused",
+    "imports"
+   ]
+  },
+  {
+   "id": "ag-03",
+   "category": "agent",
+   "text": "Pehle plan likho, phir mujhse poocho, us ke baad code change karna.",
+   "english": [
+    "plan",
+    "code",
+    "change"
+   ]
+  },
+  {
+   "id": "ag-04",
+   "category": "agent",
+   "text": "Is error ka root cause dhoondo, sirf symptom fix mat karna.",
+   "english": [
+    "error",
+    "root",
+    "cause",
+    "symptom",
+    "fix"
+   ]
+  },
+  {
+   "id": "ag-05",
+   "category": "agent",
+   "text": "Codex se kaho ke yeh tests parallel mein chalaye aur report bheje.",
+   "english": [
+    "Codex",
+    "tests",
+    "parallel",
+    "report"
+   ]
+  },
+  {
+   "id": "ag-06",
+   "category": "agent",
+   "text": "README update karo, installation steps aur screenshots add karo.",
+   "english": [
+    "README",
+    "update",
+    "installation",
+    "steps",
+    "screenshots",
+    "add"
+   ]
+  },
+  {
+   "id": "en-01",
+   "category": "english",
+   "text": "Can you send me the updated design files by tomorrow evening?",
+   "english": [
+    "send",
+    "updated",
+    "design",
+    "files",
+    "tomorrow",
+    "evening"
+   ]
+  },
+  {
+   "id": "en-02",
+   "category": "english",
+   "text": "The deployment failed because the environment variables were missing.",
+   "english": [
+    "deployment",
+    "failed",
+    "environment",
+    "variables",
+    "missing"
+   ]
+  },
+  {
+   "id": "en-03",
+   "category": "english",
+   "text": "Let's schedule a quick call to review the pull request.",
+   "english": [
+    "schedule",
+    "quick",
+    "call",
+    "review",
+    "pull",
+    "request"
+   ]
+  },
+  {
+   "id": "en-04",
+   "category": "english",
+   "text": "Please write unit tests for the payment module before merging.",
+   "english": [
+    "unit",
+    "tests",
+    "payment",
+    "module",
+    "merging"
+   ]
+  },
+  {
+   "id": "en-05",
+   "category": "english",
+   "text": "I think we should cache the results instead of calling the API every time.",
+   "english": [
+    "cache",
+    "results",
+    "calling",
+    "API"
+   ]
+  },
+  {
+   "id": "en-06",
+   "category": "english",
+   "text": "Thanks, that fixed it. Everything is working now.",
+   "english": [
+    "thanks",
+    "fixed",
+    "working"
+   ]
+  },
+  {
+   "id": "nm-01",
+   "category": "names-numbers",
+   "text": "Ahsan ko bolo ke Taskvane ka naya version 2.3 release kar de.",
+   "english": [
+    "Ahsan",
+    "Taskvane",
+    "version",
+    "release"
+   ]
+  },
+  {
+   "id": "nm-02",
+   "category": "names-numbers",
+   "text": "Meri flight 14 November ko subah 7:30 baje hai.",
+   "english": [
+    "flight",
+    "November"
+   ]
+  },
+  {
+   "id": "nm-03",
+   "category": "names-numbers",
+   "text": "Total bill 2,450 rupay bana, aadha aadha kar lete hain.",
+   "english": [
+    "total",
+    "bill"
+   ]
+  },
+  {
+   "id": "nm-04",
+   "category": "names-numbers",
+   "text": "GitHub pe issue number 42 khol do aur Hamza ko assign kar do.",
+   "english": [
+    "GitHub",
+    "issue",
+    "number",
+    "Hamza",
+    "assign"
+   ]
+  },
+  {
+   "id": "nm-05",
+   "category": "names-numbers",
+   "text": "Lahore se Karachi ki train 9 baje nikalti hai.",
+   "english": [
+    "Lahore",
+    "Karachi",
+    "train"
+   ]
+  },
+  {
+   "id": "nm-06",
+   "category": "names-numbers",
+   "text": "Gemini aur Groq dono ki API keys settings mein save kar do.",
+   "english": [
+    "Gemini",
+    "Groq",
+    "API",
+    "keys",
+    "settings",
+    "save"
+   ]
+  },
+  {
+   "id": "lg-01",
+   "category": "long",
+   "text": "Dekho yaar, maine kal raat poora code dobara check kiya, aur mujhe lagta hai masla authentication middleware mein hai, kyun ke token expire hone ke baad user ko dobara login page pe redirect nahi kiya ja raha, to tum please is ko dekh lo aur ek proper fix bana do.",
+   "english": [
+    "code",
+    "check",
+    "authentication",
+    "middleware",
+    "token",
+    "expire",
+    "user",
+    "login",
+    "page",
+    "redirect",
+    "please",
+    "proper",
+    "fix"
+   ]
+  },
+  {
+   "id": "lg-02",
+   "category": "long",
+   "text": "Kal ki meeting mein teen cheezein discuss karni hain: pehli, naye designs ka feedback; doosri, launch ki date; aur teesri, marketing ka budget. Sab log apne notes le kar aana.",
+   "english": [
+    "meeting",
+    "discuss",
+    "designs",
+    "feedback",
+    "launch",
+    "date",
+    "marketing",
+    "budget",
+    "notes"
+   ]
+  },
+  {
+   "id": "si-01",
+   "category": "silence",
+   "text": "",
+   "english": [],
+   "say": "Don't speak. Record about 3 seconds of your normal room sound."
+  },
+  {
+   "id": "si-02",
+   "category": "silence",
+   "text": "",
+   "english": [],
+   "say": "Don't speak. Type on your keyboard or tap the desk for about 3 seconds."
+  }
+ ]
+}
