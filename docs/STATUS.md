@@ -20,7 +20,8 @@
 
 ## In progress
 
-- `feat/m0-benchmark` (local branch, no remote yet): M0 harness. Next is the owner recording the 44 clips.
+- PR https://github.com/Ahsuu27488/sonic-script/pull/1 (`feat/m0-benchmark`): M0 harness, open for review.
+  Next is the owner recording the 44 clips (the benchmark results can land on the same branch).
 
 ## Live state
 
@@ -32,7 +33,9 @@
 2. Prices for `gpt-oss-120b` and Gemini 3.x audio are from the 2026-10-26 pricing pages; recheck before launch.
 3. Accuracy folding (`eval/sonic_eval/scoring.py` `VARIANTS`) covers common Roman Urdu spellings only; review
    outputs by ear in the report, not just the score.
-4. License (Apache-2.0 proposed) and the final name are not decided. No GitHub remote yet.
+4. License (Apache-2.0 proposed) and the final name are not decided. Repo is private
+   (github.com/Ahsuu27488/sonic-script); `main` is guarded by the pre-push hook only (GitHub Free can't protect
+   branches of private repos).
 
 ## Next
 
