@@ -56,22 +56,22 @@ KEY_NAMES = ("GROQ_API_KEY", "GEMINI_API_KEY")
 
 
 def load_env(path: Path = ENV_FILE) -> None:
-    """Keys come from the process environment, then (Windows) the user's saved variables, then eval/.env.
+    """Keys come from eval/.env, then the process environment, then (Windows) the user's saved variables.
 
     Reading the saved user variables means a key set with SetEnvironmentVariable(..., "User") works at once,
-    without restarting the terminal or app that launched us.
+    without restarting the terminal or app that launched us. A key in eval/.env wins over both, so the
+    benchmark can use its own key while the global one stays in use by other apps.
     """
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            value = value.strip().strip('"').strip("'")
+            if value:
+                os.environ[key.strip()] = value
     _load_windows_user_env()
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        value = value.strip().strip('"').strip("'")
-        if value:
-            os.environ.setdefault(key.strip(), value)
 
 
 def _load_windows_user_env() -> None:

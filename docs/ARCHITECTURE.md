@@ -53,16 +53,16 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 ## How a benchmark run flows
 
 1. `__main__.main` (`bench`) → `build_engines` + `warm_up` (opens the TLS connections first).
-2. `bench.run` builds jobs sentence-major (providers alternate, so rate-limit waits overlap), skips finished ones.
+2. `bench.run` encodes all clips, skips finished jobs, then runs one thread pool per provider (`concurrency`).
 3. Per job: `audio.encode` → `Engine.transcribe` (`_send` rate-limits, times the successful attempt, retries
    429/5xx) → `scoring.score` → one JSON line.
 4. `summarise` → `recommend` / `pick_format` → `report.build`.
 
 ## Configuration
 
-- `GROQ_API_KEY`, `GEMINI_API_KEY`: process environment, then the Windows user environment (`HKCU\Environment`),
-  then `eval/.env` (`config.load_env`).
-- Model ids, prices and rpm budgets: `spec/providers.json`. Presets: `bench.PRESETS`.
+- `GROQ_API_KEY`, `GEMINI_API_KEY`: `eval/.env` first, then the process environment, then the Windows user
+  environment (`HKCU\Environment`) (`config.load_env`).
+- Model ids, prices, rpm budgets and per-provider `concurrency`: `spec/providers.json`. Presets: `bench.PRESETS`.
 
 ## Commands
 

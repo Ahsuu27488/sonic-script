@@ -52,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--audio-dir", type=Path, default=AUDIO_DIR)
 
     args = ap.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)  # progress shows up live in logs
     load_env()
 
     if args.cmd == "record":

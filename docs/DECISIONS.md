@@ -57,6 +57,15 @@ still invent words ("shukriya", "music"); in a dictation app that text would be 
 *Why:* found by `probe` with the owner's keys; the benchmark must test engines users can really get.
 *Where:* `spec/providers.json`.
 
+**D-009 (provisional) Default engine: Groq Whisper turbo with a Roman Urdu hint; audio Opus 16 kbps.** (2026-10-28)
+Default `groq-whisper-hint` (fastest: p50 0.25 s) with a local cleanup for stray Urdu letters, or
+`groq-whisper-hint+gptoss20b` (~1.2 s, 100% Latin) if cleanup is not enough. Gemini 3.5 Flash-Lite is the
+quality option, not the default, until its latency is re-tested. Whisper must not be forced to `language=ur`.
+*Why:* on the owner's 44 recordings Gemini was most accurate (96-97%) but took 12-16 s and Gemini 3.1 mostly
+failed with 503 "high demand", also with a fresh key; Groq never failed and was 5-50x faster; forcing Urdu cut
+English words from ~87% to ~70%. *Where:* `spec/providers.json`, results in `eval/results/m0/` (local).
+Final once Gemini is re-tested at a quiet hour (STATUS Next 1).
+
 <!-- Template for the next entry:
 
 **D-00N <Decision in one line>.** (YYYY-MM-DD)

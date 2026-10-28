@@ -1,16 +1,18 @@
 {
   "version": 1,
-  "about": "Engines the M0 benchmark (and later the apps) can use. Model ids live here, not in code. Prices in USD, checked 2026-10-26. rpm = requests per minute the benchmark allows itself (keep under the free tier). gemini-2.5-flash-lite was dropped on 2026-10-27: Google no longer offers it to new users. llama-3.1-8b-instant was replaced by openai/gpt-oss-120b on 2026-10-27: Groq no longer offers Llama 3.1 8B on standard keys.",
+  "about": "Engines the M0 benchmark (and later the apps) can use. Model ids live here, not in code. Prices in USD, checked 2026-10-26. rpm = requests per minute the benchmark allows itself (keep under the free tier). gemini-2.5-flash-lite was dropped on 2026-10-27: Google no longer offers it to new users. llama-3.1-8b-instant was replaced by openai/gpt-oss-120b on 2026-10-27: Groq no longer offers Llama 3.1 8B on standard keys. concurrency = requests the benchmark keeps in flight per provider (start times still follow rpm).",
   "providers": {
     "gemini": {
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
       "key_env": "GEMINI_API_KEY",
-      "rpm": 10
+      "rpm": 10,
+      "concurrency": 4
     },
     "groq": {
       "base_url": "https://api.groq.com/openai/v1",
       "key_env": "GROQ_API_KEY",
-      "rpm": 18
+      "rpm": 18,
+      "concurrency": 2
     }
   },
   "engines": [
@@ -100,6 +102,23 @@
       }
     },
     {
+      "id": "groq-whisper-auto+gptoss20b",
+      "kind": "whisper-llm",
+      "provider": "groq",
+      "whisper_model": "whisper-large-v3-turbo",
+      "language": null,
+      "llm_model": "openai/gpt-oss-20b",
+      "llm_extra": {
+        "reasoning_effort": "low"
+      },
+      "prompt": "romanize-v1.md",
+      "price": {
+        "audio_per_hour": 0.04,
+        "in_per_m": 0.075,
+        "out_per_m": 0.3
+      }
+    },
+    {
       "id": "groq-whisper-hint",
       "kind": "whisper-only",
       "provider": "groq",
@@ -108,6 +127,24 @@
       "hint": "whisper-hint-v1.txt",
       "price": {
         "audio_per_hour": 0.04
+      }
+    },
+    {
+      "id": "groq-whisper-hint+gptoss20b",
+      "kind": "whisper-llm",
+      "provider": "groq",
+      "whisper_model": "whisper-large-v3-turbo",
+      "language": null,
+      "hint": "whisper-hint-v1.txt",
+      "llm_model": "openai/gpt-oss-20b",
+      "llm_extra": {
+        "reasoning_effort": "low"
+      },
+      "prompt": "romanize-v1.md",
+      "price": {
+        "audio_per_hour": 0.04,
+        "in_per_m": 0.075,
+        "out_per_m": 0.3
       }
     }
   ],

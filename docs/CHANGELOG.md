@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-10-28 · feat/m0-benchmark
+
+- Ran M0 on the owner's 44 recordings (compression + engines + 3 extra Groq variants + Gemini re-run with a
+  fresh key). Provisional engine decision D-009.
+- Benchmark runs each provider in its own worker pool, so slow Gemini no longer blocks Groq; rate limiter is
+  thread-safe; progress logs flush live.
+- New engines: `groq-whisper-auto+gptoss20b`, `groq-whisper-hint+gptoss20b`.
+- Keys: `eval/.env` now wins over global variables (lets the benchmark use its own key). `.env.*` git-ignored.
+
 ## 2026-10-27 · feat/m0-benchmark
 
 - Milestone 0 benchmark tool (`eval/`, D-005): terminal recorder with level meter, engine probe, resumable

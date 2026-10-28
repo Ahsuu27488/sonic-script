@@ -53,9 +53,8 @@ class Engine:
 
     def transcribe(self, audio: EncodedAudio, sentence_id: str = "") -> EngineResult:
         result = EngineResult()
-        self._sentence_id = sentence_id
         try:
-            self._run(audio, result)
+            self._run(audio, result, sentence_id)
             result.text = clean_output(result.text)
         except EngineError as exc:
             result.error = str(exc)
@@ -67,7 +66,7 @@ class Engine:
     def cost_usd(self, r: EngineResult, duration_s: float) -> float:
         return 0.0
 
-    def _run(self, audio: EncodedAudio, result: EngineResult) -> None:
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
         raise NotImplementedError
 
     def _send(self, stage: str, model: str, result: EngineResult, request: httpx.Request) -> dict:
@@ -94,7 +93,7 @@ class Engine:
 class GeminiAudio(Engine):
     """One call: audio + instruction -> Roman text."""
 
-    def _run(self, audio: EncodedAudio, result: EngineResult) -> None:
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
         if not self.key:
             raise EngineError(f"missing {self.provider['key_env']} (add it to eval/.env)")
         model = self.spec["model"]
@@ -144,7 +143,7 @@ class GroqWhisper(Engine):
             headers={"Authorization": f"Bearer {self.key}"})
         return str(self._send("whisper", model, result, req).get("text", "")).strip()
 
-    def _run(self, audio: EncodedAudio, result: EngineResult) -> None:
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
         result.text = self._whisper(audio, result)
 
     def cost_usd(self, r: EngineResult, duration_s: float) -> float:
@@ -155,7 +154,7 @@ class GroqWhisper(Engine):
 class GroqWhisperLLM(GroqWhisper):
     """Two calls: Whisper (Urdu script) -> small LLM (romanize + restore English words)."""
 
-    def _run(self, audio: EncodedAudio, result: EngineResult) -> None:
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
         asr = self._whisper(audio, result)
         result.raw_asr = asr
         if not asr:
@@ -190,11 +189,11 @@ class FakeEngine(Engine):
 
     expected: dict[str, str] = {}
 
-    def _run(self, audio: EncodedAudio, result: EngineResult) -> None:
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
         delay = float(self.spec.get("delay_ms", 5))
         time.sleep(delay / 1000)
         result.stages_ms["fake"] = delay
-        result.text = self.spec.get("text") or self.expected.get(self._sentence_id, "")
+        result.text = self.spec.get("text") or self.expected.get(sentence_id, "")
 
 
 KINDS: dict[str, type[Engine]] = {

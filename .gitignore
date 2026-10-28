@@ -1,6 +1,7 @@
 # Secrets: API keys live in eval/.env (see eval/.env.example). Never commit them.
 .env
 *.env
+.env.*
 !.env.example
 
 # Python

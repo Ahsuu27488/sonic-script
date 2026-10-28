@@ -96,3 +96,15 @@ def test_fake_run_produces_results_and_report(tmp_path):
     assert "<mark>" in content  # Urdu script in fake-urdu output is highlighted
     assert "../../audio/mx-01.wav" in content
     json.loads(results.read_text(encoding="utf-8").splitlines()[0])
+
+
+def test_env_file_key_wins_over_global(tmp_path, monkeypatch):
+    from sonic_eval.config import load_env
+
+    monkeypatch.setenv("GEMINI_API_KEY", "global-key")
+    env = tmp_path / ".env"
+    env.write_text("# comment\nGEMINI_API_KEY=project-key\nGROQ_API_KEY=\n", encoding="utf-8")
+    load_env(env)
+    import os
+
+    assert os.environ["GEMINI_API_KEY"] == "project-key"

@@ -9,7 +9,9 @@ from __future__ import annotations
 import json
 import statistics
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -69,32 +71,60 @@ def run(engines: list[Engine], sentences: list[Sentence], formats: list[str], re
         have = have[:limit]
     FakeEngine.expected = {s.id: s.text for s in have}
     cache = out_dir.parent / "cache"
-    # Sentence-major order alternates providers, so one provider's rate-limit wait overlaps the other's work.
     jobs = [(e, f, s, r) for r in range(repeats) for f in formats for s in have for e in engines
             if (e.id, f, s.id, r) not in done]
+    for f in formats:  # encode up front, so worker threads never run ffmpeg on the same file at once
+        for s in have:
+            audio.encode(audio_dir / f"{s.id}.wav", f, cache)
     log(f"{len(jobs)} request(s) to run ({len(done)} already done) -> {results}")
-    with results.open("a", encoding="utf-8") as fh:
-        for n, (engine, fmt, s, rep) in enumerate(jobs, 1):
-            enc = audio.encode(audio_dir / f"{s.id}.wav", fmt, cache)
-            res = engine.transcribe(enc, s.id)
-            sc = score(res.text, s.text, s.english) if not res.error else None
-            row = Row(
-                engine=engine.id, fmt=fmt, sentence=s.id, category=s.category, repeat=rep,
-                text=res.text, raw_asr=res.raw_asr, latency_ms=res.latency_ms, stages_ms=res.stages_ms,
-                bytes=len(enc.data), duration_s=round(enc.duration_s, 2), tokens_in=res.tokens_in,
-                tokens_out=res.tokens_out, cost_usd=engine.cost_usd(res, enc.duration_s),
-                retries=res.retries, error=res.error,
-                script_ok=sc.script_ok if sc else False,
-                english_found=sc.english_found if sc else 0, english_total=len(s.english),
-                accuracy=sc.accuracy if sc else 0.0, wer=sc.wer if sc else 1.0, at=time.time(),
-            )
+
+    # Each provider gets its own workers, so a slow provider never holds up a fast one. Up to `concurrency`
+    # requests per provider are in flight; the rate limiter still spaces their start times.
+    by_provider: dict[str, list] = {}
+    for job in jobs:
+        by_provider.setdefault(job[0].spec.get("provider", "fake"), []).append(job)
+    lock = threading.Lock()
+    counter = {"n": 0}
+    stopped: set[str] = set()
+
+    def work(provider: str, job) -> None:
+        engine, fmt, s, rep = job
+        if provider in stopped:
+            return
+        enc = audio.encode(audio_dir / f"{s.id}.wav", fmt, cache)
+        res = engine.transcribe(enc, s.id)
+        sc = score(res.text, s.text, s.english) if not res.error else None
+        row = Row(
+            engine=engine.id, fmt=fmt, sentence=s.id, category=s.category, repeat=rep,
+            text=res.text, raw_asr=res.raw_asr, latency_ms=res.latency_ms, stages_ms=res.stages_ms,
+            bytes=len(enc.data), duration_s=round(enc.duration_s, 2), tokens_in=res.tokens_in,
+            tokens_out=res.tokens_out, cost_usd=engine.cost_usd(res, enc.duration_s),
+            retries=res.retries, error=res.error,
+            script_ok=sc.script_ok if sc else False,
+            english_found=sc.english_found if sc else 0, english_total=len(s.english),
+            accuracy=sc.accuracy if sc else 0.0, wer=sc.wer if sc else 1.0, at=time.time(),
+        )
+        status = f"ERROR {res.error}" if res.error else f"{res.latency_ms:6.0f} ms  acc {sc.accuracy:.2f}"
+        with lock:
             fh.write(json.dumps(asdict(row), ensure_ascii=False) + "\n")
             fh.flush()
-            status = f"ERROR {res.error}" if res.error else f"{res.latency_ms:6.0f} ms  acc {sc.accuracy:.2f}"
-            log(f"[{n}/{len(jobs)}] {engine.id:<24} {fmt:<7} {s.id:<7} {status}")
-            if res.error and _fatal(res.error):
-                log("Stopping: this error will repeat for every request. Fix it and re-run the same command.")
-                break
+            counter["n"] += 1
+            log(f"[{counter['n']}/{len(jobs)}] {engine.id:<24} {fmt:<7} {s.id:<7} {status}")
+            if res.error and _fatal(res.error) and provider not in stopped:
+                stopped.add(provider)
+                log(f"Stopping {provider}: this error will repeat. Fix it and re-run the same command.")
+
+    with results.open("a", encoding="utf-8") as fh:
+        pools = [ThreadPoolExecutor(max_workers=max(1, int(provider_jobs[0][0].provider.get("concurrency", 1))),
+                                    thread_name_prefix=name)
+                 for name, provider_jobs in by_provider.items()]
+        futures = [pool.submit(work, name, job)
+                   for pool, (name, provider_jobs) in zip(pools, by_provider.items(), strict=True)
+                   for job in provider_jobs]
+        for fut in futures:
+            fut.result()
+        for pool in pools:
+            pool.shutdown()
     return results
 
 
