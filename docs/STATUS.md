@@ -14,7 +14,7 @@ but overloaded; engine decision is provisional (D-009) until Gemini is re-tested
   `spec/providers.json`); thread-safe rate limiter.
 - M0 results, opus16, owner's voice (`eval/results/m0/report.html`, local only), p50 / p95, accuracy, English kept:
   - `groq-whisper-hint` (no LLM): 0.25 s / 1.2 s, 88.6%, 87%; 7% of outputs leak Urdu letters.
-  - `groq-whisper-hint+gptoss20b`: ~1.2 s / 2.7 s, ~89%, ~86%, 100% Latin (partial, 113/132 when saved).
+  - `groq-whisper-hint+gptoss20b`: 1.15 s / 2.7 s, 90.0%, 86%, 100% Latin, 5 errors in 132 (Groq rate limits).
   - `groq-whisper-auto+gptoss20b`: 1.8 s / 3.5 s, 86.5%, 84%.
   - Whisper forced to `language=ur` (+ LLM): 81-86%, English 69-73%: forcing Urdu wrecks English words.
   - `gemini-3.5-flash-lite`: 96-97%, English 94%, silence 100%, but p50 12-16 s; `gemini-3.1-flash-lite` mostly
