@@ -70,9 +70,10 @@ flowchart LR
     NORM --> HIST["Local history<br>re-copy / undo"]
 ```
 
-### 3.1 Two activation modes
-1. **Push-to-talk (v1).** Hold a hotkey (default: `Right Ctrl`, configurable, mouse side button allowed), speak, release. The most reliable mode and the one I'll use daily.
-2. **Focus pill (v1.x, opt-in).** When a text field gets focus, a small mic pill appears near it. **Tap the pill to start**; it stops on 800 ms of silence or a second tap.
+### 3.1 Activation (D-015, D-016)
+1. **Tap to toggle (default, M1).** Tap `Right Ctrl` to start (any allowed key or a mouse side button can be chosen instead, D-018); tap again or press **Enter** to stop, transcribe and paste; **Esc** cancels. Enter does not send the message (setting "Enter also sends", off by default).
+2. **Push-to-talk (M1).** Hold the same key, speak, release. Works everywhere, including where focus detection fails.
+3. **Pop-up mic (M2, before launch).** When a text field gets focus, a small mic pill appears near it (not recording). The key or a click on the pill starts it. Never on password fields; per-app off switch, terminals off by default.
    - Changed from v0: the mic **does not** start by itself when a field is focused. Always-listening would type background conversations into your chat, burn API quota, and look like spyware to new users. A "hands-free" toggle can come later.
 
 ### 3.2 Batch first, streaming later
@@ -106,7 +107,7 @@ Network dominates the time budget. Planned optimisations:
 Model names and free-tier limits change often. The app keeps model ids in config, not code, and the benchmark (§9) re-runs whenever we switch.
 
 ### 4.2 Choosing the default
-**Milestone 0 decides**, using my own recordings: the engine with the best mix of correct script, English kept English, and p95 latency becomes the default. The others stay selectable in settings. Automatic fallback: if the default fails or hits a rate limit, retry once on the other provider.
+**Milestone 0 decides**, using my own recordings: the engine with the best mix of correct script, English kept English, and p95 latency becomes the default. The others stay selectable in settings. The user picks a **preferred and a fallback model** from a catalog with the benchmark numbers (`spec/models.json`, D-017). If the preferred model fails, hits a rate limit, or passes its learned deadline (about 2x its usual time for that clip length), the fallback starts in parallel, the first answer wins, and a short notice says why.
 
 ### 4.3 Cost per dictation (typical 8-second clip)
 - Engine A: ~260 audio tokens in + ~60 tokens out ≈ **$0.0002** → ~$0.20 per 1,000.
@@ -233,10 +234,10 @@ Every milestone ends with something I use daily or a measured result, not just c
 |---|---|---|---|
 | **M0** | **Engine benchmark** (`eval/`): record ~40 real sentences (Urdu, English, mixed, tech-heavy, names); run engines A / B / B' from Pakistan | Results table: script correctness, English-kept rate, p50/p95 latency, cost. Default engine chosen and written down as a decision. | 2–3 days |
 | **M1** | **Windows push-to-talk MVP** (Rust): hotkey → record → VAD → Opus → provider → normalizer → paste | I use it all day for 3 days instead of typing. Latency logged locally. | ~1 week |
-| **M2** | **Windows polish:** tray, settings (keys in Credential Manager, hotkey, mode, word list), HUD ring, history, retries, fallback provider | A non-technical friend installs it from a release and dictates within 2 minutes. | ~1 week |
+| **M2** | **Windows polish:** tray, settings (model catalog, keys in Credential Manager, preferred + fallback model, hotkey picker ("press a key"), mode, word list), HUD ring, **pop-up mic on text fields** (D-016), history, retries, learned-deadline fallback (D-017) | A non-technical friend installs it from a release and dictates within 2 minutes. | ~1 week |
 | **M3** | **Android IME** (Kotlin): same pipeline, same fixtures pass | I use it in WhatsApp for a week. | ~2 weeks |
 | **M4** | **Public launch v1.0** (Windows + Android) | README with demo GIF/video, signed installer, winget, APK, privacy section, contributing guide. Launch posts (§10). | ~1 week |
-| M5 | Focus pill on Windows | Pill appears on focus in Chrome, VS Code, Slack, Notepad; never steals focus. | ~1 week |
+| M5 | ~~Focus pill on Windows~~ moved into M2 (D-016) | | |
 | M6 | Ubuntu (X11 full, Wayland push-to-talk) | Works on Ubuntu 24.04+ in both sessions. | ~1–2 weeks |
 | M7 | Streaming preview (v2) | Interim text in the HUD; final insert unchanged. | ~1 week |
 | M8 | iOS (if a Mac is available) | Back Tap → speak → clipboard. | — |

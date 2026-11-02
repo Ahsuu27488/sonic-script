@@ -4,9 +4,14 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-02 · **Code at:** branch `feat/m0-benchmark` (PR #1)
-**In one line:** M0 is done: default engine is Groq (D-011), Gemini is an opt-in accuracy mode, license MIT
-(D-012). Next: merge PR #1 and start M1 (Windows app, Rust).
+**Last updated:** 2026-11-02 · **Code at:** `main` (M0 and the M1 plan merged)
+**In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1, the Windows dictation app in Rust, is fully
+planned and approved by the owner; the next session builds it, starting with plan step 1 (the normalizer).
+
+**Start here (new session):** read `docs/plans/2026-11-02-m1-windows-push-to-talk.md`, then decisions
+D-011 to D-018. Check the toolchain with `cargo --version` and `rustc --version` (should print versions; if
+`link.exe` errors appear, the C++ build tools are missing: plan step 0). Work on a new branch
+`feat/m1-normalizer`, one plan step per PR.
 
 ## What works (verified)
 
@@ -29,7 +34,11 @@
 
 ## In progress
 
-- PR https://github.com/Ahsuu27488/sonic-script/pull/1: M0 harness + results. Not merged.
+- M1 plan approved by the owner (2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to
+  talk, Esc cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017).
+  Pop-up mic on text fields, settings page and fallback model are M2 (D-016, D-017).
+- Toolchain (plan step 0): Rust via `winget install Rustlang.Rustup` and the C++ Build Tools were installing on
+  2026-11-02 night; not yet confirmed working. No Rust code exists yet (no `desktop/` folder).
 
 ## Live state
 
@@ -48,10 +57,11 @@
 
 ## Next
 
-1. Owner: keep or change the name "SonicScript" (check GitHub and the Play Store); optionally listen to `ur-04`,
-   `mx-04`, `mx-06` in the report to confirm the D-013 fixes.
-2. Agent: M1 (Windows app, Rust): plan in `docs/plans/` first, first
-   piece the local script-guard (D-011).
+1. Agent: confirm the toolchain, then build M1 in plan order: normalizer (`spec/normalizer/`, `desktop/core`)
+   → voice gate → encode + Groq → `--bench` golden check → hotkey (D-015, D-018) → inject → model catalog →
+   latency log. Delegate boilerplate to Gemini CLI via Foreman if the owner has signed Gemini CLI in.
+2. Owner: keep or change the name "SonicScript" (check GitHub and the Play Store); optionally listen to
+   `ur-04`, `mx-04`, `mx-06` in the report to confirm the D-013 fixes.
 
 ## How to run and check
 

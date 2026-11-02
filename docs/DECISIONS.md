@@ -12,7 +12,7 @@ and lands through pull requests; the default branch is protected by `.githooks/p
 re-made and working code gets broken. *Where:* `AGENTS.md`, `.shipshape/`, `.githooks/`, `docs/`.
 Set up as a new project: solo, private for now (public at launch), nothing live.
 
-**D-002 Product shape: cloud-first, bring-your-own-key, Windows then Android.** (2026-10-27)
+**D-002 Product shape: cloud-first, bring-your-own-key, Windows then Android.** (2026-10-27) *(order of the focus pill superseded by D-016)*
 Speech runs on free cloud tiers (Groq, Gemini) with the user's own API key; no SonicScript server. Order:
 Windows → Android → public launch → focus pill, Ubuntu, streaming, iOS (iOS left to contributors: no Mac).
 *Why:* the owner's Pixel 6 is too slow for good on-device models; BYOK keeps the project free to run and easy
@@ -36,7 +36,7 @@ M0 (`eval/`) is a Python package; the always-on desktop app (M1+) will be Rust w
 day and must be small, low on memory and less likely to be flagged by antivirus. *Where:* `eval/`,
 `blueprint.md` §5.2.
 
-**D-006 Default hotkey: hold Right Ctrl.** (2026-10-27)
+**D-006 Default hotkey: hold Right Ctrl.** (2026-10-27) *(superseded by D-015)*
 Push-to-talk on Right Ctrl, configurable (mouse side button offered).
 *Why:* one key, does nothing on its own in almost every app, and avoids the terminal shortcuts that Claude Code
 and Codex users rely on. *Where:* `blueprint.md` §3.1, §12 (implemented in M1).
@@ -107,6 +107,41 @@ prompt stays the short Roman Urdu style hint. *Why:* engine `groq-whisper-hint-w
 names (English kept 87% → 91%) but made Whisper translate pure Urdu into English ("I'll reach the house for a
 little while") and write Devanagari / Urdu script: accuracy 89.2% → 84.8%, Latin 93% → 88%. *Where:*
 `spec/prompts/whisper-hint-words-v1.txt`, `spec/providers.json` (kept to reproduce), run `m0` (local).
+
+**D-015 One key, two ways: tap Right Ctrl to toggle (default), hold it to talk; Enter stops and pastes.**
+(2026-11-02) Supersedes D-006. Tap Right Ctrl (< 300 ms) starts recording; tap it again or press Enter to stop,
+transcribe and paste; Esc cancels. Holding it (> 400 ms) is push-to-talk. While recording, Enter and Esc are
+taken by SonicScript (not passed to the app); at all other times no key is ever swallowed. Enter never sends
+the message: an "Enter also sends" setting exists, off by default. The key is configurable.
+*Why:* the owner prefers tap-to-start over holding; Enter to finish is natural in chat boxes; sending
+automatically would post a wrong transcription before the user can see it. *Where:* M1 plan step 5,
+`blueprint.md` §3.1.
+
+**D-016 The pop-up mic on text fields comes in M2, before launch (was M5, after launch).** (2026-11-02)
+When a text field gets focus (UI Automation), a small mic pill appears near it, not recording; the D-015 key or
+a click on the pill starts it. Never on password fields, per-app off switch (terminals off by default), hides
+when focus leaves. Built with the HUD in M2; M1 ships the key modes only.
+*Why:* it is the owner's preferred way to dictate, so it should be in v1.0; it needs the overlay window and
+text-field detection, which are M2 work anyway. Auto-starting the mic on focus stays out (blueprint §3.1:
+background speech would be typed into chats). *Where:* `blueprint.md` §3.1, §8.
+
+**D-017 Model catalog, preferred + fallback model, and a self-learning deadline.** (2026-11-02)
+`spec/models.json` is generated from the benchmark (accuracy, English kept, % Roman, p50 / p95, failure rate,
+cost, free-tier limits, test date, a Recommended flag = the D-011 default) and shown in the settings page next
+to the key fields. The user picks a preferred and a fallback model. The app learns each model's time per
+second of audio from its last 50 successful requests; a request whose time passes about 2x the expected value
+(minimum 3 s) starts the fallback in parallel, the first answer wins, and a short notice says why ("Used Groq:
+Gemini was slow, 9 s"). Clips over 2 minutes are split at pauses. *Why:* Gemini is most accurate but has a
+long tail (p50 1.8 s, p95 23 s); racing the fallback at the deadline keeps the quality when Gemini is fast and
+caps the wait when it is not, without a fixed timeout that is wrong for long clips. *Where:* `spec/models.json`
+(M1, from `eval`), settings + fallback in M2, `blueprint.md` §4.2, §7.
+
+**D-018 The dictation key is the user's choice.** (2026-11-02)
+Right Ctrl is only the default. M1: `config.toml` + `sonicscript.exe --set-key`; M2: a "press a key" picker in
+settings. Allowed: one-sided modifiers, F-keys, Pause, Scroll Lock, Caps Lock, Insert, mouse side buttons.
+Refused: keys that type or edit text, and Enter / Esc (they stop and cancel a recording). Tap, hold and cancel
+rules (D-015) are the same for every key. *Why:* the owner asked for it; some users already use Right Ctrl
+(e.g. as their only Ctrl, or for a VM / remote desktop host key). *Where:* M1 plan step 6, `blueprint.md` §3.1.
 
 <!-- Template for the next entry:
 
