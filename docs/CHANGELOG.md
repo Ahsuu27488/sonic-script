@@ -3,6 +3,10 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-02 · plan/m1-windows
+
+- PR #1 (M0) merged into `main`. M1 plan written: `docs/plans/2026-11-02-m1-windows-push-to-talk.md`.
+
 ## 2026-11-02 · feat/m0-benchmark (word list)
 
 - Word-list test: new engine `groq-whisper-hint-words` (`spec/prompts/whisper-hint-words-v1.txt`). Names

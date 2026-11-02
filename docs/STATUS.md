@@ -4,9 +4,9 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-02 · **Code at:** branch `feat/m0-benchmark` (PR #1)
+**Last updated:** 2026-11-02 · **Code at:** `main` (PR #1 merged) · plan on `plan/m1-windows`
 **In one line:** M0 is done: default engine is Groq (D-011), Gemini is an opt-in accuracy mode, license MIT
-(D-012). Next: merge PR #1 and start M1 (Windows app, Rust).
+(D-012), merged. Next: M1, the Windows push-to-talk app (plan written, waiting for go-ahead).
 
 ## What works (verified)
 
@@ -29,7 +29,8 @@
 
 ## In progress
 
-- PR https://github.com/Ahsuu27488/sonic-script/pull/1: M0 harness + results. Not merged.
+- M1 plan: `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (branch `plan/m1-windows`). Rust and the C++
+  build tools are not installed yet (plan step 0).
 
 ## Live state
 
@@ -50,8 +51,8 @@
 
 1. Owner: keep or change the name "SonicScript" (check GitHub and the Play Store); optionally listen to `ur-04`,
    `mx-04`, `mx-06` in the report to confirm the D-013 fixes.
-2. Agent: M1 (Windows app, Rust): plan in `docs/plans/` first, first
-   piece the local script-guard (D-011).
+2. Owner: read the M1 plan, say go, and install Rust + C++ build tools (plan step 0, one UAC click).
+3. Agent: build M1 in plan order, normalizer first (`spec/normalizer/`, `desktop/core`).
 
 ## How to run and check
 
