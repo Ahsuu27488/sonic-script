@@ -130,6 +130,17 @@
       }
     },
     {
+      "id": "groq-whisper-hint-words",
+      "kind": "whisper-only",
+      "provider": "groq",
+      "whisper_model": "whisper-large-v3-turbo",
+      "language": null,
+      "hint": "whisper-hint-words-v1.txt",
+      "price": {
+        "audio_per_hour": 0.04
+      }
+    },
+    {
       "id": "groq-whisper-hint+gptoss20b",
       "kind": "whisper-llm",
       "provider": "groq",

@@ -100,6 +100,14 @@ Gemini and Groq outputs all agreed with each other and not with the old text; sa
 *Why:* a wrong expected text lowers every engine unfairly, but "fixing" it from one engine's output would bias
 the test toward that engine. *Where:* `spec/fixtures/sentences.json`, `eval/sonic_eval/bench.py` `rescore`.
 
+**D-014 The user's word list is applied after Whisper, never inside the Whisper prompt.** (2026-11-02)
+In the apps, the word list ("Gemini, Groq, Codex, RAM, ...") fixes spellings in the local cleanup step (fuzzy
+match, e.g. "Jaminai" → "Gemini") or in the LLM step (`romanize-v1.md` already has `{word_list}`). The Whisper
+prompt stays the short Roman Urdu style hint. *Why:* engine `groq-whisper-hint-words` (word list + hint) fixed
+names (English kept 87% → 91%) but made Whisper translate pure Urdu into English ("I'll reach the house for a
+little while") and write Devanagari / Urdu script: accuracy 89.2% → 84.8%, Latin 93% → 88%. *Where:*
+`spec/prompts/whisper-hint-words-v1.txt`, `spec/providers.json` (kept to reproduce), run `m0` (local).
+
 <!-- Template for the next entry:
 
 **D-00N <Decision in one line>.** (YYYY-MM-DD)

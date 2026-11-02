@@ -3,6 +3,11 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-02 · feat/m0-benchmark (word list)
+
+- Word-list test: new engine `groq-whisper-hint-words` (`spec/prompts/whisper-hint-words-v1.txt`). Names
+  improve but Whisper starts translating Urdu to English; word list moves to the cleanup step (D-014).
+
 ## 2026-11-02 · feat/m0-benchmark (license, fixtures)
 
 - License MIT (D-012): `LICENSE`, README, blueprint, `eval/pyproject.toml`.

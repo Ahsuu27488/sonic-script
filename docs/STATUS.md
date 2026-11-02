@@ -16,6 +16,8 @@
   (re-scored 2026-11-02 after 3 expected-text fixes, D-013)
   - `groq-whisper-hint` (no LLM): 0.25 s / 1.2 s, 89.2%, 87%; 7% of outputs leak Urdu letters.
   - `groq-whisper-hint+gptoss20b`: 1.15 s / 2.7 s, 90.7%, 87%, 100% Latin, 5 errors in 132 (Groq rate limits).
+  - `groq-whisper-hint-words` (word list in the Whisper prompt): 0.2 s / 0.4 s, 84.8%, English 91%, 88% Latin:
+    names fixed but pure Urdu gets translated to English, so no (D-014).
   - `groq-whisper-auto+gptoss20b`: 1.8 s / 3.5 s, 87.0%, 85%.
   - Whisper forced to `language=ur` (+ LLM): 81-86%, English 69-73%: forcing Urdu wrecks English words.
   - `gemini-3.5-flash-lite`: 97-97.5%, English 95-96%, silence 100%. Evening 2026-10-28: p50 12-16 s; re-test
@@ -38,9 +40,9 @@
 1. Hint + LLM misses the latency target (p95 2.7 s > 1.2 s); only Whisper-hint alone meets it.
 2. Whisper-hint output leaks Urdu letters (7%) and spells loosely; needs a local script-guard/cleanup.
 3. Names and tech words fail on Groq ("Jaminai Algrock" = Gemini aur Groq, Codex → "Codec", RAM → "rhyme",
-   styling → "selling"); a word list in the Whisper prompt is the next test.
+   styling → "selling"); the word list goes in the local cleanup, not the Whisper prompt (D-014).
 4. Whisper-hint sometimes translates instead of transcribing (`mx-04` → "Take a backup and run the database."):
-   no cleanup can fix that; watch for it in M1.
+   no cleanup can fix that; watch for it in M1. Output can also contain Devanagari, not only Urdu letters.
 5. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
 6. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 
@@ -48,7 +50,7 @@
 
 1. Owner: keep or change the name "SonicScript" (check GitHub and the Play Store); optionally listen to `ur-04`,
    `mx-04`, `mx-06` in the report to confirm the D-013 fixes.
-2. Agent: word-list test (Gap 3), merge PR #1, then M1 (Windows app, Rust): plan in `docs/plans/` first, first
+2. Agent: M1 (Windows app, Rust): plan in `docs/plans/` first, first
    piece the local script-guard (D-011).
 
 ## How to run and check
