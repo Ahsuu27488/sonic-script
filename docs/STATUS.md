@@ -52,7 +52,7 @@
 1. Owner: keep or change the name "SonicScript" (check GitHub and the Play Store); optionally listen to `ur-04`,
    `mx-04`, `mx-06` in the report to confirm the D-013 fixes.
 2. Owner: read the M1 plan, say go, and install Rust + C++ build tools (plan step 0, one UAC click).
-3. Agent: build M1 in plan order, normalizer first (`spec/normalizer/`, `desktop/core`).
+3. Agent: build M1 in plan order (tap/hold key modes D-015, model catalog D-017), normalizer first (`spec/normalizer/`, `desktop/core`).
 
 ## How to run and check
 
