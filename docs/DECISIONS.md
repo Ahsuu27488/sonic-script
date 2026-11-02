@@ -136,6 +136,13 @@ long tail (p50 1.8 s, p95 23 s); racing the fallback at the deadline keeps the q
 caps the wait when it is not, without a fixed timeout that is wrong for long clips. *Where:* `spec/models.json`
 (M1, from `eval`), settings + fallback in M2, `blueprint.md` §4.2, §7.
 
+**D-018 The dictation key is the user's choice.** (2026-11-02)
+Right Ctrl is only the default. M1: `config.toml` + `sonicscript.exe --set-key`; M2: a "press a key" picker in
+settings. Allowed: one-sided modifiers, F-keys, Pause, Scroll Lock, Caps Lock, Insert, mouse side buttons.
+Refused: keys that type or edit text, and Enter / Esc (they stop and cancel a recording). Tap, hold and cancel
+rules (D-015) are the same for every key. *Why:* the owner asked for it; some users already use Right Ctrl
+(e.g. as their only Ctrl, or for a VM / remote desktop host key). *Where:* M1 plan step 6, `blueprint.md` §3.1.
+
 <!-- Template for the next entry:
 
 **D-00N <Decision in one line>.** (YYYY-MM-DD)

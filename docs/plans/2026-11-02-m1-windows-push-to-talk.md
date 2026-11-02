@@ -30,7 +30,8 @@ desktop/                     Cargo workspace (new)
     src/spec.rs              loads spec/providers.json + prompts at build time (include_str!)
     src/pipeline.rs          clip → text, with per-stage timings
   win/                       the app (binary `sonicscript.exe`)
-    src/hotkey.rs            WH_KEYBOARD_LL on VK_RCONTROL
+    src/hotkey.rs            WH_KEYBOARD_LL (+ WH_MOUSE_LL for side buttons) on the chosen key, Right Ctrl default
+    src/config.rs            %APPDATA%\SonicScript\config.toml: hotkey, log options
     src/audio.rs             WASAPI capture via cpal, 16 kHz mono
     src/inject.rs            clipboard paste + restore; Ctrl+Shift+V in terminals
     src/main.rs              wiring, console status, latency log
@@ -73,16 +74,23 @@ docs/                        STATUS, ARCHITECTURE (+ desktop/ map), CHANGELOG, D
    Enter and Esc are swallowed, and only while recording; nothing else is ever swallowed. The hook callback
    only posts a message (Windows unhooks slow hooks). A console beep / title change shows recording state
    until the HUD exists (M2). Safety cap: stop at 5 minutes.
-6. **Inject.** Save clipboard → set text (plus `ExcludeClipboardContentFromMonitorProcessing` so Win+V history
+6. **Changeable key (D-018).** The key is a setting, never hard-coded. M1: `hotkey = "RightCtrl"` in
+   `config.toml`, plus `sonicscript.exe --set-key` ("press the key you want", saves it). Allowed: modifier keys
+   on one side (Right/Left Ctrl, Alt, Shift, Right Win), F13-F24, F1-F12, Pause, Scroll Lock, Caps Lock, Insert,
+   and mouse side buttons (XButton1/2). Refused with a reason: letters, digits, Space, Enter, Esc, Tab,
+   Backspace, arrows (they type or edit text, or are the stop/cancel keys). Left Alt and Caps Lock get a
+   warning (menus / caps state). The tap / hold / cancel rules work the same for every key. M2 shows the
+   same "press a key" box in the settings page.
+7. **Inject.** Save clipboard → set text (plus `ExcludeClipboardContentFromMonitorProcessing` so Win+V history
    stays clean) → `SendInput` Ctrl+V (Ctrl+Shift+V when the foreground class is a terminal:
    `CASCADIA_HOSTING_WINDOW_CLASS`, `ConsoleWindowClass`) → restore clipboard after 300 ms. Elevated window
    (UIPI) → console message "copied, press Ctrl+V", text left on the clipboard.
-7. **Model catalog (D-017).** `python -m sonic_eval catalog` writes `spec/models.json` from the M0 runs:
+8. **Model catalog (D-017).** `python -m sonic_eval catalog` writes `spec/models.json` from the M0 runs:
    per engine accuracy, English kept, % Roman, p50 / p95, failure rate, cost per 1,000, free-tier limits,
    test date, and `recommended: true` for the D-011 default. Tested offline with fake rows.
-8. **Latency log.** `%LOCALAPPDATA%\SonicScript\log.jsonl`: timestamp, clip length, stage timings, bytes,
+9. **Latency log.** `%LOCALAPPDATA%\SonicScript\log.jsonl`: timestamp, clip length, stage timings, bytes,
    engine, error. **No audio and no text** (personal data); text only with `--log-text`.
-9. Delegate boilerplate (CI job, cpal capture, clipboard helpers) to Gemini CLI through Foreman; the hook,
+10. Delegate boilerplate (CI job, cpal capture, clipboard helpers) to Gemini CLI through Foreman; the hook,
    normalizer rules and review stay with Claude.
 
 ## The check
@@ -90,7 +98,8 @@ docs/                        STATUS, ARCHITECTURE (+ desktop/ map), CHANGELOG, D
 - `cargo test` (normalizer cases, voice gate on the M0 clips, Ogg header), `cargo clippy -D warnings`, CI green.
 - `--bench spec/fixtures/audio` result recorded in STATUS: accuracy, Latin %, p50 / p95 key-up → text.
 - Keys: tap → speak → tap; tap → speak → Enter (text pasted, message **not** sent); hold → speak → release;
-  Esc cancels; Right Ctrl + C / + V unchanged; Enter works normally when not recording.
+  Esc cancels; Right Ctrl + C / + V unchanged; Enter works normally when not recording. `--set-key` to F9 and to
+  a mouse side button: both modes work on the new key and Right Ctrl goes back to normal; Space is refused.
 - Manual matrix (blueprint §9): Notepad, Chrome, VS Code, Slack/Discord web, Windows Terminal with Claude Code,
   an elevated window. Right Ctrl + C / + V still work. Win+V history shows no SonicScript entries.
 - Owner: 3 days of daily use; log shows p50 ≤ 700 ms key-up → paste.

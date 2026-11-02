@@ -71,7 +71,7 @@ flowchart LR
 ```
 
 ### 3.1 Activation (D-015, D-016)
-1. **Tap to toggle (default, M1).** Tap `Right Ctrl` (configurable) to start; tap again or press **Enter** to stop, transcribe and paste; **Esc** cancels. Enter does not send the message (setting "Enter also sends", off by default).
+1. **Tap to toggle (default, M1).** Tap `Right Ctrl` to start (any allowed key or a mouse side button can be chosen instead, D-018); tap again or press **Enter** to stop, transcribe and paste; **Esc** cancels. Enter does not send the message (setting "Enter also sends", off by default).
 2. **Push-to-talk (M1).** Hold the same key, speak, release. Works everywhere, including where focus detection fails.
 3. **Pop-up mic (M2, before launch).** When a text field gets focus, a small mic pill appears near it (not recording). The key or a click on the pill starts it. Never on password fields; per-app off switch, terminals off by default.
    - Changed from v0: the mic **does not** start by itself when a field is focused. Always-listening would type background conversations into your chat, burn API quota, and look like spyware to new users. A "hands-free" toggle can come later.
@@ -234,7 +234,7 @@ Every milestone ends with something I use daily or a measured result, not just c
 |---|---|---|---|
 | **M0** | **Engine benchmark** (`eval/`): record ~40 real sentences (Urdu, English, mixed, tech-heavy, names); run engines A / B / B' from Pakistan | Results table: script correctness, English-kept rate, p50/p95 latency, cost. Default engine chosen and written down as a decision. | 2–3 days |
 | **M1** | **Windows push-to-talk MVP** (Rust): hotkey → record → VAD → Opus → provider → normalizer → paste | I use it all day for 3 days instead of typing. Latency logged locally. | ~1 week |
-| **M2** | **Windows polish:** tray, settings (model catalog, keys in Credential Manager, preferred + fallback model, hotkey, mode, word list), HUD ring, **pop-up mic on text fields** (D-016), history, retries, learned-deadline fallback (D-017) | A non-technical friend installs it from a release and dictates within 2 minutes. | ~1 week |
+| **M2** | **Windows polish:** tray, settings (model catalog, keys in Credential Manager, preferred + fallback model, hotkey picker ("press a key"), mode, word list), HUD ring, **pop-up mic on text fields** (D-016), history, retries, learned-deadline fallback (D-017) | A non-technical friend installs it from a release and dictates within 2 minutes. | ~1 week |
 | **M3** | **Android IME** (Kotlin): same pipeline, same fixtures pass | I use it in WhatsApp for a week. | ~2 weeks |
 | **M4** | **Public launch v1.0** (Windows + Android) | README with demo GIF/video, signed installer, winget, APK, privacy section, contributing guide. Launch posts (§10). | ~1 week |
 | M5 | ~~Focus pill on Windows~~ moved into M2 (D-016) | | |
