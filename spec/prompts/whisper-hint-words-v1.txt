@@ -1,0 +1,3 @@
+Gemini, Groq, Codex, Claude Code, GitHub, VS Code, API key, RAM, database, migration, deployment, console logs, unused imports, component, styling, dark mode, environment variable, hardcode, server, laptop.
+
+Yaar, PR merge kar do aur deployment check kar lo. Build fail ho raha hai, logs dekh ke batao. Theek hai, main abhi meeting mein hoon.

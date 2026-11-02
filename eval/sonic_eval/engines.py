@@ -1,0 +1,266 @@
+"""Speech engines: audio in, Roman Urdu / Hinglish text out, with timing and token usage.
+
+Every engine reuses one keep-alive HTTP client per provider (as the real app will), so latency is measured
+on a warm connection: from the first byte of the request to the full response, including the upload.
+"""
+
+from __future__ import annotations
+
+import base64
+import os
+import time
+from dataclasses import dataclass, field
+
+import httpx
+
+from .audio import EncodedAudio
+from .config import load_prompt
+from .ratelimit import RateLimiter
+
+TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+MAX_RETRIES = 3
+
+
+@dataclass
+class EngineResult:
+    text: str = ""
+    latency_ms: float = 0.0
+    stages_ms: dict[str, float] = field(default_factory=dict)
+    raw_asr: str | None = None
+    tokens_in: int = 0
+    tokens_audio: int = 0
+    tokens_out: int = 0
+    retries: int = 0
+    error: str | None = None
+
+
+class EngineError(Exception):
+    pass
+
+
+class Engine:
+    """Base class. Subclasses implement `_run`, which fills an EngineResult."""
+
+    def __init__(self, spec: dict, provider: dict, client: httpx.Client, limiter: RateLimiter,
+                 word_list: list[str] | None = None) -> None:
+        self.spec = spec
+        self.id: str = spec["id"]
+        self.provider = provider
+        self.client = client
+        self.limiter = limiter
+        self.word_list = word_list or []
+        self.key = os.environ.get(provider.get("key_env", ""), "")
+
+    def transcribe(self, audio: EncodedAudio, sentence_id: str = "") -> EngineResult:
+        result = EngineResult()
+        try:
+            self._run(audio, result, sentence_id)
+            result.text = clean_output(result.text)
+        except EngineError as exc:
+            result.error = str(exc)
+        except httpx.HTTPError as exc:
+            result.error = f"network: {exc.__class__.__name__}: {exc}"
+        result.latency_ms = round(sum(result.stages_ms.values()), 1)
+        return result
+
+    def cost_usd(self, r: EngineResult, duration_s: float) -> float:
+        return 0.0
+
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
+        raise NotImplementedError
+
+    def _send(self, stage: str, model: str, result: EngineResult, request: httpx.Request) -> dict:
+        """Rate-limit, send, retry on 429/5xx; record the time of the successful attempt only."""
+        key = f"{self.spec['provider']}:{model}"
+        for attempt in range(MAX_RETRIES + 1):
+            self.limiter.wait(key, float(self.provider.get("rpm", 10)))
+            start = time.perf_counter()
+            resp = self.client.send(request)
+            elapsed = (time.perf_counter() - start) * 1000
+            if resp.status_code == 429 or resp.status_code >= 500:
+                if attempt == MAX_RETRIES:
+                    raise EngineError(f"{stage}: HTTP {resp.status_code} after {attempt} retries: {_short(resp)}")
+                result.retries += 1
+                self.limiter.back_off(key, _retry_after(resp, attempt))
+                continue
+            if resp.status_code >= 400:
+                raise EngineError(f"{stage}: HTTP {resp.status_code}: {_short(resp)}")
+            result.stages_ms[stage] = round(elapsed, 1)
+            return resp.json()
+        raise EngineError(f"{stage}: gave up")  # pragma: no cover
+
+
+class GeminiAudio(Engine):
+    """One call: audio + instruction -> Roman text."""
+
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
+        if not self.key:
+            raise EngineError(f"missing {self.provider['key_env']} (add it to eval/.env)")
+        model = self.spec["model"]
+        body = {
+            "contents": [{"role": "user", "parts": [
+                {"text": load_prompt(self.spec["prompt"], self.word_list)},
+                {"inline_data": {"mime_type": audio.mime, "data": base64.b64encode(audio.data).decode()}},
+            ]}],
+            "generationConfig": self.spec.get("generation_config", {"temperature": 0}),
+        }
+        req = self.client.build_request(
+            "POST", f"{self.provider['base_url']}/models/{model}:generateContent",
+            json=body, headers={"x-goog-api-key": self.key})
+        data = self._send("gemini", model, result, req)
+        cands = data.get("candidates") or []
+        if not cands:
+            raise EngineError(f"gemini: no candidates ({data.get('promptFeedback', 'no feedback')})")
+        parts = cands[0].get("content", {}).get("parts", [])
+        result.text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+        usage = data.get("usageMetadata", {})
+        result.tokens_in = int(usage.get("promptTokenCount", 0))
+        result.tokens_out = int(usage.get("candidatesTokenCount", 0))
+        for d in usage.get("promptTokensDetails", []):
+            if d.get("modality") == "AUDIO":
+                result.tokens_audio = int(d.get("tokenCount", 0))
+
+    def cost_usd(self, r: EngineResult, duration_s: float) -> float:
+        p = self.spec.get("price", {})
+        return (r.tokens_in * p.get("audio_in_per_m", 0) + r.tokens_out * p.get("out_per_m", 0)) / 1e6
+
+
+class GroqWhisper(Engine):
+    """Whisper only, optionally steered by a Roman Urdu hint prompt."""
+
+    def _whisper(self, audio: EncodedAudio, result: EngineResult) -> str:
+        if not self.key:
+            raise EngineError(f"missing {self.provider['key_env']} (add it to eval/.env)")
+        model = self.spec["whisper_model"]
+        form = {"model": model, "temperature": "0", "response_format": "json"}
+        if self.spec.get("language"):
+            form["language"] = self.spec["language"]
+        if self.spec.get("hint"):
+            form["prompt"] = load_prompt(self.spec["hint"])
+        req = self.client.build_request(
+            "POST", f"{self.provider['base_url']}/audio/transcriptions",
+            data=form, files={"file": (f"audio.{audio.ext}", audio.data, audio.mime)},
+            headers={"Authorization": f"Bearer {self.key}"})
+        return str(self._send("whisper", model, result, req).get("text", "")).strip()
+
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
+        result.text = self._whisper(audio, result)
+
+    def cost_usd(self, r: EngineResult, duration_s: float) -> float:
+        # Groq bills Whisper with a 10-second minimum per request.
+        return max(duration_s, 10.0) / 3600 * self.spec.get("price", {}).get("audio_per_hour", 0)
+
+
+class GroqWhisperLLM(GroqWhisper):
+    """Two calls: Whisper (Urdu script) -> small LLM (romanize + restore English words)."""
+
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
+        asr = self._whisper(audio, result)
+        result.raw_asr = asr
+        if not asr:
+            return
+        model = self.spec["llm_model"]
+        body = {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": load_prompt(self.spec["prompt"], self.word_list)},
+                {"role": "user", "content": asr},
+            ],
+            **self.spec.get("llm_extra", {}),
+        }
+        req = self.client.build_request(
+            "POST", f"{self.provider['base_url']}/chat/completions",
+            json=body, headers={"Authorization": f"Bearer {self.key}"})
+        data = self._send("llm", model, result, req)
+        result.text = str(data["choices"][0]["message"].get("content") or "")
+        usage = data.get("usage", {})
+        result.tokens_in = int(usage.get("prompt_tokens", 0))
+        result.tokens_out = int(usage.get("completion_tokens", 0))
+
+    def cost_usd(self, r: EngineResult, duration_s: float) -> float:
+        p = self.spec.get("price", {})
+        llm = (r.tokens_in * p.get("in_per_m", 0) + r.tokens_out * p.get("out_per_m", 0)) / 1e6
+        return super().cost_usd(r, duration_s) + llm
+
+
+class FakeEngine(Engine):
+    """Offline stand-in for tests and dry runs: returns the expected text after a simulated delay."""
+
+    expected: dict[str, str] = {}
+
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
+        delay = float(self.spec.get("delay_ms", 5))
+        time.sleep(delay / 1000)
+        result.stages_ms["fake"] = delay
+        result.text = self.spec.get("text") or self.expected.get(sentence_id, "")
+
+
+KINDS: dict[str, type[Engine]] = {
+    "gemini-audio": GeminiAudio,
+    "whisper-only": GroqWhisper,
+    "whisper-llm": GroqWhisperLLM,
+    "fake": FakeEngine,
+}
+
+
+def build_engines(providers: dict, ids: list[str] | None, limiter: RateLimiter,
+                  word_list: list[str] | None = None) -> tuple[list[Engine], dict[str, httpx.Client]]:
+    specs = providers["engines"]
+    if ids:
+        known = {s["id"] for s in specs}
+        unknown = [i for i in ids if i not in known]
+        if unknown:
+            raise SystemExit(f"unknown engine(s): {', '.join(unknown)}. Known: {', '.join(sorted(known))}")
+        specs = [s for s in specs if s["id"] in ids]
+    clients: dict[str, httpx.Client] = {}
+    engines = []
+    for spec in specs:
+        prov_name = spec.get("provider", "fake")
+        provider = providers.get("providers", {}).get(prov_name, {"rpm": 6000})
+        if prov_name not in clients:
+            clients[prov_name] = httpx.Client(timeout=TIMEOUT, http2=False)
+        engines.append(KINDS[spec["kind"]](spec, provider, clients[prov_name], limiter, word_list))
+    return engines, clients
+
+
+def warm_up(providers: dict, clients_by_provider: dict[str, httpx.Client]) -> None:
+    """Open the TLS connection before timing anything (the app does this when the hotkey goes down)."""
+    for name, client in clients_by_provider.items():
+        prov = providers["providers"].get(name)
+        if not prov:
+            continue
+        key = os.environ.get(prov["key_env"], "")
+        headers = {"x-goog-api-key": key} if name == "gemini" else {"Authorization": f"Bearer {key}"}
+        try:
+            client.get(f"{prov['base_url']}/models", headers=headers)
+        except httpx.HTTPError:
+            pass
+
+
+NO_SPEECH = "[no speech]"
+
+
+def clean_output(text: str) -> str:
+    """Light cleanup every platform will do: trim, drop wrapping quotes/code fences, collapse spaces,
+    and turn the prompt's no-speech marker into empty text."""
+    t = text.strip()
+    if t.lower().strip(". ") == NO_SPEECH:
+        return ""
+    if t.startswith("```") and t.endswith("```"):
+        t = t.strip("`").strip()
+    if len(t) >= 2 and t[0] == t[-1] and t[0] in "\"'":
+        t = t[1:-1].strip()
+    return " ".join(t.split())
+
+
+def _retry_after(resp: httpx.Response, attempt: int) -> float:
+    try:
+        return max(1.0, float(resp.headers.get("retry-after", "")))
+    except ValueError:
+        return 2.0 * (2**attempt)
+
+
+def _short(resp: httpx.Response) -> str:
+    text = resp.text.strip().replace("\n", " ")
+    return text[:300]
