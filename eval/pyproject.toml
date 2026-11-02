@@ -3,7 +3,7 @@ name = "sonic-eval"
 version = "0.1.0"
 description = "SonicScript M0: record test sentences and benchmark cloud speech engines for Roman Urdu / Hinglish dictation."
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = "MIT"
 dependencies = [
   "httpx>=0.27",
   "numpy>=1.26",

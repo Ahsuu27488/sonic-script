@@ -87,6 +87,19 @@ kept, p50 1.8 s, but 14 of 44 requests took 10-29 s (p95 23 s) and 1 timed out: 
 the network. The target is p95 ≤ 1.2 s (blueprint §2); Groq hint meets it (p95 1.2 s, no failures).
 *Where:* `spec/providers.json`, results in `eval/results/m0/` and `eval/results/m0-gemini-am/` (local).
 
+**D-012 License: MIT.** (2026-11-02)
+The project is MIT-licensed (`LICENSE`, `eval/pyproject.toml`); this replaces the Apache-2.0 proposal in
+`blueprint.md` §5/§12. *Why:* the owner's choice: the shortest, best-known permissive license, easy for
+contributors; the patent grant of Apache-2.0 matters little for a free BYOK app. *Where:* `LICENSE`,
+`README.md`, `blueprint.md`, `eval/pyproject.toml`.
+
+**D-013 Fix expected text only when every engine of both providers agrees.** (2026-11-02)
+Three test sentences were corrected (`ur-04` "kar raha tha", `mx-04` "aur", `mx-06` no "environment") because
+Gemini and Groq outputs all agreed with each other and not with the old text; saved runs were re-scored with
+`rescore` (no API calls). Engine-specific mishearings (`ag-02` "unused", `ag-05` "Codex") stay as they are.
+*Why:* a wrong expected text lowers every engine unfairly, but "fixing" it from one engine's output would bias
+the test toward that engine. *Where:* `spec/fixtures/sentences.json`, `eval/sonic_eval/bench.py` `rescore`.
+
 <!-- Template for the next entry:
 
 **D-00N <Decision in one line>.** (YYYY-MM-DD)

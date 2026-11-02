@@ -23,7 +23,7 @@
   {
    "id": "ur-04",
    "category": "urdu",
-   "text": "Yaar tum kal kahan the? Main tumhara intezar karta raha.",
+   "text": "Yaar tum kal kahan the? Main tumhara intezar kar raha tha.",
    "english": []
   },
   {
@@ -87,7 +87,7 @@
   {
    "id": "mx-04",
    "category": "mixed-tech",
-   "text": "Database ka backup le lo phir migration run karna.",
+   "text": "Database ka backup le lo aur migration run karna.",
    "english": [
     "database",
     "backup",
@@ -109,11 +109,10 @@
   {
    "id": "mx-06",
    "category": "mixed-tech",
-   "text": "API key environment variable mein daal do, code mein hardcode mat karna.",
+   "text": "API key variable mein daal do, code mein hardcode mat karna.",
    "english": [
     "API",
     "key",
-    "environment",
     "variable",
     "code",
     "hardcode"

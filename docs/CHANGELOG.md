@@ -3,6 +3,13 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-02 · feat/m0-benchmark (license, fixtures)
+
+- License MIT (D-012): `LICENSE`, README, blueprint, `eval/pyproject.toml`.
+- Report review done by the agent: 3 expected texts fixed where every engine of both providers agreed
+  (D-013); new `rescore` command re-scores saved runs without API calls (keeps `results.jsonl.bak`). All
+  engines gained ~0.5-1 point; ranking unchanged.
+
 ## 2026-11-02 · feat/m0-benchmark
 
 - Graphify code knowledge graph (D-010): code-only, local, `graphify-out/` git-ignored, Claude Code hook in

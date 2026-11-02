@@ -5,6 +5,7 @@
   python -m sonic_eval probe [--engines ID ...]
   python -m sonic_eval bench --preset compression|engines [--run NAME] [--engines ...] [--formats ...]
   python -m sonic_eval report [--run NAME]
+  python -m sonic_eval rescore [--run NAME]   re-score saved outputs after a fixture fix (no API calls)
 """
 
 from __future__ import annotations
@@ -50,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("report", help="build the HTML report for a run")
     rp.add_argument("--run", default="m0")
     rp.add_argument("--audio-dir", type=Path, default=AUDIO_DIR)
+    rs = sub.add_parser("rescore", help="re-score a run against the current sentences.json, then rebuild the report")
+    rs.add_argument("--run", default="m0")
+    rs.add_argument("--audio-dir", type=Path, default=AUDIO_DIR)
 
     args = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
@@ -82,6 +86,11 @@ def main(argv: list[str] | None = None) -> int:
         out = report.build(run_dir, args.audio_dir)
         print(f"\nReport: {out}")
         return 0
+
+    if args.cmd == "rescore":
+        changed = bench.rescore(RESULTS / args.run / "results.jsonl", load_sentences())
+        print(f"Re-scored: {changed} rows changed (old file kept as results.jsonl.bak)")
+        args.cmd = "report"
 
     if args.cmd == "report":
         out = report.build(RESULTS / args.run, args.audio_dir)

@@ -157,7 +157,7 @@ sonic-script/
 | Shared logic across platforms | **Shared spec + golden tests**, not shared code (for now) | The core logic is small (record → HTTP call → normalise). Re-implementing it in Kotlin against the same fixtures is simpler than Rust-on-Android via UniFFI. Revisit if the logic grows. |
 | API keys | **BYOK**, stored in the OS keystore (Windows Credential Manager, libsecret, Android Keystore) | No backend, no cost, no user data passes through us. Easiest kind of open-source project to trust. |
 | Benchmark tool | **Python** (`eval/`) | Quick to write; only calls APIs on recorded files. |
-| License | **Apache-2.0** (proposed) | Permissive, patent grant, friendly for companies and contributors. |
+| License | **MIT** (decided 2026-11-02, D-012) | Shortest, best-known permissive license; easy for contributors. |
 
 ### 5.3 Privacy model (write it in the README)
 - Audio is sent **only** to the provider the user picked, using **their own key**, and only while they dictate.
@@ -284,7 +284,7 @@ Why launch after M4 rather than at the end: Windows + Android covers most of the
 4. **M0 benchmark in Python; the Windows app in Rust** (see §5.2).
 
 **Still open:**
-1. **License:** Apache-2.0 proposed (vs MIT).
+1. **License:** MIT (decided 2026-11-02, D-012).
 2. **Name:** keep "SonicScript" (subject to the availability check), or rename for Urdu/Hindi users?
 
 ---

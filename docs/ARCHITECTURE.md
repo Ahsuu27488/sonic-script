@@ -19,6 +19,7 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 
 | Path | Responsibility |
 |---|---|
+| `LICENSE` | MIT (D-012) |
 | `blueprint.md` | Product plan (v1); `archive/blueprint-v0.md` is the original draft |
 | `DESIGN.md`, `design/tokens.css` | Design system and its tokens (the report inlines the CSS) |
 | `spec/fixtures/sentences.json` | Test set: id, category, text, expected English words, `say` for silence items |
@@ -30,9 +31,9 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `eval/sonic_eval/engines.py` | `GeminiAudio`, `GroqWhisper`, `GroqWhisperLLM`, `FakeEngine`; retries, `clean_output` |
 | `eval/sonic_eval/ratelimit.py` | `RateLimiter`: spaces requests per provider:model, backs off after 429 |
 | `eval/sonic_eval/scoring.py` | `score`: Latin-script check, English words kept, spelling-tolerant accuracy |
-| `eval/sonic_eval/bench.py` | `run` (resumable), `summarise`, `pick_format`, `recommend`, presets |
+| `eval/sonic_eval/bench.py` | `run` (resumable), `rescore`, `summarise`, `pick_format`, `recommend`, presets |
 | `eval/sonic_eval/report.py` | `build`: HTML report (recommendation, tables, latency chart, per-sentence view) |
-| `eval/sonic_eval/__main__.py` | CLI: `record`, `probe`, `bench`, `report` |
+| `eval/sonic_eval/__main__.py` | CLI: `record`, `probe`, `bench`, `report`, `rescore` |
 | `eval/tests/` | Offline tests (mocked HTTP, synthetic audio, fake engines) |
 | `.claude/settings.json`, `.graphifyignore` | Graphify hook for Claude Code and what the graph skips (D-010); graph in `graphify-out/` (git-ignored) |
 
@@ -75,6 +76,7 @@ python -m sonic_eval probe
 python -m sonic_eval bench --preset compression
 python -m sonic_eval bench --preset engines [--formats opus16]
 python -m sonic_eval report --run m0
+python -m sonic_eval rescore --run m0      # re-score saved outputs after a sentences.json fix (no API calls)
 python -m ruff check . && python -m pytest -q
 pip install --user graphifyy               # code graph (D-010); Scripts folder is on the user PATH
 GRAPHIFY_BACKEND=none graphify extract . --code-only && graphify cluster-only . --no-label   # first build

@@ -31,4 +31,4 @@ words in between. SonicScript fixes that.
 
 ## License
 
-Apache-2.0 (proposed, not final yet).
+MIT ([LICENSE](LICENSE)).

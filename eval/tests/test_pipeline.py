@@ -108,3 +108,17 @@ def test_env_file_key_wins_over_global(tmp_path, monkeypatch):
     import os
 
     assert os.environ["GEMINI_API_KEY"] == "project-key"
+
+
+def test_rescore_uses_fixed_expected_text(tmp_path):
+    path = tmp_path / "results.jsonl"
+    row = {"engine": "e", "fmt": "wav", "sentence": "x-01", "repeat": 0, "text": "kar raha tha", "error": None,
+           "script_ok": True, "english_found": 0, "english_total": 0, "accuracy": 0.5, "wer": 0.5}
+    err = dict(row, repeat=1, text="", error="HTTP 503", accuracy=0.0)
+    path.write_text(json.dumps(row) + "\n" + json.dumps(err) + "\n", encoding="utf-8")
+    fixed = [Sentence(id="x-01", category="urdu", text="kar raha tha", english=[])]
+    assert bench.rescore(path, fixed) == 1
+    rows = {r["repeat"]: r for r in bench.read_rows(path)}
+    assert rows[0]["accuracy"] == 1.0 and rows[0]["wer"] == 0.0
+    assert rows[1]["error"] == "HTTP 503" and rows[1]["accuracy"] == 0.0  # errors are left alone
+    assert (tmp_path / "results.jsonl.bak").read_text(encoding="utf-8").count("\n") == 2

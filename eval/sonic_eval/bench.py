@@ -146,6 +146,32 @@ def read_rows(path: Path) -> list[dict]:
     return list(latest.values())
 
 
+def rescore(path: Path, sentences: list[Sentence]) -> int:
+    """Re-score saved outputs against the current expected text (after a fixture fix); no API calls.
+
+    Keeps a copy as results.jsonl.bak and rewrites only the score fields. Returns how many rows changed.
+    """
+    by_id = {s.id: s for s in sentences}
+    lines = path.read_text(encoding="utf-8").splitlines()
+    out, changed = [], 0
+    for line in lines:
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        s = by_id.get(r["sentence"])
+        if s and not r.get("error"):
+            sc = score(r["text"], s.text, s.english)
+            new = {"script_ok": sc.script_ok, "english_found": sc.english_found,
+                   "english_total": len(s.english), "accuracy": sc.accuracy, "wer": sc.wer}
+            if any(r.get(k) != v for k, v in new.items()):
+                changed += 1
+                r.update(new)
+        out.append(json.dumps(r, ensure_ascii=False))
+    path.with_name(path.name + ".bak").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return changed
+
+
 def percentile(values: list[float], p: float) -> float:
     if not values:
         return 0.0
