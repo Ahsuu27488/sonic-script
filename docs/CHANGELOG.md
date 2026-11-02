@@ -5,6 +5,7 @@
 
 ## 2026-11-02 · plan/m1-windows
 
+- STATUS rewritten as a hand-off for a fresh session ("Start here"); Rust + C++ Build Tools installing.
 - PR #1 (M0) merged into `main`. M1 plan written: `docs/plans/2026-11-02-m1-windows-push-to-talk.md`.
 - Owner decisions: tap-to-toggle default with Enter to finish (D-015), pop-up mic moved into M2 (D-016), model
   catalog + preferred/fallback model with a learned deadline (D-017), changeable dictation key (D-018). Blueprint §3.1, §4.2, §8 updated.
