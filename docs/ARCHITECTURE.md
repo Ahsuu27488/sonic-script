@@ -34,6 +34,7 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `eval/sonic_eval/report.py` | `build`: HTML report (recommendation, tables, latency chart, per-sentence view) |
 | `eval/sonic_eval/__main__.py` | CLI: `record`, `probe`, `bench`, `report` |
 | `eval/tests/` | Offline tests (mocked HTTP, synthetic audio, fake engines) |
+| `.claude/settings.json`, `.graphifyignore` | Graphify hook for Claude Code and what the graph skips (D-010); graph in `graphify-out/` (git-ignored) |
 
 ## Data
 
@@ -75,4 +76,7 @@ python -m sonic_eval bench --preset compression
 python -m sonic_eval bench --preset engines [--formats opus16]
 python -m sonic_eval report --run m0
 python -m ruff check . && python -m pytest -q
+pip install --user graphifyy               # code graph (D-010); Scripts folder is on the user PATH
+GRAPHIFY_BACKEND=none graphify extract . --code-only && graphify cluster-only . --no-label   # first build
+graphify update .                          # after code changes; graphify query "..." to ask
 ```

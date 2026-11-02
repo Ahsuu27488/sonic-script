@@ -3,6 +3,13 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-02 · feat/m0-benchmark
+
+- Graphify code knowledge graph (D-010): code-only, local, `graphify-out/` git-ignored, Claude Code hook in
+  `.claude/settings.json`, rules in `CLAUDE.md`. `graphify` installed with pip and its folder added to PATH.
+- Gemini re-test (2026-10-29 16:15 PK) recorded; engine decision final (D-011 supersedes D-009): Groq default,
+  Gemini 3.5 Flash-Lite opt-in.
+
 ## 2026-10-28 · feat/m0-benchmark
 
 - Ran M0 on the owner's 44 recordings (compression + engines + 3 extra Groq variants + Gemini re-run with a

@@ -1,0 +1,4 @@
+# Keep personal data and generated output out of the knowledge graph (D-004).
+spec/fixtures/audio/
+eval/results/
+archive/

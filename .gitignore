@@ -30,3 +30,6 @@ target/
 android/.gradle/
 android/build/
 android/local.properties
+
+# Graphify knowledge graph: generated locally, rebuild with `graphify update .`
+graphify-out/

@@ -57,7 +57,7 @@ still invent words ("shukriya", "music"); in a dictation app that text would be 
 *Why:* found by `probe` with the owner's keys; the benchmark must test engines users can really get.
 *Where:* `spec/providers.json`.
 
-**D-009 (provisional) Default engine: Groq Whisper turbo with a Roman Urdu hint; audio Opus 16 kbps.** (2026-10-28)
+**D-009 (provisional, superseded by D-011) Default engine: Groq Whisper turbo with a Roman Urdu hint; audio Opus 16 kbps.** (2026-10-28)
 Default `groq-whisper-hint` (fastest: p50 0.25 s) with a local cleanup for stray Urdu letters, or
 `groq-whisper-hint+gptoss20b` (~1.2 s, 100% Latin) if cleanup is not enough. Gemini 3.5 Flash-Lite is the
 quality option, not the default, until its latency is re-tested. Whisper must not be forced to `language=ur`.
@@ -65,6 +65,27 @@ quality option, not the default, until its latency is re-tested. Whisper must no
 failed with 503 "high demand", also with a fresh key; Groq never failed and was 5-50x faster; forcing Urdu cut
 English words from ~87% to ~70%. *Where:* `spec/providers.json`, results in `eval/results/m0/` (local).
 Final once Gemini is re-tested at a quiet hour (STATUS Next 1).
+
+**D-010 Code knowledge graph with Graphify, code only, built locally.** (2026-11-02)
+Graphify (PyPI `graphifyy`, MIT) builds `graphify-out/` from the code with tree-sitter; agents query it before
+grepping (`graphify query`), and a Claude Code PreToolUse hook (`.claude/settings.json`) reminds them. Only
+`--code-only` builds with `GRAPHIFY_BACKEND=none`; `graphify-out/` is git-ignored; `.graphifyignore` keeps out
+the voice recordings and results. No git hooks (they would clash with `.githooks/`); rebuild with
+`graphify update .` after code changes.
+*Why:* the owner asked for it to save agent tokens as the code grows (M1 adds a Rust app). The non-code mode
+sends docs to an LLM chosen by whichever key is set, which would push the docs to the Gemini key without asking;
+code-only keeps everything on the PC. *Where:* `CLAUDE.md` (graphify section), `.claude/settings.json`,
+`.graphifyignore`, `.gitignore`.
+
+**D-011 Default engine is Groq; Gemini 3.5 Flash-Lite is an opt-in accuracy mode.** (2026-11-02)
+Supersedes D-009. Default: Groq Whisper turbo with the Roman Urdu hint, audio Opus 16 kbps, never forced to
+`language=ur`. M1 builds a local script-guard (stray Urdu letters → removed or transliterated); if it is not
+enough, the default becomes `groq-whisper-hint+gptoss20b`. Gemini 3.5 Flash-Lite is a selectable "accuracy"
+engine with a client timeout and a Groq fallback; `gemini-3.1-flash-lite` is not offered.
+*Why:* the re-test (run `m0-gemini-am`, 2026-10-29 16:15 PK, 44 clips) gave Gemini 96.7% accuracy and 95% English
+kept, p50 1.8 s, but 14 of 44 requests took 10-29 s (p95 23 s) and 1 timed out: the tail is Google's queue, not
+the network. The target is p95 ≤ 1.2 s (blueprint §2); Groq hint meets it (p95 1.2 s, no failures).
+*Where:* `spec/providers.json`, results in `eval/results/m0/` and `eval/results/m0-gemini-am/` (local).
 
 <!-- Template for the next entry:
 
