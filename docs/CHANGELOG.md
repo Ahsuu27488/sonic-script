@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · docs/handoff-default-engine
+
+- PRs #6 (step 4), #7 (step 5) and #8 (engines + catalog) merged into `main` after green CI.
+- Owner chose the default engine: Gemini 3.5 Flash-Lite with Groq Whisper as the fallback (D-028); not built yet.
+- Key test passed with `sonicscript.exe` in a private test window: Enter and Esc are taken only while recording,
+  Right Ctrl + C still copies. It also measured the mic-open delay (406 ms of a 1.5 s recording lost).
+- The VS Build Tools CMake folder added to the owner's user PATH.
+- STATUS rewritten as a hand-off: "Start here" and an ordered "Next" for the next session.
+
 ## 2026-11-03 · feat/m1-engines
 
 - Owner's live test of step 5: tap / hold, mic and key-up → text in 0.2 s work, but Groq Whisper mangled natural

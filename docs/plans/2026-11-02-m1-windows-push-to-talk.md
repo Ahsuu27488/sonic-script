@@ -20,7 +20,10 @@
 - Owner's live test of step 5 (2026-11-03): key, mic and 0.2 s key-up → text work, but Groq Whisper is weak on
   natural Urdu / Hindi. Quality first now (D-025): engines + catalog on `feat/m1-engines` (D-026, D-027; plan step
   8, the model catalog, done early): Gemini ~97% vs Groq 89%. `--engine` and `--models` added.
-- Next: the owner picks the default (Flash-Lite + Groq fallback proposed), the fallback race, then step 6.
+- Owner chose the default (D-028): Gemini 3.5 Flash-Lite with Groq Whisper as the fallback. Key test passed
+  (Enter / Esc only taken while recording, Right Ctrl + C copies). PRs #6-#8 merged 2026-11-03.
+- Next (STATUS Next): fallback race + default switch, mic-open delay, Flash / Transcribe benchmark after the
+  daily reset, then step 7 (paste), step 6 (key), step 9 (latency log).
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).
