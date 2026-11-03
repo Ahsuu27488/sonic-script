@@ -25,6 +25,9 @@
   so ~160 formatted dictations a day (STATUS known gap 3). A first 20b / 120b run on saved transcripts was
   stopped half-way (the prompt changed under it) and deleted; run `fmt-say-120b` (the 13 sentences as text):
   12 of 13 right.
+- Owner recorded the 13 `fmt` clips. Run `m1-format`: Groq Whisper + format, Layout 88.5% with both 120b and
+  20b (20b lost words on fmt-11); Flash-Lite timed out on all 13 (Google). `spec/providers.json` `format`
+  gained `rpm: 6` (benchmarks only: 8K tokens/min).
 
 ## 2026-11-03 · docs/handoff-formatting
 

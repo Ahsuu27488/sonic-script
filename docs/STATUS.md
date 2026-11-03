@@ -64,7 +64,11 @@ p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart f
   the engine's text and says "Not formatted"), required after Transcribe. `--no-format` = exact words. The
   cleanup keeps line breaks (lists). Text-only check `fmt-say-120b` (the 13 `fmt` sentences as spoken, typed):
   12 of 13 fully right (missed: filler "woh na" kept in fmt-11), ~1 s per request; `lg-02` and `ag-03` keep
-  every word. Not yet measured on audio or on the 44 M0 clips' saved transcripts (Next 1).
+  every word. Audio run `m1-format` (the owner's 13 `fmt` recordings, Groq Whisper + format): Layout 88.5%
+  with 120b and with 20b, format step p50 ~1.0 s; the misses come mostly from Whisper's text (fmt-13 garbled,
+  "Maitlaab" not seen as a filler) and one real one (fmt-03 rules stayed a sentence). 20b paraphrased fmt-11
+  ("Kya kal chutti hai?", words lost); 120b kept them. Flash-Lite timed out on all 13 (Google, 22:00 PK).
+  Not yet measured on the 44 M0 clips' saved transcripts (Next 1).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
@@ -121,8 +125,8 @@ p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart f
 
 1. **Smart formatting (D-030): finish the check**, branch `feat/m1-format` (code done; plan
    `docs/plans/2026-11-03-m1-smart-formatting.md`, section 6).
-   - **Owner:** record the 13 `fmt` clips: `cd eval; python -m sonic_eval record` (only the new ones are
-     missing; say each line as shown, take-backs and fillers included).
+   - Done: the owner recorded the 13 `fmt` clips (2026-11-03); audio run `m1-format` on Groq Whisper with
+     120b and 20b (results under What works).
    - **Agent, text only (Groq quota, no Gemini):** the format step on saved transcripts, 120b first (`--rpm 6`
      keeps under 8K tokens/min; each run ~85-90K tokens of the 200K/day):
      `python -m sonic_eval reformat --from m1-engines --run fmt-120b --model openai/gpt-oss-120b --rpm 6
@@ -130,10 +134,11 @@ p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart f
      `--from m0 --run fmt-120b ... --engines groq-whisper-hint`. Pass: accuracy / English kept within 0.5
      points of the "Before" lines on the clips that did not become lists (`lg-02`, `ag-03` are spoken lists:
      their M0 text is a sentence). 20b the same way only if 120b fails.
-   - **Agent, audio (after the recordings):** `python -m sonic_eval bench --run m1-format --engines
-     gemini-3.5-flash-lite groq-whisper-hint --formats opus16 --repeats 1 --only format --format-model
-     openai/gpt-oss-120b` (Flash-Lite + Groq only, so Transcribe / Flash quota stays for Next 4). Pass: Layout
-     ≥ 90%.
+   - **Agent, audio, Flash-Lite still to do** (it timed out on every clip; probe first with
+     `python -m sonic_eval probe --engines gemini-3.5-flash-lite`): `python -m sonic_eval bench --run m1-format
+     --engines gemini-3.5-flash-lite --formats opus16 --repeats 1 --only format --format-model
+     openai/gpt-oss-120b` (resumes the failed rows; Flash-Lite only, so Transcribe / Flash quota stays for
+     Next 4). Pass: Layout ≥ 90%.
    - Then: a decision entry (model, prompt, the token limit in known gap 3), the app golden check on the 13
      clips (copy `spec/fixtures/audio/fmt-*.wav` to a folder, `sonicscript --bench <folder> --out
      ../eval/results/m1-format-app/results.jsonl`, `rescore`), the owner's live try, PR (What / Why / How
