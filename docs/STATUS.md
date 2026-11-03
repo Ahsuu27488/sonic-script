@@ -4,8 +4,8 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** `feat/m1-voice-gate` (PR stacked on PR #3 `feat/m1-normalizer`;
-`main` has M0 and the M1 plan)
+**Last updated:** 2026-11-03 · **Code at:** `feat/m1-voice-gate` (PR #4; `main` has M0, the M1 plan and
+step 1, PR #3 merged 2026-11-03)
 **In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1 (Windows dictation app in Rust): plan
 steps 1 (text cleanup) and 2 (voice gate) are built and tested, each in its own PR; next is step 3, encode +
 Groq.
@@ -50,8 +50,8 @@ D-011 to D-020. One plan step per branch and PR (`feat/m1-<step>`); the Rust wor
 
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
-  text fields, settings page and fallback model are M2 (D-016, D-017). Step 1 done on `feat/m1-normalizer`
-(PR #3), step 2 on `feat/m1-voice-gate`.
+  text fields, settings page and fallback model are M2 (D-016, D-017). Step 1 merged (PR #3), step 2 on
+`feat/m1-voice-gate` (PR #4).
 
 ## Live state
 
@@ -78,8 +78,7 @@ D-011 to D-020. One plan step per branch and PR (`feat/m1-<step>`); the Rust wor
 1. Agent: M1 step 3, encode (Ogg/Opus 16 kbps, FLAC fallback) + Groq client (`desktop/core/src/encode.rs`,
    `groq.rs`, `spec.rs`), then `--bench` golden check → hotkey (D-015, D-018) → inject → model catalog →
    latency log. Delegate boilerplate to Gemini CLI via Foreman if the owner has signed Gemini CLI in.
-2. Owner: review and merge PR #3 (normalizer), then the voice-gate PR (retarget it to `main` after #3 is
-   merged); keep or change the name "SonicScript".
+2. Owner: review and merge PR #4 (voice gate); keep or change the name "SonicScript".
 
 ## How to run and check
 
