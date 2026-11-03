@@ -21,8 +21,7 @@ def build(providers: dict, results_dir: Path, runs: list[str], app_runs: list[st
     """`total` = clips in the test set, so a model measured on fewer (a daily limit ran out) says so."""
     eval_rows = _rows(results_dir, runs)
     app_rows = _rows(results_dir, app_runs or [])
-    default = providers.get("default_engine")
-    fallback = providers.get("fallback_engine")
+    chain = [link["engine"] for link in providers.get("chain", [])]
     models = []
     for spec in providers["engines"]:
         info = spec.get("catalog")
@@ -36,8 +35,9 @@ def build(providers: dict, results_dir: Path, runs: list[str], app_runs: list[st
             "label": info["label"],
             "provider": spec["provider"],
             "tier": info["tier"],
-            "recommended": spec["id"] == default,
-            "fallback": spec["id"] == fallback,
+            "recommended": bool(chain) and spec["id"] == chain[0],
+            # Place after the default in the chain (1 = first fallback), None when not in it.
+            "fallback": chain.index(spec["id"]) if spec["id"] in chain[1:] else None,
             "keys": list(dict.fromkeys(keys)),
             "limits": info.get("limits", {}),
             "notes": info.get("notes", ""),

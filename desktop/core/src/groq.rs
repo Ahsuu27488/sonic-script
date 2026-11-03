@@ -140,10 +140,30 @@ mod tests {
         assert_eq!(
             err,
             ApiError::RateLimited {
-                retry_after_s: Some(30)
+                retry_after_s: Some(30),
+                daily: false
             }
         );
         assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn a_used_up_daily_quota_is_flagged_and_not_retried() {
+        // Google's answer when a model's free requests for the day are gone (shortened).
+        let body = r#"{"error":{"code":429,"message":"You exceeded your current quota","details":[
+            {"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[
+            {"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}"#;
+        // One reply only: a retry would find no server and fail differently.
+        let (url, _) = server(vec![(429, "", body)]);
+        let err = client(&url).transcribe(&clip()).unwrap_err();
+        assert_eq!(
+            err,
+            ApiError::RateLimited {
+                retry_after_s: None,
+                daily: true
+            }
+        );
+        assert_eq!(err.to_string(), "today's free requests are used up");
     }
 
     #[test]

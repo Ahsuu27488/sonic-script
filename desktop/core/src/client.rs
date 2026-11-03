@@ -1,16 +1,16 @@
 //! One engine from the spec, ready to use: its speech call (Groq / OpenAI transcription or Gemini) and, when
 //! the spec gives one, the `refine` step that turns the transcript into Roman Urdu / Hinglish on another
-//! provider (an OpenAI-style chat call, as `eval` `Refiner`). [`Racer`] puts a fallback engine behind it for
-//! slow or failed requests (D-028).
+//! provider (an OpenAI-style chat call, as `eval` `Refiner`). [`Chain`] puts engines in order of preference,
+//! each asked when the one before is slow, fails or is resting after a rate limit (D-029).
 
-use std::sync::Arc;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use reqwest::blocking::Client as Http;
 use serde_json::{Value, json};
 
-use crate::api::{self, ApiError, Fallback, Transcript};
+use crate::api::{self, ApiError, Passed, Skip, Transcript};
 use crate::encode::Encoded;
 use crate::gemini::Gemini;
 use crate::groq::Groq;
@@ -54,6 +54,10 @@ impl Client {
 }
 
 impl Transcribe for Client {
+    fn id(&self) -> &str {
+        self.engine.id()
+    }
+
     /// Opens the TLS connections the next request needs. Blocking; run it on a worker thread.
     fn warm(&self) {
         match &self.speech {
@@ -92,108 +96,184 @@ impl Transcribe for Client {
     }
 }
 
-/// How long the primary engine gets before the fallback is asked too (D-028: a fixed 3 s; D-017's learned
-/// deadline comes later).
-pub const FALLBACK_AFTER: Duration = Duration::from_secs(3);
+/// How long an engine is skipped after its free requests for the day ran out. Google resets them at
+/// midnight Pacific (about 1 PM in Pakistan); asking again every hour costs one quick 429 at most.
+pub const DAILY_REST: Duration = Duration::from_secs(60 * 60);
+/// The shortest pause after any other 429 (a per-minute limit).
+const MIN_REST: Duration = Duration::from_secs(60);
 
-/// The primary engine with an optional fallback (D-028). The clip goes to the primary; if it fails, or has not
-/// answered by the deadline, it also goes to the fallback, and the first good answer wins. A request that
-/// loses keeps running on its own thread until it ends (at most the 10 s client timeout) and is ignored.
-pub struct Racer<T> {
-    primary: Arc<T>,
-    fallback: Option<Arc<T>>,
-    deadline: Duration,
+/// Engines in order of preference (D-029). The clip goes to the first; when it fails, or has not answered
+/// within its wait, it also goes to the next one, and so on; the first good answer wins. An engine that hit a
+/// rate limit rests (is skipped at once) for a while. A request that loses keeps running on its own thread
+/// until it ends (at most the 10 s client timeout) and is ignored.
+pub struct Chain<T> {
+    links: Vec<Link<T>>,
+    /// Per link: skipped until then.
+    resting: Arc<Mutex<Vec<Option<Instant>>>>,
 }
 
-#[derive(Clone, Copy)]
-enum Side {
-    Primary,
-    Fallback,
+struct Link<T> {
+    engine: Arc<T>,
+    /// How long to wait for this engine before also asking the next one.
+    wait: Duration,
 }
 
-impl<T: Transcribe + Send + Sync + 'static> Racer<T> {
-    pub fn new(primary: T, fallback: Option<T>, deadline: Duration) -> Self {
-        Self {
-            primary: Arc::new(primary),
-            fallback: fallback.map(Arc::new),
-            deadline,
-        }
+/// (place among the engines asked, answer)
+type Reply = (usize, Result<Transcript, ApiError>);
+
+impl<T: Transcribe + Send + Sync + 'static> Chain<T> {
+    /// `links`: (engine, wait) in order; the last engine's wait is not used. Panics when empty.
+    pub fn new(links: Vec<(T, Duration)>) -> Self {
+        assert!(!links.is_empty(), "a chain needs an engine");
+        let resting = Arc::new(Mutex::new(vec![None; links.len()]));
+        let links = links
+            .into_iter()
+            .map(|(engine, wait)| Link {
+                engine: Arc::new(engine),
+                wait,
+            })
+            .collect();
+        Self { links, resting }
     }
 
-    pub fn primary(&self) -> &T {
-        &self.primary
+    pub fn first(&self) -> &T {
+        &self.links[0].engine
     }
 
-    pub fn fallback(&self) -> Option<&T> {
-        self.fallback.as_deref()
+    /// The engines in order, each with its wait.
+    pub fn links(&self) -> impl Iterator<Item = (&T, Duration)> {
+        self.links.iter().map(|l| (&*l.engine, l.wait))
     }
 
-    fn ask(
-        &self,
-        who: Side,
-        audio: &Arc<Encoded>,
-        tx: mpsc::Sender<(Side, Result<Transcript, ApiError>)>,
-    ) {
-        let engine = match who {
-            Side::Primary => self.primary.clone(),
-            Side::Fallback => self.fallback.clone().expect("only asked when there is one"),
-        };
-        let audio = audio.clone();
+    /// Starts link `link` on its own thread; the answer comes back tagged with `place`.
+    fn ask(&self, link: usize, place: usize, audio: &Arc<Encoded>, tx: mpsc::Sender<Reply>) {
+        let engine = self.links[link].engine.clone();
+        let (audio, resting) = (audio.clone(), self.resting.clone());
         std::thread::spawn(move || {
-            // The receiver is gone when the other engine already won: nothing to do then.
-            let _ = tx.send((who, engine.transcribe(&audio)));
+            let result = engine.transcribe(&audio);
+            let until = result.as_ref().err().and_then(rest_for);
+            if let Ok(mut r) = resting.lock() {
+                r[link] = until.map(|d| Instant::now() + d);
+            }
+            // The receiver is gone when another engine already won: nothing to do then.
+            let _ = tx.send((place, result));
         });
     }
 }
 
-impl<T: Transcribe + Send + Sync + 'static> Transcribe for Racer<T> {
-    /// Warms both engines at once (the fallback on its own thread).
-    fn warm(&self) {
-        if let Some(f) = &self.fallback {
-            let f = f.clone();
-            std::thread::spawn(move || f.warm());
+fn rest_for(e: &ApiError) -> Option<Duration> {
+    match e {
+        ApiError::RateLimited { daily: true, .. } => Some(DAILY_REST),
+        ApiError::RateLimited { retry_after_s, .. } => {
+            Some(Duration::from_secs(retry_after_s.unwrap_or(0)).max(MIN_REST))
         }
-        self.primary.warm();
+        _ => None,
+    }
+}
+
+/// Our sender goes to the last engine asked, so `recv` ends once every thread is done.
+fn sender(tx: &mut Option<mpsc::Sender<Reply>>, last: bool) -> mpsc::Sender<Reply> {
+    if last { tx.take() } else { tx.clone() }.expect("each engine is asked once")
+}
+
+impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
+    fn id(&self) -> &str {
+        self.first().id()
     }
 
-    /// Both failing returns the primary's error (it says more about the engine the user chose).
-    fn transcribe(&self, audio: &Encoded) -> Result<Transcript, ApiError> {
-        if self.fallback.is_none() {
-            return self.primary.transcribe(audio);
+    /// Warms every engine at once (all but the first on their own threads).
+    fn warm(&self) {
+        for link in &self.links[1..] {
+            let engine = link.engine.clone();
+            std::thread::spawn(move || engine.warm());
         }
+        self.first().warm();
+    }
+
+    /// When every engine asked fails, the error of the first one asked is returned.
+    fn transcribe(&self, audio: &Encoded) -> Result<Transcript, ApiError> {
+        let id = |link: usize| self.links[link].engine.id().to_string();
+        let now = Instant::now();
+        let resting: Vec<bool> = match self.resting.lock() {
+            Ok(r) => r.iter().map(|u| u.is_some_and(|u| u > now)).collect(),
+            Err(_) => vec![false; self.links.len()],
+        };
+        let mut order: Vec<usize> = (0..self.links.len()).filter(|&i| !resting[i]).collect();
+        let mut passed = Vec::new();
+        if order.is_empty() {
+            // Every engine is resting: asking them anyway beats giving nothing.
+            order = (0..self.links.len()).collect();
+        } else {
+            for i in (0..self.links.len()).filter(|&i| resting[i]) {
+                passed.push(Passed {
+                    engine: id(i),
+                    why: Skip::Resting,
+                });
+            }
+        }
+
         let audio = Arc::new(audio.clone());
         let (tx, rx) = mpsc::channel();
-        self.ask(Side::Primary, &audio, tx.clone());
-        let why = match rx.recv_timeout(self.deadline) {
-            Ok((_, Ok(t))) => return Ok(t),
-            Ok((_, Err(e))) => Fallback::Failed(e),
-            Err(_) => Fallback::Slow,
-        };
-        let mut primary_error = match &why {
-            Fallback::Failed(e) => Some(e.clone()),
-            Fallback::Slow => None,
-        };
-        // `tx` moves into the fallback's thread: once both threads are done, `recv` ends.
-        self.ask(Side::Fallback, &audio, tx);
-        let mut fallback_error = None;
-        while let Ok((who, result)) = rx.recv() {
-            match (who, result) {
-                (_, Ok(t)) => {
+        let mut tx = Some(tx);
+        let mut errors: Vec<Option<ApiError>> = vec![None; order.len()];
+        self.ask(order[0], 0, &audio, sender(&mut tx, order.len() == 1));
+        let (mut asked, mut since) = (1, Instant::now());
+        loop {
+            let reply = if asked < order.len() {
+                let wait = self.links[order[asked - 1]]
+                    .wait
+                    .saturating_sub(since.elapsed());
+                // We still hold a sender, so this can only time out.
+                rx.recv_timeout(wait).ok()
+            } else {
+                match rx.recv() {
+                    Ok(r) => Some(r),
+                    Err(_) => break,
+                }
+            };
+            let next = match reply {
+                Some((place, Ok(t))) => {
                     return Ok(Transcript {
-                        fallback: Some(why),
+                        engine: id(order[place]),
+                        passed,
                         ..t
                     });
                 }
-                (Side::Primary, Err(e)) => primary_error = Some(e),
-                (Side::Fallback, Err(e)) => fallback_error = Some(e),
-            }
-            if primary_error.is_some() && fallback_error.is_some() {
-                break;
+                Some((place, Err(e))) => {
+                    // Only the newest engine failing moves the chain on; an older one may still answer.
+                    let newest = place + 1 == asked && asked < order.len();
+                    if newest {
+                        passed.push(Passed {
+                            engine: id(order[place]),
+                            why: Skip::Failed(e.clone()),
+                        });
+                    }
+                    errors[place] = Some(e);
+                    if errors.iter().all(Option::is_some) {
+                        break;
+                    }
+                    newest
+                }
+                None => {
+                    passed.push(Passed {
+                        engine: id(order[asked - 1]),
+                        why: Skip::Slow,
+                    });
+                    true
+                }
+            };
+            if next {
+                let last = asked + 1 == order.len();
+                self.ask(order[asked], asked, &audio, sender(&mut tx, last));
+                asked += 1;
+                since = Instant::now();
             }
         }
-        Err(primary_error
-            .or(fallback_error)
-            .unwrap_or_else(|| ApiError::Network("the engine thread stopped".into())))
+        Err(errors
+            .into_iter()
+            .flatten()
+            .next()
+            .unwrap_or_else(|| ApiError::Network("the engine threads stopped".into())))
     }
 }
 
@@ -312,103 +392,212 @@ mod tests {
     }
 
     impl Transcribe for Fake {
+        fn id(&self) -> &str {
+            self.id
+        }
+
         fn transcribe(&self, _: &Encoded) -> Result<Transcript, ApiError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             std::thread::sleep(self.after);
             self.reply.clone().map(|text| Transcript {
                 text: text.into(),
-                engine: self.id.into(),
                 ..Transcript::default()
             })
         }
     }
 
-    const DEADLINE: Duration = Duration::from_millis(300);
+    const WAIT: Duration = Duration::from_millis(300);
 
-    fn race(primary: Fake, fallback: Fake) -> (Result<Transcript, ApiError>, Duration, u32) {
-        let calls = fallback.calls.clone();
-        let racer = Racer::new(primary, Some(fallback), DEADLINE);
+    /// A chain of fakes, each waited on for [`WAIT`], and each fake's call counter.
+    fn chain(fakes: Vec<Fake>) -> (Chain<Fake>, Vec<Arc<AtomicU32>>) {
+        let calls = fakes.iter().map(|f| f.calls.clone()).collect();
+        (
+            Chain::new(fakes.into_iter().map(|f| (f, WAIT)).collect()),
+            calls,
+        )
+    }
+
+    fn run(c: &Chain<Fake>) -> (Result<Transcript, ApiError>, Duration) {
         let audio = crate::encode::opus(&vec![0.1; 1_600]).unwrap();
         let t = Instant::now();
-        let result = racer.transcribe(&audio);
-        (result, t.elapsed(), calls.load(Ordering::SeqCst))
+        (c.transcribe(&audio), t.elapsed())
+    }
+
+    fn calls(c: &[Arc<AtomicU32>]) -> Vec<u32> {
+        c.iter().map(|n| n.load(Ordering::SeqCst)).collect()
+    }
+
+    fn slow(engine: &str) -> Passed {
+        Passed {
+            engine: engine.into(),
+            why: Skip::Slow,
+        }
+    }
+
+    fn failed(engine: &str, e: ApiError) -> Passed {
+        Passed {
+            engine: engine.into(),
+            why: Skip::Failed(e),
+        }
+    }
+
+    fn daily() -> ApiError {
+        ApiError::RateLimited {
+            retry_after_s: None,
+            daily: true,
+        }
     }
 
     #[test]
-    fn a_slow_primary_loses_to_the_fallback_at_the_deadline() {
-        let (r, took, asked) = race(
-            Fake::new("gemini", 2_000, Ok("Gemini text")),
-            Fake::new("groq", 50, Ok("Groq text")),
-        );
+    fn a_slow_engine_hands_over_to_the_next_after_its_wait() {
+        let (c, n) = chain(vec![
+            Fake::new("transcribe", 2_000, Ok("Transcribe text")),
+            Fake::new("flash", 50, Ok("Flash text")),
+        ]);
+        let (r, took) = run(&c);
         let t = r.unwrap();
-        assert_eq!((t.text.as_str(), t.engine.as_str()), ("Groq text", "groq"));
-        assert_eq!(t.fallback, Some(Fallback::Slow));
-        assert_eq!(asked, 1);
+        assert_eq!(
+            (t.text.as_str(), t.engine.as_str()),
+            ("Flash text", "flash")
+        );
+        assert_eq!(t.passed, [slow("transcribe")]);
+        assert_eq!(calls(&n), [1, 1]);
         assert!(
-            took >= DEADLINE && took < DEADLINE + Duration::from_millis(500),
-            "deadline + Groq, not Gemini's 2 s: {took:?}"
+            took >= WAIT && took < WAIT + Duration::from_millis(500),
+            "{took:?}"
         );
     }
 
     #[test]
-    fn a_primary_error_asks_the_fallback_at_once() {
-        let failed = ApiError::Http(503, "high demand".into());
-        let (r, took, _) = race(
-            Fake::new("gemini", 0, Err(failed.clone())),
-            Fake::new("groq", 50, Ok("Groq text")),
-        );
+    fn each_slow_engine_adds_its_wait_down_the_chain() {
+        let (c, _) = chain(vec![
+            Fake::new("transcribe", 2_000, Ok("1")),
+            Fake::new("flash", 2_000, Ok("2")),
+            Fake::new("lite", 2_000, Ok("3")),
+            Fake::new("groq", 20, Ok("4")),
+        ]);
+        let (r, took) = run(&c);
         let t = r.unwrap();
         assert_eq!(t.engine, "groq");
-        assert_eq!(t.fallback, Some(Fallback::Failed(failed)));
-        assert!(took < DEADLINE, "no wait for the deadline: {took:?}");
+        assert_eq!(t.passed, [slow("transcribe"), slow("flash"), slow("lite")]);
+        assert!(
+            took >= 3 * WAIT && took < 3 * WAIT + Duration::from_millis(500),
+            "{took:?}"
+        );
     }
 
     #[test]
-    fn a_fast_primary_never_asks_the_fallback() {
-        let (r, _, asked) = race(
-            Fake::new("gemini", 20, Ok("Gemini text")),
+    fn errors_go_down_the_chain_at_once() {
+        let busy = ApiError::Http(503, "high demand".into());
+        let (c, _) = chain(vec![
+            Fake::new("transcribe", 0, Err(busy.clone())),
+            Fake::new("flash", 0, Err(daily())),
+            Fake::new("lite", 30, Ok("Lite text")),
+        ]);
+        let (r, took) = run(&c);
+        let t = r.unwrap();
+        assert_eq!(t.engine, "lite");
+        assert_eq!(
+            t.passed,
+            [failed("transcribe", busy), failed("flash", daily())]
+        );
+        assert!(took < WAIT, "no waiting on failed engines: {took:?}");
+    }
+
+    #[test]
+    fn a_fast_first_engine_is_the_only_one_asked() {
+        let (c, n) = chain(vec![
+            Fake::new("transcribe", 20, Ok("Transcribe text")),
+            Fake::new("flash", 0, Ok("Flash text")),
             Fake::new("groq", 0, Ok("Groq text")),
-        );
-        let t = r.unwrap();
-        assert_eq!((t.engine.as_str(), t.fallback.as_ref()), ("gemini", None));
-        assert_eq!(asked, 0);
+        ]);
+        let t = run(&c).0.unwrap();
+        assert_eq!((t.engine.as_str(), t.passed.len()), ("transcribe", 0));
+        assert_eq!(calls(&n), [1, 0, 0]);
     }
 
     #[test]
-    fn a_slow_primary_still_wins_when_the_fallback_fails() {
-        let (r, _, asked) = race(
-            Fake::new("gemini", 600, Ok("Gemini text")),
+    fn a_slow_engine_still_wins_when_the_next_fails() {
+        let (c, _) = chain(vec![
+            Fake::new("lite", 600, Ok("Lite text")),
             Fake::new("groq", 0, Err(ApiError::Timeout)),
+        ]);
+        let t = run(&c).0.unwrap();
+        assert_eq!(t.engine, "lite");
+        assert_eq!(t.passed, [slow("lite")], "the next one was asked, and lost");
+    }
+
+    #[test]
+    fn when_every_engine_fails_the_first_error_is_returned() {
+        let first = ApiError::Http(503, "high demand".into());
+        let (c, _) = chain(vec![
+            Fake::new("lite", 0, Err(first.clone())),
+            Fake::new("groq", 0, Err(ApiError::BadKey("GROQ_API_KEY".into()))),
+        ]);
+        assert_eq!(run(&c).0.unwrap_err(), first);
+        let (c, _) = chain(vec![
+            Fake::new("lite", 400, Err(ApiError::Timeout)),
+            Fake::new("groq", 0, Err(ApiError::BadKey("GROQ_API_KEY".into()))),
+        ]);
+        assert_eq!(
+            run(&c).0.unwrap_err(),
+            ApiError::Timeout,
+            "also when it fails late"
         );
+    }
+
+    #[test]
+    fn a_used_up_engine_is_skipped_on_the_next_clips() {
+        let (c, n) = chain(vec![
+            Fake::new("transcribe", 0, Err(daily())),
+            Fake::new("flash", 0, Ok("Flash text")),
+        ]);
+        let t = run(&c).0.unwrap();
+        assert_eq!(t.passed, [failed("transcribe", daily())]);
+        let (r, took) = run(&c);
         let t = r.unwrap();
-        assert_eq!(t.engine, "gemini");
-        assert_eq!(t.fallback, Some(Fallback::Slow), "it was asked, and lost");
-        assert_eq!(asked, 1);
-    }
-
-    #[test]
-    fn when_both_fail_the_primary_error_is_returned() {
-        let primary_error = ApiError::RateLimited {
-            retry_after_s: Some(30),
+        assert_eq!(t.engine, "flash");
+        let resting = Passed {
+            engine: "transcribe".into(),
+            why: Skip::Resting,
         };
-        let (r, ..) = race(
-            Fake::new("gemini", 0, Err(primary_error.clone())),
-            Fake::new("groq", 0, Err(ApiError::BadKey("GROQ_API_KEY".into()))),
-        );
-        assert_eq!(r.unwrap_err(), primary_error);
-        let (r, ..) = race(
-            Fake::new("gemini", 400, Err(ApiError::Timeout)),
-            Fake::new("groq", 0, Err(ApiError::BadKey("GROQ_API_KEY".into()))),
-        );
-        assert_eq!(r.unwrap_err(), ApiError::Timeout, "also when it fails late");
+        assert_eq!(t.passed, [resting]);
+        assert_eq!(calls(&n), [1, 2], "not asked again while it rests");
+        assert!(took < WAIT);
     }
 
     #[test]
-    fn without_a_fallback_the_primary_answers_however_long_it_takes() {
-        let racer = Racer::new(Fake::new("gemini", 400, Ok("Gemini text")), None, DEADLINE);
-        let audio = crate::encode::opus(&vec![0.1; 1_600]).unwrap();
-        let t = racer.transcribe(&audio).unwrap();
-        assert_eq!((t.engine.as_str(), t.fallback), ("gemini", None));
+    fn other_errors_do_not_rest_an_engine() {
+        let (c, n) = chain(vec![
+            Fake::new(
+                "transcribe",
+                0,
+                Err(ApiError::Http(503, "high demand".into())),
+            ),
+            Fake::new("flash", 0, Ok("Flash text")),
+        ]);
+        run(&c).0.unwrap();
+        run(&c).0.unwrap();
+        assert_eq!(calls(&n), [2, 2]);
+    }
+
+    #[test]
+    fn a_lone_engine_is_asked_even_while_it_rests() {
+        let (c, n) = chain(vec![Fake::new("flash", 0, Err(daily()))]);
+        assert_eq!(run(&c).0.unwrap_err(), daily());
+        assert_eq!(run(&c).0.unwrap_err(), daily());
+        assert_eq!(
+            calls(&n),
+            [2],
+            "with nothing else to ask, it is asked anyway"
+        );
+    }
+
+    #[test]
+    fn a_lone_engine_answers_however_long_it_takes() {
+        let (c, _) = chain(vec![Fake::new("lite", 400, Ok("Lite text"))]);
+        let t = run(&c).0.unwrap();
+        assert_eq!((t.engine.as_str(), t.passed.len()), ("lite", 0));
     }
 
     #[test]

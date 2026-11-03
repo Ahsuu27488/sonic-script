@@ -7,12 +7,14 @@
 **Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-fallback` (PR open; `main` has PRs #3-#9).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live (key test passed, 0.2 s
 key-up → text with Groq), 6 engines are benchmarked and listed in a free / paid model catalog
-(`sonicscript --models`), and the default is now **Gemini 3.5 Flash-Lite with Groq raced in after 3 s** (D-028,
-built: 95.5%, typical 1.5 s, slowest 5% 3.4 s, 0 errors). Text is still printed in the console, not pasted (step 7).
+(`sonicscript --models`), and the default is now an **engine chain** (D-029): Gemini 3.5 Transcribe + Roman
+cleanup → Gemini 3.5 Flash → Flash-Lite → Groq Whisper, skipping models whose free requests are used up (run
+`m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors, p95 4.3 s). Text is still printed in the console,
+not pasted (step 7). Smart list formatting is researched and tested (works, not built).
 
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
-   D-028 (D-025 to D-028 are the newest and change the direction), `ARCHITECTURE.md`, and the plan
+   D-029 (D-025 to D-029 are the newest and change the direction), `ARCHITECTURE.md`, and the plan
    `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top).
 2. Do "Next" below in order, one branch and PR per item (`feat/m1-<topic>`), each with its check.
 3. Keys: `GROQ_API_KEY` and `GEMINI_API_KEY` are in the owner's Windows user environment; `OPENAI_API_KEY` only
@@ -81,15 +83,20 @@ built: 95.5%, typical 1.5 s, slowest 5% 3.4 s, 0 errors). Text is still printed 
   - `gemini-3.8-flash`: dropped, every free-tier request timed out or got 503.
   - Free-tier limits for the owner's key from Google's own 429s: Flash 20/day, Transcribe 25/day (reset at
     midnight Pacific = 1 PM Pakistan). Flash-Lite: not hit at 150+/day (third-party: 500/day).
-- Default engine with fallback (D-028, 2026-11-03): `sonicscript` without `--engine` sends the clip to
-  `gemini-3.5-flash-lite`; after 3 s without an answer, or on an error, also to `groq-whisper-hint`; first good
-  answer wins, the console says "Used groq-whisper-hint: ... was slow". `--engine <id>` runs one engine alone.
-  Run `m1-fallback` (44 M0 clips, scored by `eval rescore`): accuracy 95.5% on speech clips, English kept 92%,
-  Latin-only 100%, silence 100%, 0 errors, clip → text p50 1.5 s / p95 3.4 s. Groq answered 10 of 42 clips
-  (Gemini slow each time; 91.9% on those), Gemini 32 (96.6%). Racer tests with fake engines: slow primary →
-  fallback at the deadline, error → fallback at once, fast primary → no fallback request, both fail → primary's
-  error, slow primary still wins when the fallback fails.
-- `eval`: 29 offline tests pass; `desktop`: 57 core + 7 app tests pass, fmt and clippy clean (2026-11-03).
+- Engine chain (D-029, 2026-11-03): `sonicscript` without `--engine` sends the clip to
+  `gemini-3.5-transcribe+gptoss20b`; after 4 s or an error also to `gemini-3.5-flash`, 2 s later
+  `gemini-3.5-flash-lite`, 2 s later `groq-whisper-hint`; first good answer wins. Run `m1-chain` (44 M0 clips,
+  `eval rescore`): 94.9% on speech clips, English kept 93%, Latin-only 100%, silence 100%, 0 errors, p50 3.3 s /
+  p95 4.3 s. Transcribe answered 24 clips (98.5%, typical 2.9 s) until Google's real daily-limit 429 (clip 26),
+  then was skipped without a request; Google was very slow that hour (text requests 13-29 s), so Groq answered
+  13 (88.1%), Flash 4, Flash-Lite 1. The run before, D-028's Flash-Lite + Groq (`m1-fallback`): 95.5%, p95 3.4 s.
+  Chain tests with fake engines: slow → next after its wait, waits add down the chain, errors move on at once,
+  fast first → no other request, all fail → first error, daily 429 → skipped on later clips, other errors →
+  not rested, a lone engine is asked even while resting. `groq.rs`: a daily-quota 429 is flagged, not retried.
+- Smart formatting test (2026-11-03, text only, `docs/research/format-test/`): one prompt with two examples
+  turns spoken lists into "- " lists, keeps ordinary sentences, applies take-backs ("nahi nahi"), lakh numbers
+  (2,50,000) and romanizes Urdu script, in ~1 s on Groq `gpt-oss-20b` / `gpt-oss-120b` (120b best). Not wired in.
+- `eval`: 29 offline tests pass; `desktop`: 61 core + 7 app tests pass, fmt and clippy clean (2026-11-03).
 - Key test (2026-11-03, `sonicscript.exe` in a private test window with simulated keys): Enter while recording
   stops it and never reaches the app; Enter when idle passes; Esc cancels; Right Ctrl + C still copies and
   cancels the recording it started. With the owner's earlier live test (tap, hold, Realtek mic, 0.2 s key-up →
@@ -100,11 +107,12 @@ built: 95.5%, typical 1.5 s, slowest 5% 3.4 s, 0 errors). Text is still printed 
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
   text fields, settings page and fallback model are M2 (D-016, D-017). Steps 0-3 merged (PR #3, #4, #5);
-  step 4 PR #6; step 5 PR #7 (verified live); engines + catalog PR #8; default engine + fallback (D-028)
-  on `feat/m1-fallback`.
+  step 4 PR #6; step 5 PR #7 (verified live); engines + catalog PR #8; engine chain (D-029) PR #10.
 - Benchmark `m1-engines`: Flash and Transcribe have 19-22 clips left (resume after the daily reset with the same
   `bench --run m1-engines --engines gemini-3.5-transcribe+gptoss20b gemini-3.5-flash` command, then
-  `catalog`).
+  `catalog`). Today's (2026-11-03) free requests went to run `m1-chain`.
+- Smart formatting (Wispr Flow research, `docs/research/2026-11-03-wispr-flow.md`): owner's direction: no
+  per-app styles, one smart formatter (lists when the speaker lists things). Questions to the owner pending.
 
 ## Live state
 
@@ -113,9 +121,10 @@ built: 95.5%, typical 1.5 s, slowest 5% 3.4 s, 0 errors). Text is still printed 
 ## Known gaps
 
 1. Only Groq Whisper is fast (0.3 s) but it is the least accurate (89%); every engine above 95% takes
-   1.5-2.5 s typically, which D-025 accepts. The fallback (D-028) keeps the slow tail at ~3.4 s, but with
-   the fixed 3 s deadline Groq answered 24% of clips in run `m1-fallback` (accuracy 95.5% vs Gemini alone
-   ~97%). A later deadline (4-5 s) or D-017's learned deadline would keep more Gemini answers: owner's call.
+   1.5-2.5 s typically, which D-025 accepts. With the chain (D-029) the typical wait is ~3 s (Transcribe +
+   cleanup) and up to ~4.3 s when Google is slow; once Transcribe is out of free requests, Flash and Flash-Lite
+   get only 2 s each before Groq is asked (in `m1-chain` Groq answered 13 of 18 such clips, 88%). Waits of 3 s
+   for Flash / Flash-Lite, or D-017's learned deadline, would keep more Gemini answers: owner's call.
 2. Names fail on Groq; the word list fixes sound-alikes ("Jaminai" → Gemini, "Codec" → Codex) but not words
    run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM).
 3. Whisper-hint sometimes translates instead of transcribing (`mx-04` → "Take a backup and run the database.",
@@ -134,16 +143,22 @@ built: 95.5%, typical 1.5 s, slowest 5% 3.4 s, 0 errors). Text is still printed 
 9. Building `desktop/` needs CMake on PATH (for libopus): the VS Build Tools CMake folder was added to the
    owner's user PATH on 2026-11-03 (new terminals only). On another PC: that folder or `winget install Kitware.CMake`.
 10. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
-11. Gemini Flash-Lite, the most accurate engine with a usable free limit, has a slow tail (some requests
-    10-20 s; 2 of 44 hit the app's 10 s timeout). The fallback race (D-028) caps the wait; a request that loses
-    keeps running in the background until it ends (at most 10 s) and is ignored. The bench's cost counts only
-    the answer that was used.
+11. Every Gemini model has a slow tail (some requests 10-30 s), and they slow down together. The chain
+    (D-029) caps the wait at ~4.3 s with Groq last; a request that loses keeps running in the background until
+    it ends (at most 10 s) and is ignored, but still uses that model's daily quota. The bench's cost counts only
+    the answer that was used. The "free requests used up" notice is only printed in dictation mode (bench rows
+    show it as `passed`); it is not tried live yet.
 12. Free-tier Gemini requests may be used by Google to improve its products (Gemini API terms); the catalog
     says so. OpenAI and Groq-only engines do not have this note (not checked).
+13. No smart formatting yet: lists, fillers ("matlab", "woh na"), take-backs and South Asian numbers come out
+    as spoken. Tested and working in a prompt (see What works); needs spoken test sentences and a score in
+    `eval` before it goes into `romanize-v1.md` / `transcribe-roman-v1.md`. Groq Whisper (last in the chain)
+    has no language model step, so its text would stay unformatted.
 
 ## Next
 
-1. **Owner: review and merge the `feat/m1-fallback` PR**; decide whether the 3 s deadline stays (known gap 1).
+1. **Owner: review and merge PR #10 (engine chain, D-029)**; decide the Flash / Flash-Lite waits (known gap 1);
+   answer the smart-formatting questions, then an agent plans it (`docs/plans/`) on its own branch.
 2. **Agent: mic-open delay (known gap 8)**: measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's

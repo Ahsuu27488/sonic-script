@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use sonicscript_core::api::Fallback;
+use sonicscript_core::api::{ApiError, Skip};
 use sonicscript_core::keys::Action;
 use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::{self, Outcome, Transcribe};
@@ -122,9 +122,9 @@ fn transcribe(
     let key_up_to_text = stopped.elapsed().as_millis();
     let seconds = f64::from(out.audio_ms) / 1000.0;
     if let Some(e) = &out.error {
-        // With a fallback, an error comes back only when both engines failed.
-        let both = if client.fallback().is_some() {
-            " (the fallback failed too)"
+        // In a chain, an error comes back only when every engine asked failed.
+        let both = if client.links().count() > 1 {
+            " (every engine in the chain failed)"
         } else {
             ""
         };
@@ -150,21 +150,41 @@ fn transcribe(
             f64::from(out.sent_ms) / 1000.0,
             out.stages.request
         );
-        if let Some(note) = fallback_note(&out, client.primary().engine().id()) {
+        if let Some(note) = fallback_note(&out, client.first().id()) {
             println!("  {note}");
         }
     }
+    for note in limit_notes(&out) {
+        println!("  {note}");
+    }
 }
 
-/// The short notice D-028 asks for when the fallback's text was used.
-fn fallback_note(out: &Outcome, primary: &str) -> Option<String> {
-    let why = out.fallback.as_ref().filter(|_| out.engine != primary)?;
-    Some(match why {
-        Fallback::Slow => format!(
-            "Used {}: {primary} was slow (no answer in {} s).",
-            out.engine,
-            sonicscript_core::client::FALLBACK_AFTER.as_secs()
-        ),
-        Fallback::Failed(e) => format!("Used {}: {primary} failed ({e}).", out.engine),
-    })
+/// Which engine's text this is when it is not the first one's, and why (D-029).
+fn fallback_note(out: &Outcome, first: &str) -> Option<String> {
+    if out.engine == first || out.passed.is_empty() {
+        return None;
+    }
+    let why: Vec<String> = out.passed.iter().map(ToString::to_string).collect();
+    Some(format!("Used {}: {}.", out.engine, why.join("; ")))
+}
+
+/// What to tell the user when an engine hits its free limit (once, when the 429 comes; afterwards the engine
+/// is skipped without asking until it has rested).
+fn limit_notes(out: &Outcome) -> Vec<String> {
+    out.passed
+        .iter()
+        .filter_map(|p| match &p.why {
+            Skip::Failed(ApiError::RateLimited { daily: true, .. }) => Some(format!(
+                "! {} has used up today's free requests. They come back at midnight Pacific time \
+                 (about 1 PM in Pakistan); until then the next model in the chain answers first. To make \
+                 another model your main one: sonicscript --engine <id> (list: sonicscript --models).",
+                p.engine
+            )),
+            Skip::Failed(ApiError::RateLimited { .. }) => Some(format!(
+                "! {} hit its per-minute limit: the next model answers for about a minute.",
+                p.engine
+            )),
+            _ => None,
+        })
+        .collect()
 }

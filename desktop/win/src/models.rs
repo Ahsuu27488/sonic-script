@@ -28,11 +28,11 @@ pub fn print() -> Result<(), String> {
 
 fn print_model(m: &Value) {
     let star = if m["recommended"] == true {
-        "  ★ default"
-    } else if m["fallback"] == true {
-        "  ↺ fallback (when the default is slow or fails)"
+        "  ★ default".to_string()
+    } else if let Some(n) = m["fallback"].as_u64() {
+        format!("  ↺ fallback {n}")
     } else {
-        ""
+        String::new()
     };
     println!(
         "\n  {}  [{}]{star}",

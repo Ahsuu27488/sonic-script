@@ -30,7 +30,8 @@ usage: sonicscript [--engine <id>] [mode]
   sonicscript --record <seconds>              mic check: record, then print the text (0.5-300 s)
   sonicscript --file <wav>...                 transcribe 16 kHz mono WAV files, print the text
   sonicscript --bench <dir> [--out <file>]    run every WAV in <dir>, write eval rows (JSON lines)
-Without --engine the spec's default_engine runs, with its fallback_engine for slow or failed requests;
+Without --engine the spec's engine chain runs (D-029): Gemini 3.5 Transcribe, then Gemini 3.5 Flash,
+Flash-Lite and Groq Whisper, each asked when the one before is slow, fails or is out of free requests;
 --engine <id> runs that engine from spec/providers.json alone.
 Keys come from GROQ_API_KEY / GEMINI_API_KEY (this console or your Windows user environment).";
 

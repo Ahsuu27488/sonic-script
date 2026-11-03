@@ -3,6 +3,23 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-fallback (engine chain)
+
+- Owner chose a chain of free Gemini models with Groq last (D-029, supersedes D-028): `spec/providers.json`
+  `chain` (Transcribe + Groq Roman cleanup 4 s → Flash 2 s → Flash-Lite 2 s → Groq Whisper) replaces
+  `default_engine` / `fallback_engine`; `spec::chain()`.
+- `client::Racer` became `client::Chain`: any number of engines, each with its wait; errors move on at once; a
+  429 rests the engine (1 h for a daily quota, else ≥ 60 s) so later clips skip it without a request.
+  `ApiError::RateLimited` gained `daily` (Google's `...PerDay...` quota; never retried); `Transcript` /
+  `Outcome` list the engines `passed` over (`Slow` / `Failed` / `Resting`); `Transcribe` gained `id`.
+- App: an engine with a missing key is left out of the chain with a notice; dictation prints which model
+  answered and, once, that a model's free requests are used up (when they come back, how to change the main
+  model). Bench rows `app-<a>~<b>~...` with `passed`; the summary counts answers per engine.
+- Catalog: `fallback` is the place in the chain; `--models` shows "fallback 1 / 2 / 3".
+- Run `m1-chain`: 94.9%, 0 errors, p50 3.3 s / p95 4.3 s; Transcribe 98.5% on its 24 clips.
+- Research: Wispr Flow's formatting (`docs/research/2026-11-03-wispr-flow.md`) and a smart-list formatting test
+  (`docs/research/format-test/`): works in ~1 s on Groq; not wired in.
+
 ## 2026-11-03 · feat/m1-fallback
 
 - Default engine is now `gemini-3.5-flash-lite` with `groq-whisper-hint` as the fallback (D-028):
