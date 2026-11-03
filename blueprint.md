@@ -107,7 +107,7 @@ Network dominates the time budget. Planned optimisations:
 Model names and free-tier limits change often. The app keeps model ids in config, not code, and the benchmark (§9) re-runs whenever we switch.
 
 ### 4.2 Choosing the default
-**Milestone 0 decides**, using my own recordings: the engine with the best mix of correct script, English kept English, and p95 latency becomes the default. The others stay selectable in settings. The user picks a **preferred and a fallback model** from a catalog with the benchmark numbers (`spec/models.json`, D-017). If the preferred model fails, hits a rate limit, or passes its learned deadline (about 2x its usual time for that clip length), the fallback starts in parallel, the first answer wins, and a short notice says why.
+**Milestone 0 decides**, using my own recordings: the engine with the best mix of correct script, English kept English, and p95 latency becomes the default. The others stay selectable in settings. The user picks a **main model and up to two fallbacks** from a catalog with the benchmark numbers (`spec/models.json`, D-017, D-029); the default chain is Gemini 3.5 Transcribe → Flash → Flash-Lite, with Groq Whisper last. If a model fails, hits a rate limit, or passes its deadline (fixed now; later learned, about 2x its usual time for that clip length), the next one starts in parallel, the first answer wins, and a short notice says why. A model whose free requests for the day are used up is skipped until they reset, and the user is told.
 
 ### 4.3 Cost per dictation (typical 8-second clip)
 - Engine A: ~260 audio tokens in + ~60 tokens out ≈ **$0.0002** → ~$0.20 per 1,000.
@@ -120,6 +120,7 @@ The romanization prompt is the heart of the project, so it's treated like code:
 - Rules: Latin script only; English words in standard English spelling; preserve meaning exactly (never translate, summarise or answer); add punctuation and casing; numbers as digits.
 - **Spelling style.** Roman Urdu has no standard spelling ("kar do" / "kardo", "hai" / "hay"). Ship a sensible default (common chat spellings: *hai, kar do, nahi, kya*), plus a user setting and a **personal word list** (names, product terms like "Taskvane", "PR", "Kubernetes") injected into the prompt.
 - Output modes: **Roman Urdu/Hinglish** (default), **English only**, **Urdu script**, **Devanagari**. The last two are cheap to add and widen the audience.
+- **Smart formatting** (D-030, on by default, one switch to turn it off): spoken lists become lists, empty fillers ("matlab", "umm") and taken-back words ("nahi nahi", "actually") are removed, numbers become digits with lakh / crore grouping. The same for every app (no per-app styles).
 
 ### 4.5 Normalizer (runs locally after the model)
 - **Script guard:** if Arabic/Devanagari characters slip through in Roman mode, re-ask the LLM once, or transliterate with rules.
@@ -234,7 +235,7 @@ Every milestone ends with something I use daily or a measured result, not just c
 |---|---|---|---|
 | **M0** | **Engine benchmark** (`eval/`): record ~40 real sentences (Urdu, English, mixed, tech-heavy, names); run engines A / B / B' from Pakistan | Results table: script correctness, English-kept rate, p50/p95 latency, cost. Default engine chosen and written down as a decision. | 2–3 days |
 | **M1** | **Windows push-to-talk MVP** (Rust): hotkey → record → VAD → Opus → provider → normalizer → paste | I use it all day for 3 days instead of typing. Latency logged locally. | ~1 week |
-| **M2** | **Windows polish:** tray, settings (model catalog, keys in Credential Manager, preferred + fallback model, hotkey picker ("press a key"), mode, word list), HUD ring, **pop-up mic on text fields** (D-016), history, retries, learned-deadline fallback (D-017) | A non-technical friend installs it from a release and dictates within 2 minutes. | ~1 week |
+| **M2** | **Windows polish:** tray, settings (model catalog, keys in Credential Manager, main model + 2 fallbacks (D-029), smart-formatting switch (D-030), hotkey picker ("press a key"), mode, word list), HUD ring, **pop-up mic on text fields** (D-016), history, retries, learned-deadline fallback (D-017) | A non-technical friend installs it from a release and dictates within 2 minutes. | ~1 week |
 | **M3** | **Android IME** (Kotlin): same pipeline, same fixtures pass | I use it in WhatsApp for a week. | ~2 weeks |
 | **M4** | **Public launch v1.0** (Windows + Android) | README with demo GIF/video, signed installer, winget, APK, privacy section, contributing guide. Launch posts (§10). | ~1 week |
 | M5 | ~~Focus pill on Windows~~ moved into M2 (D-016) | | |
