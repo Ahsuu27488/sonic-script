@@ -8,7 +8,7 @@
 The Milestone 0 benchmark is a Python command-line tool run by hand on the owner's PC. It calls the Groq and
 Gemini HTTP APIs directly with the user's keys; there is no SonicScript server. The M1 Windows app is being
 built in Rust in `desktop/`: so far only the platform-free core (`desktop/core`: text cleanup and voice
-gate), no app binary yet.
+gate, Opus encoding, Groq client, pipeline), no app binary yet.
 The planned apps are described in `blueprint.md` §3 and §5.
 
 ```
@@ -43,6 +43,11 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `desktop/core/examples/clean.rs` | Runs the cleanup on stdin lines, prints JSON lines (for re-scoring with `eval`) |
 | `desktop/core/src/vad.rs` | Voice gate (D-020): `detect(&[f32]) -> Detection { speech_ms, keep }`, `has_speech()`; 16 kHz mono, 20 ms frames |
 | `desktop/core/examples/gate.rs` | Runs the voice gate on WAV files: speech ms, kept seconds, send / drop |
+| `desktop/core/src/encode.rs` | `opus(&[f32]) -> Encoded { bytes, mime, ext, audio_ms }`: Ogg/Opus 16 kbps VoIP, complexity 10 (D-021) |
+| `desktop/core/src/spec.rs` | `default_engine()`, `engine(id) -> WhisperEngine` (provider, model, language, hint) from `spec/providers.json` + `spec/prompts/` at build time |
+| `desktop/core/src/groq.rs` | `Groq::new / from_env`, `warm()`, `transcribe(&Encoded) -> Result<Transcript, GroqError>`; 10 s timeout, one retry |
+| `desktop/core/src/pipeline.rs` | `run(samples, &impl Transcribe, &Normalizer) -> Outcome` (text, raw, sent, sizes, `Stages` timings, error) |
+| `desktop/core/examples/transcribe.rs` | The real pipeline on WAV files against Groq, one JSON line per file (paced by `rpm`) |
 | `.claude/settings.json`, `.graphifyignore` | Graphify hook for Claude Code and what the graph skips (D-010); graph in `graphify-out/` (git-ignored) |
 
 ## Data
@@ -74,6 +79,13 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
   environment (`HKCU\Environment`) (`config.load_env`).
 - Model ids, prices, rpm budgets and per-provider `concurrency`: `spec/providers.json`. Presets: `bench.PRESETS`.
 
+## Dictation pipeline (desktop/core)
+
+```
+samples (16 kHz mono) ─► vad::detect ─► no speech? → nothing sent
+                      ─► trim ─► encode::opus ─► Groq::transcribe (warm TLS, 10 s, 1 retry) ─► Normalizer::clean
+```
+
 ## Text cleanup (desktop/core)
 
 ```
@@ -97,6 +109,7 @@ python -m ruff check . && python -m pytest -q
 cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cargo run -q --example clean -- [words.txt] < texts.txt   # (in desktop/) cleanup on one text per line
 cargo run -q --example gate -- ../spec/fixtures/audio/*.wav   # (in desktop/) voice gate per clip
+cargo run -q --release --example transcribe -- ../spec/fixtures/audio/*.wav   # (in desktop/) real pipeline, needs GROQ_API_KEY
 pip install --user graphifyy               # code graph (D-010); Scripts folder is on the user PATH
 GRAPHIFY_BACKEND=none graphify extract . --code-only && graphify cluster-only . --no-label   # first build
 graphify update .                          # after code changes; graphify query "..." to ask

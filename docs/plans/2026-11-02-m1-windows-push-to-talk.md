@@ -5,7 +5,11 @@
 - Step 1 normalizer: done, PR #3 (D-019: only the hint's tail is a phantom).
 - Step 2 voice gate: done, PR #4. Not a port of `trim_silence`: its fixed -42 dB finds speech in room noise;
   relative energy + zero-crossing instead (D-020).
-- Next: step 3, encode + Groq.
+- Step 3 encode + Groq: done, `feat/m1-encode-groq`. libopus built (needs CMake on PATH), so no FLAC
+  fallback; complexity 10 (D-021). Added `pipeline.rs` and `examples/transcribe.rs`; on the 44 M0 clips
+  against Groq: accuracy 88.0%, Latin 100%, English 86.6%, clip → text p50 341 ms. Encoding costs ~1/32 of
+  the clip length: step 5 should encode while recording.
+- Next: step 4, `--bench` golden check in the app binary (`desktop/win`), then step 5.
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).

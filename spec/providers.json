@@ -1,6 +1,7 @@
 {
   "version": 1,
-  "about": "Engines the M0 benchmark (and later the apps) can use. Model ids live here, not in code. Prices in USD, checked 2026-10-26. rpm = requests per minute the benchmark allows itself (keep under the free tier). gemini-2.5-flash-lite was dropped on 2026-10-27: Google no longer offers it to new users. llama-3.1-8b-instant was replaced by openai/gpt-oss-120b on 2026-10-27: Groq no longer offers Llama 3.1 8B on standard keys. concurrency = requests the benchmark keeps in flight per provider (start times still follow rpm).",
+  "about": "Engines the M0 benchmark (and later the apps) can use. Model ids live here, not in code. Prices in USD, checked 2026-10-26. rpm = requests per minute the benchmark allows itself (keep under the free tier). gemini-2.5-flash-lite was dropped on 2026-10-27: Google no longer offers it to new users. llama-3.1-8b-instant was replaced by openai/gpt-oss-120b on 2026-10-27: Groq no longer offers Llama 3.1 8B on standard keys. concurrency = requests the benchmark keeps in flight per provider (start times still follow rpm). default_engine = what the apps use out of the box (D-011).",
+  "default_engine": "groq-whisper-hint",
   "providers": {
     "gemini": {
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
