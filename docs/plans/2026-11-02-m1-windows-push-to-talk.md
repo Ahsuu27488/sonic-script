@@ -22,8 +22,14 @@
   8, the model catalog, done early): Gemini ~97% vs Groq 89%. `--engine` and `--models` added.
 - Owner chose the default (D-028): Gemini 3.5 Flash-Lite with Groq Whisper as the fallback. Key test passed
   (Enter / Esc only taken while recording, Right Ctrl + C copies). PRs #6-#8 merged 2026-11-03.
-- Next (STATUS Next): fallback race + default switch, mic-open delay, Flash / Transcribe benchmark after the
-  daily reset, then step 7 (paste), step 6 (key), step 9 (latency log).
+- Engine chain (D-029, PR #10, merged 2026-11-03), replacing D-028 and bringing the M2 "preferred + fallback
+  model" forward: Gemini 3.5 Transcribe + Roman cleanup → Flash → Flash-Lite → Groq Whisper, models out of free
+  requests skipped. Run `m1-chain`: 94.9%, p95 4.3 s.
+- Smart formatting (D-030, not in the plan as written): one formatter for every app (spoken lists → lists,
+  fillers, take-backs, numbers), on by default, Groq `gpt-oss-120b` after every engine. Decided and tested in a
+  prompt (`docs/research/format-test/`), not built.
+- Next (STATUS Next): smart formatting, mic-open delay, chain benchmark with 3 s waits, Flash / Transcribe
+  benchmark after the daily reset, then step 7 (paste), step 6 (key), step 9 (latency log).
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).

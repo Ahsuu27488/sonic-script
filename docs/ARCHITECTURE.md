@@ -137,8 +137,8 @@ cargo run -q --release -p sonicscript                     # (in desktop/) dictat
 cargo run -q --release -p sonicscript -- --record 5       # (in desktop/) mic check: record 5 s, print the text
 cargo run -q --release -p sonicscript -- --models         # (in desktop/) the model catalog, free / paid
 cargo run -q --release -p sonicscript -- --engine gemini-3.5-flash-lite --bench ../spec/fixtures/audio --out ../eval/results/<run>/results.jsonl
-cargo run -q --release -p sonicscript -- --file a.wav     # (in desktop/) real pipeline, needs GROQ_API_KEY
-cargo run -q --release -p sonicscript -- --bench ../spec/fixtures/audio --out ../eval/results/m1-bench/results.jsonl
+cargo run -q --release -p sonicscript -- --file a.wav     # (in desktop/) real pipeline (the chain: GEMINI_API_KEY + GROQ_API_KEY)
+cargo run -q --release -p sonicscript -- --bench ../spec/fixtures/audio --out ../eval/results/<run>/results.jsonl   # the chain; spends Gemini's daily free requests
 python -m sonic_eval rescore --run m1-bench   # (in eval/) scores the app's rows (fills category), builds the report
 pip install --user graphifyy               # code graph (D-010); Scripts folder is on the user PATH
 GRAPHIFY_BACKEND=none graphify extract . --code-only && graphify cluster-only . --no-label   # first build

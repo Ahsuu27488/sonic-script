@@ -10,9 +10,10 @@ English words kept in English:
 Built-in tools (Windows `Win + H`, Gboard, Apple Dictation) write Urdu or Devanagari script and garble the English
 words in between. SonicScript fixes that.
 
-> **Status: early development.** Nothing to install yet. The engine benchmark (Milestone 0) is done: Groq Whisper
-> is the fast default, Gemini the accurate option. The Windows app (Milestone 1, Rust) is being built. See
-> [blueprint.md](blueprint.md) for the plan.
+> **Status: early development.** Nothing to install yet. The Windows app (Milestone 1, Rust) is being built: it
+> records with a key, sends the clip to free Gemini models in turn (Gemini 3.5 Transcribe, Flash, Flash-Lite) with
+> Groq Whisper as the last resort, and prints Roman Urdu / Hinglish text (pasting at the cursor comes next). See
+> [blueprint.md](blueprint.md) for the plan and [docs/STATUS.md](docs/STATUS.md) for where it stands.
 
 ## Planned
 

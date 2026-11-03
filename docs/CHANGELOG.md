@@ -3,6 +3,14 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · docs/handoff-formatting
+
+- PR #10 (engine chain, D-029) merged after green CI.
+- Hand-off: STATUS rewritten (current facts only, older results condensed, Next 1 = smart formatting with a full
+  brief); README, blueprint §4.2 / §4.4 and the M1 plan's progress brought up to D-029 / D-030. A session for
+  the formatting work could not start: drive C: has 3.4 GB free and a git worktree needs ~5.4 GB (STATUS
+  Start here 3).
+
 ## 2026-11-03 · feat/m1-fallback (engine chain)
 
 - Owner chose a chain of free Gemini models with Groq last (D-029, supersedes D-028): `spec/providers.json`
