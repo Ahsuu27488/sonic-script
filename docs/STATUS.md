@@ -84,8 +84,9 @@ not pasted (step 7). Smart list formatting is researched and tested (works, not 
   - Free-tier limits for the owner's key from Google's own 429s: Flash 20/day, Transcribe 25/day (reset at
     midnight Pacific = 1 PM Pakistan). Flash-Lite: not hit at 150+/day (third-party: 500/day).
 - Engine chain (D-029, 2026-11-03): `sonicscript` without `--engine` sends the clip to
-  `gemini-3.5-transcribe+gptoss20b`; after 4 s or an error also to `gemini-3.5-flash`, 2 s later
-  `gemini-3.5-flash-lite`, 2 s later `groq-whisper-hint`; first good answer wins. Run `m1-chain` (44 M0 clips,
+  `gemini-3.5-transcribe+gptoss20b`; after 4 s or an error also to `gemini-3.5-flash`, 3 s later
+  `gemini-3.5-flash-lite`, 3 s later `groq-whisper-hint`; first good answer wins. Run `m1-chain` (44 M0 clips,
+  with 2 s waits then; 3 s chosen afterwards, not benchmarked yet;
   `eval rescore`): 94.9% on speech clips, English kept 93%, Latin-only 100%, silence 100%, 0 errors, p50 3.3 s /
   p95 4.3 s. Transcribe answered 24 clips (98.5%, typical 2.9 s) until Google's real daily-limit 429 (clip 26),
   then was skipped without a request; Google was very slow that hour (text requests 13-29 s), so Groq answered
@@ -111,8 +112,7 @@ not pasted (step 7). Smart list formatting is researched and tested (works, not 
 - Benchmark `m1-engines`: Flash and Transcribe have 19-22 clips left (resume after the daily reset with the same
   `bench --run m1-engines --engines gemini-3.5-transcribe+gptoss20b gemini-3.5-flash` command, then
   `catalog`). Today's (2026-11-03) free requests went to run `m1-chain`.
-- Smart formatting (Wispr Flow research, `docs/research/2026-11-03-wispr-flow.md`): owner's direction: no
-  per-app styles, one smart formatter (lists when the speaker lists things). Questions to the owner pending.
+- Smart formatting (Wispr Flow research, `docs/research/2026-11-03-wispr-flow.md`): decided (D-030), not built.
 
 ## Live state
 
@@ -122,9 +122,9 @@ not pasted (step 7). Smart list formatting is researched and tested (works, not 
 
 1. Only Groq Whisper is fast (0.3 s) but it is the least accurate (89%); every engine above 95% takes
    1.5-2.5 s typically, which D-025 accepts. With the chain (D-029) the typical wait is ~3 s (Transcribe +
-   cleanup) and up to ~4.3 s when Google is slow; once Transcribe is out of free requests, Flash and Flash-Lite
-   get only 2 s each before Groq is asked (in `m1-chain` Groq answered 13 of 18 such clips, 88%). Waits of 3 s
-   for Flash / Flash-Lite, or D-017's learned deadline, would keep more Gemini answers: owner's call.
+   cleanup). With 2 s waits for Flash / Flash-Lite, Groq answered 13 of the 18 clips after Transcribe ran out
+   (88%) in `m1-chain`; the owner chose 3 s each, so on a slow Google day Groq now comes at ~6 s (~10 s while
+   Transcribe still has free requests). Not benchmarked with 3 s yet; D-017's learned deadline comes later.
 2. Names fail on Groq; the word list fixes sound-alikes ("Jaminai" → Gemini, "Codec" → Codex) but not words
    run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM).
 3. Whisper-hint sometimes translates instead of transcribing (`mx-04` → "Take a backup and run the database.",
@@ -151,24 +151,27 @@ not pasted (step 7). Smart list formatting is researched and tested (works, not 
 12. Free-tier Gemini requests may be used by Google to improve its products (Gemini API terms); the catalog
     says so. OpenAI and Groq-only engines do not have this note (not checked).
 13. No smart formatting yet: lists, fillers ("matlab", "woh na"), take-backs and South Asian numbers come out
-    as spoken. Tested and working in a prompt (see What works); needs spoken test sentences and a score in
-    `eval` before it goes into `romanize-v1.md` / `transcribe-roman-v1.md`. Groq Whisper (last in the chain)
-    has no language model step, so its text would stay unformatted.
+    as spoken. Decided (D-030): on by default with an off switch, one formatter for every app, Groq
+    `gpt-oss-120b` after every engine. Tested in a prompt (see What works); not built.
 
 ## Next
 
-1. **Owner: review and merge PR #10 (engine chain, D-029)**; decide the Flash / Flash-Lite waits (known gap 1);
-   answer the smart-formatting questions, then an agent plans it (`docs/plans/`) on its own branch.
-2. **Agent: mic-open delay (known gap 8)**: measure which part of `audio::Recorder::start` is slow (device
+1. **Owner: review and merge PR #10 (engine chain, D-029).**
+2. **Agent: smart formatting (D-030)**, own branch after PR #10: plan in `docs/plans/` first. Add spoken
+   test sentences with lists, take-backs, fillers and numbers to `spec/fixtures/sentences.json` (the owner
+   records them: `python -m sonic_eval record --only <ids>`), a list / format score in `eval`, then the
+   format rules (`docs/research/format-test/format-draft.md` is the tested start) in the refine prompt, refine
+   on `gpt-oss-120b` after every chain engine; benchmark 20b vs 120b; an off switch.
+3. **Agent: mic-open delay (known gap 8)**: measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
    "recorded" seconds match the time between the keys.
-3. **Agent, after 1 PM Pakistan time (Gemini's daily reset):** finish the Flash / Transcribe benchmark
+4. **Agent, after 1 PM Pakistan time (Gemini's daily reset):** finish the Flash / Transcribe benchmark
    (`cd eval; python -m sonic_eval bench --run m1-engines --engines gemini-3.5-transcribe+gptoss20b
    gemini-3.5-flash --formats opus16 --repeats 1`), then `catalog` (command under "How to run and check").
-4. **Agent: M1 step 7, paste at the cursor** (plan step 7; the biggest step to daily use), then step 6
+5. **Agent: M1 step 7, paste at the cursor** (plan step 7; the biggest step to daily use), then step 6
    (changeable key, D-018), then step 9 (latency log).
-5. Owner: keep or change the name "SonicScript"; try the app with natural speech now that the default is
+6. Owner: keep or change the name "SonicScript"; try the app with natural speech now that the default is
    Gemini (`cd desktop; cargo run -q --release -p sonicscript`).
 
 ## How to run and check

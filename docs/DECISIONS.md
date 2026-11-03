@@ -259,7 +259,7 @@ use (~500 requests/day), while Flash and Transcribe allow only 20 / 25 a day; bu
 **D-029 Engine chain: Gemini 3.5 Transcribe (+ Roman cleanup on Groq) → Gemini 3.5 Flash → Gemini 3.5 Flash-Lite
 → Groq Whisper; a model out of free requests is skipped and the user is told.** (2026-11-03)
 Supersedes D-028. The clip goes to `gemini-3.5-transcribe+gptoss20b`; with no answer after 4 s, or on an error,
-also to `gemini-3.5-flash`; 2 s later `gemini-3.5-flash-lite`; 2 s later `groq-whisper-hint`; the first good
+also to `gemini-3.5-flash`; 3 s later `gemini-3.5-flash-lite`; 3 s later `groq-whisper-hint`; the first good
 answer wins, errors move on at once. A 429 that names a daily quota (`...PerDay...`) rests that model for an hour
 (asked again hourly until Google's reset at midnight Pacific, about 1 PM in Pakistan), any other 429 for at least
 60 s; resting models are skipped without a request, and the console tells the user once which model ran out, when
@@ -270,9 +270,27 @@ benchmark report: the Gemini models are the most accurate free engines (Transcri
 Flash-Lite 97.0%, Groq 89%) and each has its own daily free limit (owner's key: Transcribe 25, Flash 20,
 Flash-Lite ~500), so the chain gives about 45 top-quality clips a day before Flash-Lite. Groq stays last (owner,
 2026-11-03) because all Gemini models slow down together on Google's busy hours, and Groq `gpt-oss-20b` stays
-the Roman cleanup after Transcribe (which writes Urdu / Devanagari script). Cost: when Google is slow on every
-model, Groq starts after 8 s (3 s under D-028), and a model asked during a race uses its own daily quota even when
+the Roman cleanup after Transcribe (which writes Urdu / Devanagari script). The waits for Flash and Flash-Lite
+were 2 s in run `m1-chain` (Groq then answered 13 of the 18 clips after Transcribe ran out, 88%); the owner chose
+3 s each (2026-11-03) to keep more Gemini answers. Cost: when Google is slow on every model, Groq starts after
+10 s (3 s under D-028), or 6 s once Transcribe is out of free requests, and a model asked during a race uses its own daily quota even when
 it loses. *Where:* `spec/providers.json` `chain`, `desktop/core/src/spec.rs` `chain()`, `client.rs` `Chain`
 (`DAILY_REST`), `api.rs` (`RateLimited.daily`, `Passed`), `desktop/win/src/key.rs`, `dictate.rs`
 (`limit_notes`), `eval/sonic_eval/catalog.py` (`fallback` = place in the chain), run `eval/results/m1-chain`
 (local).
+
+**D-030 Smart formatting: one formatter for every app, on by default, on Groq `gpt-oss-120b`, after every
+engine.** (2026-11-03) The text is formatted the same way whichever app it goes into (no per-app styles, unlike
+Wispr Flow): spoken lists (three or more items, tasks, rules or steps) become "- " lists, ordered steps "1." lists,
+with the lead-in words as a first line; ordinary speech stays sentences. The same step removes empty fillers
+("matlab", "woh na", "umm"), applies take-backs ("nahi nahi", "sorry", "actually") and writes numbers as digits
+with lakh / crore grouping. On by default, with a setting to turn it off (exact words). The cleanup / format step
+moves to Groq `gpt-oss-120b` and runs after every engine in the chain, Groq Whisper included (+~1 s on that path).
+*Why:* the owner's choices (2026-11-03) after the Wispr Flow research (`docs/research/2026-11-03-wispr-flow.md`):
+Wispr formats lists well but has no Roman Urdu and no auto-detected Hinglish. In the text-only test
+(`docs/research/format-test/`) one prompt with two examples got lists, take-backs, numbers and Urdu-script
+romanizing right in ~1 s; `gpt-oss-120b` got the most details right. Same formatting after every engine keeps the
+text style from changing when the chain falls back. *Where:* to build (STATUS Next): `spec/prompts/` (format rules
+in the refine prompt and the Gemini audio prompt), `spec/providers.json` (refine model, a refine step on the
+Flash / Flash-Lite / Groq engines), spoken list sentences in `spec/fixtures/sentences.json` and a list score in
+`eval`. Not built yet; the model choice is confirmed by that benchmark first.

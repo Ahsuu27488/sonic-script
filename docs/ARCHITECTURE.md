@@ -104,8 +104,8 @@ key down ─► mic (cpal) ─► mono ─► resample 16 kHz ─► encode::Str
 key up / Enter ─► run_streamed:
 samples (16 kHz mono) ─► vad::detect ─► no speech? → nothing sent
                       ─► packets for speech ± 500 ms ─► Ogg ─► Chain (D-029) ─► Normalizer::clean
-Chain: Gemini Transcribe + Groq Roman cleanup ─(4 s or error)─► + Gemini Flash ─(2 s)─► + Gemini Flash-Lite
-       ─(2 s)─► + Groq Whisper; first good answer wins (the others run on and are ignored); a model out of free
+Chain: Gemini Transcribe + Groq Roman cleanup ─(4 s or error)─► + Gemini Flash ─(3 s)─► + Gemini Flash-Lite
+       ─(3 s)─► + Groq Whisper; first good answer wins (the others run on and are ignored); a model out of free
        requests is skipped for an hour
 ```
 
