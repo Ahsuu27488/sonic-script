@@ -2,3 +2,4 @@
 //! Rules and prompts come from `spec/` at build time; nothing here touches Windows.
 
 pub mod normalize;
+pub mod vad;

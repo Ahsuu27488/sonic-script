@@ -7,7 +7,8 @@
 
 The Milestone 0 benchmark is a Python command-line tool run by hand on the owner's PC. It calls the Groq and
 Gemini HTTP APIs directly with the user's keys; there is no SonicScript server. The M1 Windows app is being
-built in Rust in `desktop/`: so far only the platform-free text cleanup (`desktop/core`), no app binary yet.
+built in Rust in `desktop/`: so far only the platform-free core (`desktop/core`: text cleanup and voice
+gate), no app binary yet.
 The planned apps are described in `blueprint.md` §3 and §5.
 
 ```
@@ -40,6 +41,8 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `desktop/Cargo.toml` | Rust workspace (M1); members: `core` |
 | `desktop/core/src/normalize.rs` | `Normalizer::new().with_word_list(..).clean(raw) -> Cleaned { text, needs_llm, phantom }`: script guard, phantom filter, word list, spacing; reads `spec/normalizer/rules.json` and `spec/prompts/whisper-hint-v1.txt` at build time |
 | `desktop/core/examples/clean.rs` | Runs the cleanup on stdin lines, prints JSON lines (for re-scoring with `eval`) |
+| `desktop/core/src/vad.rs` | Voice gate (D-020): `detect(&[f32]) -> Detection { speech_ms, keep }`, `has_speech()`; 16 kHz mono, 20 ms frames |
+| `desktop/core/examples/gate.rs` | Runs the voice gate on WAV files: speech ms, kept seconds, send / drop |
 | `.claude/settings.json`, `.graphifyignore` | Graphify hook for Claude Code and what the graph skips (D-010); graph in `graphify-out/` (git-ignored) |
 
 ## Data
@@ -93,6 +96,7 @@ python -m sonic_eval rescore --run m0      # re-score saved outputs after a sent
 python -m ruff check . && python -m pytest -q
 cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cargo run -q --example clean -- [words.txt] < texts.txt   # (in desktop/) cleanup on one text per line
+cargo run -q --example gate -- ../spec/fixtures/audio/*.wav   # (in desktop/) voice gate per clip
 pip install --user graphifyy               # code graph (D-010); Scripts folder is on the user PATH
 GRAPHIFY_BACKEND=none graphify extract . --code-only && graphify cluster-only . --no-label   # first build
 graphify update .                          # after code changes; graphify query "..." to ask

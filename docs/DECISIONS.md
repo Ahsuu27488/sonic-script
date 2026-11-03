@@ -154,6 +154,16 @@ sentence `mx-01`, which is the hint's first sentence. Short words ("code", "cold
 "corrected" into list words. Cost: dictating exactly the hint's last sentence is dropped (STATUS known gap).
 *Where:* `spec/normalizer/rules.json`, `desktop/core/src/normalize.rs`, `spec/normalizer/cases.json`.
 
+**D-020 Voice gate: relative energy + zero-crossing, at least 300 ms of speech.** (2026-11-03)
+A 20 ms frame is speech when it is 9 dB above the clip's own noise floor (10th-percentile frame, never below
+-50 dBFS) and its zero-crossing rate is below 0.15; a clip with less than 300 ms of speech is not sent. The
+clip is trimmed to the speech frames plus 200 ms on each side. No speech model (Silero) for now.
+*Why:* the fixed -42 dB threshold of `eval` `trim_silence` finds 3.6 s of "speech" in the M0 room-noise clip
+`si-02`, so it would still send silence to Whisper (D-007). Energy alone could not separate the cases (margin
+12 dB passed `si-02`, 15-18 dB dropped real speech with no pause or in noise); adding the zero-crossing limit
+gives silence 20-80 ms and the weakest real speech variant ~720 ms (Python prototype), a wide gap on both sides of 300 ms.
+*Where:* `desktop/core/src/vad.rs` (constants at the top), test `m0_recordings`.
+
 <!-- Template for the next entry:
 
 **D-00N <Decision in one line>.** (YYYY-MM-DD)

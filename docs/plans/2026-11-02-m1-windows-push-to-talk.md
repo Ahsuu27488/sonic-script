@@ -1,5 +1,12 @@
 # M1: Windows push-to-talk MVP (Rust)
 
+**Progress** (the plan below is kept as written; changes are noted here):
+- Step 0 toolchain: done 2026-11-03 (Rust 1.99.1, VS 2022 Build Tools).
+- Step 1 normalizer: done, PR #3 (D-019: only the hint's tail is a phantom).
+- Step 2 voice gate: done, PR #4. Not a port of `trim_silence`: its fixed -42 dB finds speech in room noise;
+  relative energy + zero-crossing instead (D-020).
+- Next: step 3, encode + Groq.
+
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).
 Done when the owner uses it instead of typing for 3 days, with latency logged locally (blueprint §8).
