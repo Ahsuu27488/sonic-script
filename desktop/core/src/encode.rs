@@ -59,49 +59,115 @@ impl From<std::io::Error> for EncodeError {
 /// Mono samples in [-1, 1] at [`RATE`] → Ogg/Opus at [`BITRATE`]. The last frame is padded with silence;
 /// the end granule position tells decoders to drop the padding.
 pub fn opus(samples: &[f32]) -> Result<Encoded, EncodeError> {
-    let mut enc = Encoder::new(RATE as u32, Channels::Mono, Application::Voip)?;
-    enc.set_bitrate(Bitrate::Bits(BITRATE))?;
-    enc.set_complexity(COMPLEXITY)?;
-    let to_granule = GRANULE_RATE / RATE as u64;
-    let pre_skip = enc.get_lookahead()? as u64 * to_granule;
+    let mut stream = Stream::new()?;
+    stream.push(samples)?;
+    stream.finish(0..samples.len())
+}
 
-    let mut w = PacketWriter::new(Vec::with_capacity(samples.len() / 8 + 256));
-    w.write_packet(
-        opus_head(pre_skip as u16),
-        SERIAL,
-        PacketWriteEndInfo::EndPage,
-        0,
-    )?;
-    w.write_packet(opus_tags(), SERIAL, PacketWriteEndInfo::EndPage, 0)?;
+/// Encodes while the user is still talking (M1 plan step 5): every complete 20 ms frame becomes an Opus
+/// packet as soon as it is pushed, so only the last partial frame is left when recording stops. The Ogg
+/// file is built at the end from the packets that cover the part the voice gate keeps.
+pub struct Stream {
+    enc: Encoder,
+    pre_skip: u64,
+    /// Samples pushed so far.
+    len: usize,
+    /// The tail that does not fill a frame yet.
+    pending: Vec<f32>,
+    packets: Vec<Vec<u8>>,
+}
 
-    let frames = samples.len().div_ceil(FRAME).max(1);
-    let end_granule = pre_skip + samples.len() as u64 * to_granule;
-    let mut frame = [0f32; FRAME];
-    let mut packet = [0u8; MAX_PACKET];
-    for i in 0..frames {
-        let chunk = &samples[(i * FRAME).min(samples.len())..((i + 1) * FRAME).min(samples.len())];
-        frame[..chunk.len()].copy_from_slice(chunk);
-        frame[chunk.len()..].fill(0.0);
-        let n = enc.encode_float(&frame, &mut packet)?;
-        let last = i + 1 == frames;
-        let granule = if last {
-            end_granule
-        } else {
-            pre_skip + ((i + 1) * FRAME) as u64 * to_granule
-        };
-        let end = if last {
-            PacketWriteEndInfo::EndStream
-        } else {
-            PacketWriteEndInfo::NormalPacket
-        };
-        w.write_packet(packet[..n].to_vec(), SERIAL, end, granule)?;
+impl Stream {
+    pub fn new() -> Result<Self, EncodeError> {
+        let mut enc = Encoder::new(RATE as u32, Channels::Mono, Application::Voip)?;
+        enc.set_bitrate(Bitrate::Bits(BITRATE))?;
+        enc.set_complexity(COMPLEXITY)?;
+        let pre_skip = enc.get_lookahead()? as u64 * (GRANULE_RATE / RATE as u64);
+        Ok(Self {
+            enc,
+            pre_skip,
+            len: 0,
+            pending: Vec::with_capacity(FRAME),
+            packets: Vec::new(),
+        })
     }
-    Ok(Encoded {
-        bytes: w.into_inner(),
-        mime: MIME,
-        ext: EXT,
-        audio_ms: (samples.len() * 1000 / RATE) as u32,
-    })
+
+    /// Mono samples at [`RATE`]; any length.
+    pub fn push(&mut self, mut samples: &[f32]) -> Result<(), EncodeError> {
+        self.len += samples.len();
+        while !samples.is_empty() {
+            let take = (FRAME - self.pending.len()).min(samples.len());
+            self.pending.extend_from_slice(&samples[..take]);
+            samples = &samples[take..];
+            if self.pending.len() == FRAME {
+                self.encode_pending()?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Samples pushed so far.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    fn encode_pending(&mut self) -> Result<(), EncodeError> {
+        self.pending.resize(FRAME, 0.0);
+        let mut packet = [0u8; MAX_PACKET];
+        let n = self.enc.encode_float(&self.pending, &mut packet)?;
+        self.packets.push(packet[..n].to_vec());
+        self.pending.clear();
+        Ok(())
+    }
+
+    /// The Ogg/Opus file for `keep` (sample indexes, as [`crate::vad::Detection::keep`]). It starts at the
+    /// frame that holds `keep.start`: a decoder starting mid-stream needs a few ms to settle, which falls in
+    /// the voice gate's padding. `0..len()` gives the whole clip.
+    pub fn finish(mut self, keep: std::ops::Range<usize>) -> Result<Encoded, EncodeError> {
+        let end = keep.end.min(self.len);
+        if !self.pending.is_empty() || self.packets.is_empty() {
+            self.encode_pending()?;
+        }
+        let first = (keep.start / FRAME).min(self.packets.len() - 1);
+        let last = end.div_ceil(FRAME).clamp(first + 1, self.packets.len());
+        let to_granule = GRANULE_RATE / RATE as u64;
+        let kept = end.saturating_sub(first * FRAME);
+
+        let mut w = PacketWriter::new(Vec::with_capacity((last - first) * 48 + 256));
+        w.write_packet(
+            opus_head(self.pre_skip as u16),
+            SERIAL,
+            PacketWriteEndInfo::EndPage,
+            0,
+        )?;
+        w.write_packet(opus_tags(), SERIAL, PacketWriteEndInfo::EndPage, 0)?;
+        let count = last - first;
+        for (i, packet) in self.packets.drain(first..last).enumerate() {
+            let done = i + 1 == count;
+            let granule = self.pre_skip
+                + if done {
+                    kept as u64
+                } else {
+                    ((i + 1) * FRAME) as u64
+                } * to_granule;
+            let info = if done {
+                PacketWriteEndInfo::EndStream
+            } else {
+                PacketWriteEndInfo::NormalPacket
+            };
+            w.write_packet(packet, SERIAL, info, granule)?;
+        }
+        Ok(Encoded {
+            bytes: w.into_inner(),
+            mime: MIME,
+            ext: EXT,
+            audio_ms: (kept * 1000 / RATE) as u32,
+        })
+    }
 }
 
 /// RFC 7845 §5.1: identification header, mono, channel mapping family 0.
@@ -200,5 +266,37 @@ mod tests {
         let (headers, packets, _, _) = decode(&e.bytes);
         assert_eq!(headers.len(), 2);
         assert_eq!(packets, 1);
+    }
+
+    #[test]
+    fn pushing_in_odd_chunks_gives_the_same_file_as_one_go() {
+        let samples = tone(1.3, 180.0);
+        let whole = opus(&samples).unwrap();
+        let mut s = Stream::new().unwrap();
+        for chunk in samples.chunks(441) {
+            s.push(chunk).unwrap();
+        }
+        assert_eq!(s.len(), samples.len());
+        assert_eq!(s.finish(0..samples.len()).unwrap().bytes, whole.bytes);
+    }
+
+    #[test]
+    fn finish_keeps_only_the_frames_that_cover_the_range() {
+        let samples = tone(3.0, 250.0);
+        let mut s = Stream::new().unwrap();
+        s.push(&samples).unwrap();
+        let keep = 10 * FRAME..60 * FRAME + 7;
+        let e = s.finish(keep.clone()).unwrap();
+        let (headers, packets, granule, out) = decode(&e.bytes);
+        let pre_skip = u16::from_le_bytes([headers[0][10], headers[0][11]]) as u64;
+        assert_eq!(packets, 51);
+        assert_eq!(granule, pre_skip + (keep.len() as u64) * 3);
+        assert_eq!(e.audio_ms, (keep.len() * 1000 / RATE) as u32);
+        let rms = |s: &[f32]| (s.iter().map(|x| x * x).sum::<f32>() / s.len() as f32).sqrt();
+        let (a, b) = (rms(&samples), rms(&out[FRAME * 5..]));
+        assert!(
+            (b / a - 1.0).abs() < 0.2,
+            "starting mid-stream still decodes: rms in {a}, out {b}"
+        );
     }
 }

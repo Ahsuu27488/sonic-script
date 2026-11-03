@@ -4,14 +4,15 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-bench` (step 4, PR open); steps 1-3 merged
-(PR #3, #4, #5). **Merge the step 4 PR before starting step 5.**
-**In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1 (Windows dictation app in Rust): plan
-steps 1-4 are built and tested (text cleanup, voice gate, Opus + Groq + pipeline, `sonicscript.exe --bench`
-golden check at M0 accuracy); next is step 5, hotkey + recording.
+**Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-hotkey` (step 5, PR open, stacked on
+`feat/m1-bench` = step 4, PR #6, open); steps 1-3 merged (PR #3, #4, #5). **Merge PR #6, then the step 5 PR,
+before step 6.**
+**In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1 (Windows dictation app in Rust): steps
+1-5 are built (text cleanup, voice gate, Opus + Groq + pipeline, `--bench` at M0 accuracy, dictation key +
+recording); step 5's key and mic still need the owner's live test at the PC; next is step 6, changeable key.
 
-**Start here (new session):** check the step 4 PR (`feat/m1-bench`) is merged and `main` is pulled; read
-`docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top), then decisions D-011 to D-022. One plan
+**Start here (new session):** check PR #6 and the step 5 PR are merged and `main` is pulled; read
+`docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top), then decisions D-011 to D-024. One plan
 step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Checks: see "How to run and check".
 
 ## What works (verified)
@@ -37,6 +38,13 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
   English kept 86% (M0 87%), silence 100% (both not sent), 0 errors, 0 retries, ~7.5 KB per clip, clip → text
   p50 298 ms / p95 387 ms (M0 request alone: 253 / 1154 ms). Report: `eval/results/m1-pad500/report.html`
   (local). `cargo test`: 4 app tests pass; fmt and clippy `-D warnings` clean.
+- Dictation key + recording (M1 step 5, D-023, D-024), built and unit-tested, **not yet tried live**:
+  `keys.rs` (9 tests: tap, hold, slow tap, Enter / Esc swallowed only while recording, shortcut cancels,
+  typing during toggle mode, 5-minute cap, tick wrap), `resample.rs` (4 tests: 48 / 44.1 / 32 kHz, gain and
+  error vs an ideal sine, 12 kHz removed, chunk size, 16 kHz pass-through), `encode::Stream` (same bytes as
+  one-shot encoding; a cut mid-stream decodes). The hook installs (`sonicscript.exe` prints "listening").
+  `--bench` with the streaming encoder (run `m1-stream`): 89.3%, Latin 100%, English 87%, p50 286 ms.
+  `cargo test`: 41 core + 4 app tests pass.
 - `eval/` tool: 25 offline tests pass (2026-11-02). Runs per provider in parallel (`concurrency` in
   `spec/providers.json`); thread-safe rate limiter.
 - M0 results, opus16, owner's voice (`eval/results/m0/report.html`, local only), p50 / p95, accuracy, English kept:
@@ -61,7 +69,7 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
   text fields, settings page and fallback model are M2 (D-016, D-017). Steps 0-3 merged (PR #3, #4, #5);
-  step 4 done on `feat/m1-bench` (PR open); step 5 (hotkey + recording, encoding while recording) is next.
+  step 4 on `feat/m1-bench` (PR #6); step 5 on `feat/m1-hotkey` (PR open, live test pending); step 6 next.
 
 ## Live state
 
@@ -82,8 +90,11 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 6. Urdu-script "میں" is always romanized "mein" (it can also be "main" = I). Mostly-Urdu output only gets a
    rough letter-by-letter draft and is flagged `needs_llm`; the LLM re-ask is not wired yet (the step 3 pipeline returns `needs_llm`; the re-ask comes with the app).
 7. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
-8. Opus encoding takes ~1/32 of the clip length (4 s → ~125 ms, a 30 s clip → ~1 s) at complexity 10;
-   complexity 5 is 2x faster but less accurate (D-021). Step 5 should encode 20 ms frames while recording.
+8. Step 5 not tried live: the PC was locked (keys go to the lock screen, no hook sees them) and no microphone
+   was connected (only TWS / Pixel 6 / WO Mic endpoints, all disconnected). The owner's checklist: `sonicscript`
+   in a console → tap, speak, tap; tap, speak, Enter (Enter must not reach the app); hold, speak, release;
+   Esc cancels; Right Ctrl + C still copies; `--record 5` prints what was said. The audio callback, hook and
+   key-up → text latency are only checked by reading the code until then.
 9. Building `desktop/` needs CMake on PATH (for libopus). VS Build Tools ships one at
    `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin`;
    add that folder to the user PATH or `winget install Kitware.CMake`.
@@ -91,9 +102,10 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 
 ## Next
 
-1. Agent: M1 step 5, hotkey + capture in `desktop/win` with encoding while recording (D-015, D-018) → step 6
-   changeable key → inject → model catalog → latency log. Delegate boilerplate to Gemini CLI via Foreman if the owner has signed Gemini CLI in.
-2. Owner: add CMake to PATH (known gap 9); review and merge the step 4 PR; keep or change the name "SonicScript".
+1. Agent: M1 step 6, changeable key (`config.toml`, `--set-key`, mouse side buttons, D-018) → step 7 inject
+   (paste at the cursor) → model catalog → latency log. Fix anything the owner's live test of step 5 finds first. Delegate boilerplate to Gemini CLI via Foreman if the owner has signed Gemini CLI in.
+2. Owner: live-test step 5 at the unlocked PC with a mic (known gap 8); add CMake to PATH (known gap 9);
+   review and merge PR #6, then the step 5 PR; keep or change the name "SonicScript".
 
 ## How to run and check
 
@@ -102,6 +114,8 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 - Run: `python -m sonic_eval record | probe | bench --preset compression|engines | report | rescore`
 - Try the cleanup: `cd desktop && cargo run -q --example clean -- [words.txt]` (one text per line on stdin).
 - Try the voice gate: `cd desktop && cargo run -q --example gate -- <16 kHz mono .wav files>`.
+- Dictate: `cd desktop && cargo run -q --release -p sonicscript` (tap / hold Right Ctrl; the text is printed).
+  Mic check: `... -p sonicscript -- --record 5`.
 - Try the whole pipeline against Groq: `cd desktop && cargo run -q --release -p sonicscript -- --file <wav>...`
   (needs `GROQ_API_KEY`; prints the text, so test recordings only).
 - Golden check: `cd desktop && cargo run -q --release -p sonicscript -- --bench ../spec/fixtures/audio --out
