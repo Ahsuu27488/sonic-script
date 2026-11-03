@@ -22,6 +22,7 @@ def build(providers: dict, results_dir: Path, runs: list[str], app_runs: list[st
     eval_rows = _rows(results_dir, runs)
     app_rows = _rows(results_dir, app_runs or [])
     default = providers.get("default_engine")
+    fallback = providers.get("fallback_engine")
     models = []
     for spec in providers["engines"]:
         info = spec.get("catalog")
@@ -36,6 +37,7 @@ def build(providers: dict, results_dir: Path, runs: list[str], app_runs: list[st
             "provider": spec["provider"],
             "tier": info["tier"],
             "recommended": spec["id"] == default,
+            "fallback": spec["id"] == fallback,
             "keys": list(dict.fromkeys(keys)),
             "limits": info.get("limits", {}),
             "notes": info.get("notes", ""),

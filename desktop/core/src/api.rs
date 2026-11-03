@@ -30,6 +30,19 @@ pub struct Transcript {
     pub tokens_out: u32,
     pub refine_tokens_in: u32,
     pub refine_tokens_out: u32,
+    /// Id of the engine that answered (set by [`crate::client::Client`]).
+    pub engine: String,
+    /// Why the fallback engine was asked too, when it was (D-028); the answer may still be the primary's.
+    pub fallback: Option<Fallback>,
+}
+
+/// Why [`crate::client::Racer`] sent the clip to the fallback engine as well.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Fallback {
+    /// The primary had not answered by the deadline.
+    Slow,
+    /// The primary failed (429, 5xx, timeout, ...).
+    Failed(ApiError),
 }
 
 #[derive(Debug, Clone, PartialEq)]

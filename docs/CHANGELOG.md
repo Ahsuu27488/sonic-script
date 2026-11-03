@@ -3,6 +3,20 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-fallback
+
+- Default engine is now `gemini-3.5-flash-lite` with `groq-whisper-hint` as the fallback (D-028):
+  `spec/providers.json` `default_engine` / new `fallback_engine`, `spec::fallback_engine()`.
+- `desktop/core` `client::Racer`: primary on a thread, the fallback too after 3 s (`FALLBACK_AFTER`) or on a
+  primary error, first good answer wins, both failing returns the primary's error. `Transcript` and `Outcome`
+  say which engine answered and why the fallback was asked (`api::Fallback`); `Transcribe` gained `warm`.
+- App: without `--engine` the pair runs (a missing key runs the other engine alone, with a notice); `--engine
+  <id>` runs one engine alone. Dictation prints "Used groq-whisper-hint: ... was slow" when Groq's text is used.
+  `--bench` rows are named `app-<primary>~<fallback>` with `answered_by` and `fallback`; the summary counts
+  fallbacks.
+- Catalog: `fallback` flag per model; `--models` marks it. `spec/models.json` regenerated (same runs).
+- Run `m1-fallback`: 95.5% on speech clips, 0 errors, p50 1.5 s / p95 3.4 s; Groq answered 10 of 42.
+
 ## 2026-11-03 · docs/handoff-default-engine
 
 - PRs #6 (step 4), #7 (step 5) and #8 (engines + catalog) merged into `main` after green CI.

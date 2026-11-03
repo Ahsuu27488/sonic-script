@@ -4,11 +4,11 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** `main` (PRs #3-#8 merged 2026-11-03; this hand-off is a docs PR).
+**Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-fallback` (PR open; `main` has PRs #3-#9).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live (key test passed, 0.2 s
 key-up → text with Groq), 6 engines are benchmarked and listed in a free / paid model catalog
-(`sonicscript --models`), and the owner chose **Gemini 3.5 Flash-Lite as the default with Groq as the fallback**
-(D-028), which is the next thing to build. Text is still printed in the console, not pasted (step 7).
+(`sonicscript --models`), and the default is now **Gemini 3.5 Flash-Lite with Groq raced in after 3 s** (D-028,
+built: 95.5%, typical 1.5 s, slowest 5% 3.4 s, 0 errors). Text is still printed in the console, not pasted (step 7).
 
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
@@ -81,7 +81,15 @@ key-up → text with Groq), 6 engines are benchmarked and listed in a free / pai
   - `gemini-3.8-flash`: dropped, every free-tier request timed out or got 503.
   - Free-tier limits for the owner's key from Google's own 429s: Flash 20/day, Transcribe 25/day (reset at
     midnight Pacific = 1 PM Pakistan). Flash-Lite: not hit at 150+/day (third-party: 500/day).
-- `eval`: 29 offline tests pass; `desktop`: 49 core + 6 app tests pass, fmt and clippy clean (2026-11-03).
+- Default engine with fallback (D-028, 2026-11-03): `sonicscript` without `--engine` sends the clip to
+  `gemini-3.5-flash-lite`; after 3 s without an answer, or on an error, also to `groq-whisper-hint`; first good
+  answer wins, the console says "Used groq-whisper-hint: ... was slow". `--engine <id>` runs one engine alone.
+  Run `m1-fallback` (44 M0 clips, scored by `eval rescore`): accuracy 95.5% on speech clips, English kept 92%,
+  Latin-only 100%, silence 100%, 0 errors, clip → text p50 1.5 s / p95 3.4 s. Groq answered 10 of 42 clips
+  (Gemini slow each time; 91.9% on those), Gemini 32 (96.6%). Racer tests with fake engines: slow primary →
+  fallback at the deadline, error → fallback at once, fast primary → no fallback request, both fail → primary's
+  error, slow primary still wins when the fallback fails.
+- `eval`: 29 offline tests pass; `desktop`: 57 core + 7 app tests pass, fmt and clippy clean (2026-11-03).
 - Key test (2026-11-03, `sonicscript.exe` in a private test window with simulated keys): Enter while recording
   stops it and never reaches the app; Enter when idle passes; Esc cancels; Right Ctrl + C still copies and
   cancels the recording it started. With the owner's earlier live test (tap, hold, Realtek mic, 0.2 s key-up →
@@ -92,7 +100,8 @@ key-up → text with Groq), 6 engines are benchmarked and listed in a free / pai
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
   text fields, settings page and fallback model are M2 (D-016, D-017). Steps 0-3 merged (PR #3, #4, #5);
-  step 4 PR #6; step 5 PR #7 (verified live); engines + catalog PR #8. Default engine chosen (D-028), not built.
+  step 4 PR #6; step 5 PR #7 (verified live); engines + catalog PR #8; default engine + fallback (D-028)
+  on `feat/m1-fallback`.
 - Benchmark `m1-engines`: Flash and Transcribe have 19-22 clips left (resume after the daily reset with the same
   `bench --run m1-engines --engines gemini-3.5-transcribe+gptoss20b gemini-3.5-flash` command, then
   `catalog`).
@@ -104,7 +113,9 @@ key-up → text with Groq), 6 engines are benchmarked and listed in a free / pai
 ## Known gaps
 
 1. Only Groq Whisper is fast (0.3 s) but it is the least accurate (89%); every engine above 95% takes
-   1.5-2.5 s typically, which D-025 accepts. The fallback (D-028) is what keeps the slow tail bounded.
+   1.5-2.5 s typically, which D-025 accepts. The fallback (D-028) keeps the slow tail at ~3.4 s, but with
+   the fixed 3 s deadline Groq answered 24% of clips in run `m1-fallback` (accuracy 95.5% vs Gemini alone
+   ~97%). A later deadline (4-5 s) or D-017's learned deadline would keep more Gemini answers: owner's call.
 2. Names fail on Groq; the word list fixes sound-alikes ("Jaminai" → Gemini, "Codec" → Codex) but not words
    run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM).
 3. Whisper-hint sometimes translates instead of transcribing (`mx-04` → "Take a backup and run the database.",
@@ -124,25 +135,15 @@ key-up → text with Groq), 6 engines are benchmarked and listed in a free / pai
    owner's user PATH on 2026-11-03 (new terminals only). On another PC: that folder or `winget install Kitware.CMake`.
 10. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 11. Gemini Flash-Lite, the most accurate engine with a usable free limit, has a slow tail (some requests
-    10-20 s; 2 of 44 hit the app's 10 s timeout). As the default it needs the D-017 fallback: start Groq when
-    Gemini is slow, first answer wins. Not built yet.
+    10-20 s; 2 of 44 hit the app's 10 s timeout). The fallback race (D-028) caps the wait; a request that loses
+    keeps running in the background until it ends (at most 10 s) and is ignored. The bench's cost counts only
+    the answer that was used.
 12. Free-tier Gemini requests may be used by Google to improve its products (Gemini API terms); the catalog
     says so. OpenAI and Groq-only engines do not have this note (not checked).
 
 ## Next
 
-1. **Agent: default engine with fallback (D-028)**, branch `feat/m1-fallback`.
-   - `spec/providers.json`: `default_engine` = `gemini-3.5-flash-lite`, new `fallback_engine` =
-     `groq-whisper-hint`; `spec.rs` reads both; the catalog's `recommended` follows `default_engine`.
-   - `desktop/core`: a racing transcriber (e.g. `client.rs` `Racer` implementing `pipeline::Transcribe`): send
-     the `Encoded` clip to the primary on a thread; if it fails, or has not answered after 3 s, send it to the
-     fallback too; first success wins; report which engine answered and why (`Outcome` gets the engine id and a
-     reason). Both clients warm up on key-down. Missing Gemini key → fallback alone, with a one-line notice.
-   - Tests with fake transcribers (slow primary → fallback wins at ~3 s; primary error → fallback at once;
-     fast primary → no fallback request; both fail → primary's error).
-   - Check: `sonicscript --bench ../spec/fixtures/audio --out ../eval/results/m1-fallback/results.jsonl`, then
-     `python -m sonic_eval rescore --run m1-fallback`: expect ~96-97%, 0 errors, slowest 5% about 3.5 s or less;
-     record it here, re-run `catalog` with the app run, rebuild.
+1. **Owner: review and merge the `feat/m1-fallback` PR**; decide whether the 3 s deadline stays (known gap 1).
 2. **Agent: mic-open delay (known gap 8)**: measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
@@ -152,7 +153,8 @@ key-up → text with Groq), 6 engines are benchmarked and listed in a free / pai
    gemini-3.5-flash --formats opus16 --repeats 1`), then `catalog` (command under "How to run and check").
 4. **Agent: M1 step 7, paste at the cursor** (plan step 7; the biggest step to daily use), then step 6
    (changeable key, D-018), then step 9 (latency log).
-5. Owner: keep or change the name "SonicScript"; try the app with natural speech once the default is Gemini.
+5. Owner: keep or change the name "SonicScript"; try the app with natural speech now that the default is
+   Gemini (`cd desktop; cargo run -q --release -p sonicscript`).
 
 ## How to run and check
 
@@ -163,7 +165,8 @@ key-up → text with Groq), 6 engines are benchmarked and listed in a free / pai
 - Try the voice gate: `cd desktop && cargo run -q --example gate -- <16 kHz mono .wav files>`.
 - Dictate: `cd desktop && cargo run -q --release -p sonicscript` (tap / hold Right Ctrl; the text is printed).
   Mic check: `... -p sonicscript -- --record 5`.
-- Models: `... -p sonicscript -- --models` (catalog); any command takes `--engine <id>` (ids in the catalog).
+- Models: `... -p sonicscript -- --models` (catalog); any command takes `--engine <id>` (ids in the catalog) to
+  run that engine alone; without it the default runs with its fallback (D-028).
   The app reads keys from the environment / Windows user environment only, not `eval/.env`.
 - Try the whole pipeline: `cd desktop && cargo run -q --release -p sonicscript -- --file <wav>...`
   (needs `GROQ_API_KEY`; prints the text, so test recordings only).

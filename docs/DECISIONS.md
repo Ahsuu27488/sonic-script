@@ -251,7 +251,8 @@ error (429, 5xx, timeout) goes to Groq at once. Without a Gemini key the app run
 Gemini 3.5 Transcribe and the OpenAI models stay choices in the catalog (`--engine`). *Why:* the owner's choice
 after the benchmark (D-025, D-027): Flash-Lite is 97.0% accurate (Groq 89.2%) with a free limit that fits daily
 use (~500 requests/day), while Flash and Transcribe allow only 20 / 25 a day; but some Flash-Lite requests take
-10-20 s (2 of 44 hit the 10 s timeout in the app), and the fallback caps that wait. *Where:* to build:
-`spec/providers.json` (`default_engine`, a new `fallback_engine`), `desktop/core` (race in the client or
-pipeline), `desktop/win/src/dictate.rs` (notice). Not built yet (STATUS Next 1).
+10-20 s (2 of 44 hit the 10 s timeout in the app), and the fallback caps that wait. *Where:*
+`spec/providers.json` (`default_engine`, `fallback_engine`), `desktop/core/src/client.rs` (`Racer`,
+`FALLBACK_AFTER`), `desktop/win/src/key.rs` (pair or `--engine` alone), `dictate.rs` (notice); built
+2026-11-03, run `eval/results/m1-fallback` (local).
 

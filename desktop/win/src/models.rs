@@ -29,6 +29,8 @@ pub fn print() -> Result<(), String> {
 fn print_model(m: &Value) {
     let star = if m["recommended"] == true {
         "  ★ default"
+    } else if m["fallback"] == true {
+        "  ↺ fallback (when the default is slow or fails)"
     } else {
         ""
     };

@@ -124,6 +124,7 @@ impl Engine {
 #[derive(Deserialize)]
 struct File {
     default_engine: String,
+    fallback_engine: Option<String>,
     providers: std::collections::HashMap<String, Provider>,
     engines: Vec<RawEngine>,
 }
@@ -172,6 +173,13 @@ struct Price {
 pub fn default_engine() -> Engine {
     let file = parse();
     engine(&file.default_engine).expect("default_engine must be an engine the app can run")
+}
+
+/// The engine `spec/providers.json` names as `fallback_engine`: also asked when the default is slow or
+/// fails (D-028).
+pub fn fallback_engine() -> Option<Engine> {
+    let id = parse().fallback_engine?;
+    Some(engine(&id).expect("fallback_engine must be an engine the app can run"))
 }
 
 /// An engine the app can run, by id; `None` when it does not exist or is a kind only `eval` runs.
@@ -276,6 +284,19 @@ mod tests {
     #[test]
     fn the_default_engine_can_run() {
         assert!(engine(&parse().default_engine).is_some());
+    }
+
+    #[test]
+    fn the_fallback_is_groq_behind_gemini_flash_lite() {
+        // D-028: the most accurate free engine first, the fast one when it is slow or fails.
+        assert_eq!(default_engine().id(), "gemini-3.5-flash-lite");
+        let fallback = fallback_engine().unwrap();
+        assert_eq!(fallback.id(), "groq-whisper-hint");
+        assert_ne!(
+            fallback.provider().key_env,
+            default_engine().provider().key_env,
+            "a different provider, so one provider's bad day does not take both"
+        );
     }
 
     #[test]
