@@ -1,7 +1,8 @@
 //! `--bench <dir>`: the real pipeline on every WAV file in a folder (M1 plan step 4, the golden check without a
 //! mic). Writes one row per clip in the shape of `eval`'s `results.jsonl`, so
 //! `python -m sonic_eval rescore --run <run>` scores it with the M0 scorer and builds the report. Requests are
-//! spaced by the provider's `rpm`.
+//! spaced by the first engine's `rpm`. With a chain (D-029) the rows are named `app-<first>~<next>~...` and
+//! say which engine answered and which were passed over.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -9,20 +10,23 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 use sonicscript_core::api::ApiError;
-use sonicscript_core::client::Client;
 use sonicscript_core::normalize::Normalizer;
-use sonicscript_core::pipeline::{self, Outcome, PipelineError};
+use sonicscript_core::pipeline::{self, Outcome, PipelineError, Transcribe};
 use sonicscript_core::spec::Engine;
 
+use crate::key::Engines;
 use crate::wav;
 
-pub fn run(dir: &Path, out: &mut impl Write, client: &Client) -> Result<Summary, String> {
+pub fn run(dir: &Path, out: &mut impl Write, client: &Engines) -> Result<Summary, String> {
     let files = wav_files(dir)?;
     if files.is_empty() {
         return Err(format!("no .wav files in {}", dir.display()));
     }
-    let engine = client.engine();
-    let gap = Duration::from_secs(60) / engine.rpm().max(1);
+    let engines: Vec<&Engine> = client.links().map(|(c, _)| c.engine()).collect();
+    let primary = engines[0];
+    let ids: Vec<&str> = engines.iter().map(|e| e.id()).collect();
+    let name = format!("app-{}", ids.join("~"));
+    let gap = Duration::from_secs(60) / primary.rpm().max(1);
     let normalizer = Normalizer::new();
     client.warm();
     let mut done = Vec::new();
@@ -41,7 +45,12 @@ pub fn run(dir: &Path, out: &mut impl Write, client: &Client) -> Result<Summary,
         }
         last = Some(Instant::now());
         let outcome = pipeline::run(&samples, client, &normalizer);
-        writeln!(out, "{}", row(&id, &outcome, engine)).map_err(|e| e.to_string())?;
+        let answered = engines
+            .iter()
+            .copied()
+            .find(|e| e.id() == outcome.engine)
+            .unwrap_or(primary);
+        writeln!(out, "{}", row(&id, &outcome, &name, answered)).map_err(|e| e.to_string())?;
         eprintln!("[{}/{}] {id:<8} {}", i + 1, files.len(), status(&outcome));
         let fatal = matches!(
             &outcome.error,
@@ -55,7 +64,7 @@ pub fn run(dir: &Path, out: &mut impl Write, client: &Client) -> Result<Summary,
             break;
         }
     }
-    Ok(Summary::of(&done))
+    Ok(Summary::of(&done, primary.id()))
 }
 
 fn wav_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
@@ -85,17 +94,28 @@ fn status(o: &Outcome) -> String {
             if o.phantom { "  phantom" } else { "" }
         ),
     }
+    .to_string()
+        + &if o.passed.is_empty() {
+            String::new()
+        } else {
+            format!("  {} → {}", passed(o).join("; "), o.engine)
+        }
 }
 
-/// A row as `eval` writes it (`bench.Row`); `rescore` adds the category and the score fields.
-pub fn row(id: &str, o: &Outcome, engine: &Engine) -> Value {
+fn passed(o: &Outcome) -> Vec<String> {
+    o.passed.iter().map(ToString::to_string).collect()
+}
+
+/// A row as `eval` writes it (`bench.Row`); `rescore` adds the category and the score fields. `name` is the
+/// row's engine name; `engine` is the one that answered, which sets the cost.
+pub fn row(id: &str, o: &Outcome, name: &str, engine: &Engine) -> Value {
     let s = &o.stages;
     let at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs_f64())
         .unwrap_or_default();
     json!({
-        "engine": format!("app-{}", engine.id()),
+        "engine": name,
         "fmt": "opus16",
         "sentence": id,
         "category": null,
@@ -122,12 +142,15 @@ pub fn row(id: &str, o: &Outcome, engine: &Engine) -> Value {
         "sent": o.sent,
         "phantom": o.phantom,
         "needs_llm": o.needs_llm,
+        "answered_by": if o.sent && o.error.is_none() { Some(&o.engine) } else { None },
+        "passed": passed(o),
         "at": at,
     })
 }
 
 /// What the clip cost, by the spec's prices (as `eval` `cost_usd`): per second of audio for transcription
-/// APIs (Groq bills at least 10 s), per token for Gemini, plus the refine step's tokens.
+/// APIs (Groq bills at least 10 s), per token for Gemini, plus the refine step's tokens. Only the answer
+/// that was used is counted; a losing request's cost is unknown (its tokens never come back).
 fn cost_usd(engine: &Engine, o: &Outcome) -> f64 {
     if !o.sent {
         return 0.0;
@@ -157,6 +180,11 @@ pub struct Summary {
     pub sent: usize,
     pub errors: usize,
     pub retries: u32,
+    /// Clips where the chain passed over an engine, and how many were answered by another than the first.
+    pub fallback_asked: usize,
+    pub fallback_used: usize,
+    /// Clips answered per engine (sent, no error), most first.
+    pub answers: Vec<(String, usize)>,
     /// Clip in → text out, over the clips that were sent without error.
     pub total_p50: f64,
     pub total_p95: f64,
@@ -167,7 +195,8 @@ pub struct Summary {
 }
 
 impl Summary {
-    pub fn of(outcomes: &[Outcome]) -> Self {
+    /// `primary` is the id of the engine asked first.
+    pub fn of(outcomes: &[Outcome], primary: &str) -> Self {
         let ok: Vec<&Outcome> = outcomes
             .iter()
             .filter(|o| o.sent && o.error.is_none())
@@ -175,11 +204,25 @@ impl Summary {
         let total: Vec<f64> = ok.iter().map(|o| o.total_ms).collect();
         let request: Vec<f64> = ok.iter().map(|o| o.stages.request).collect();
         let bytes: usize = ok.iter().map(|o| o.bytes).sum();
+        let mut answers: Vec<(String, usize)> = Vec::new();
+        for o in &ok {
+            match answers.iter_mut().find(|(e, _)| *e == o.engine) {
+                Some((_, n)) => *n += 1,
+                None => answers.push((o.engine.clone(), 1)),
+            }
+        }
+        answers.sort_by_key(|a| std::cmp::Reverse(a.1));
         Self {
             clips: outcomes.len(),
             sent: outcomes.iter().filter(|o| o.sent).count(),
             errors: outcomes.iter().filter(|o| o.error.is_some()).count(),
             retries: outcomes.iter().map(|o| u32::from(o.retries)).sum(),
+            fallback_asked: outcomes.iter().filter(|o| !o.passed.is_empty()).count(),
+            fallback_used: ok
+                .iter()
+                .filter(|o| !o.passed.is_empty() && o.engine != primary)
+                .count(),
+            answers,
             total_p50: percentile(&total, 50.0),
             total_p95: percentile(&total, 95.0),
             request_p50: percentile(&request, 50.0),
@@ -196,6 +239,21 @@ impl std::fmt::Display for Summary {
             "{} clips, {} sent, {} errors, {} retries, {:.1} KB per sent clip",
             self.clips, self.sent, self.errors, self.retries, self.kb
         )?;
+        if self.fallback_asked > 0 {
+            writeln!(
+                f,
+                "an engine was passed over for {} clips; {} were answered by a later one",
+                self.fallback_asked, self.fallback_used
+            )?;
+        }
+        if self.answers.len() > 1 {
+            let each: Vec<String> = self
+                .answers
+                .iter()
+                .map(|(e, n)| format!("{e} {n}"))
+                .collect();
+            writeln!(f, "answers: {}", each.join(", "))?;
+        }
         write!(
             f,
             "clip -> text p50 {:.0} ms / p95 {:.0} ms; speech request p50 {:.0} ms / p95 {:.0} ms",
@@ -219,6 +277,7 @@ pub fn percentile(values: &[f64], p: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sonicscript_core::api::{Passed, Skip};
     use sonicscript_core::spec;
 
     #[test]
@@ -253,7 +312,12 @@ mod tests {
     #[test]
     fn rows_have_the_eval_shape_and_bill_ten_seconds_minimum() {
         let e = spec::engine("groq-whisper-hint").unwrap();
-        let r = row("mx-01", &outcome(true, 340.0, None), &e);
+        let r = row(
+            "mx-01",
+            &outcome(true, 340.0, None),
+            "app-groq-whisper-hint",
+            &e,
+        );
         assert_eq!(r["engine"], "app-groq-whisper-hint");
         assert_eq!(r["sentence"], "mx-01");
         assert_eq!(
@@ -265,26 +329,77 @@ mod tests {
         let Engine::Whisper(w) = &e else { panic!() };
         assert!((cost - 10.0 / 3600.0 * w.audio_per_hour).abs() < 1e-12);
 
-        let quiet = row("si-01", &outcome(false, 2.0, None), &e);
+        let quiet = row(
+            "si-01",
+            &outcome(false, 2.0, None),
+            "app-groq-whisper-hint",
+            &e,
+        );
         assert_eq!(
             quiet["raw_asr"],
             Value::Null,
             "not sent: Whisper never saw it"
         );
         assert_eq!(quiet["cost_usd"], 0.0);
+        assert_eq!(quiet["answered_by"], Value::Null);
+    }
+
+    #[test]
+    fn rows_say_which_engine_answered_and_which_were_passed_over() {
+        let groq = spec::engine("groq-whisper-hint").unwrap();
+        let mut o = outcome(true, 3400.0, None);
+        o.engine = "groq-whisper-hint".into();
+        o.passed = vec![
+            Passed {
+                engine: "gemini-3.5-flash".into(),
+                why: Skip::Resting,
+            },
+            Passed {
+                engine: "gemini-3.5-flash-lite".into(),
+                why: Skip::Slow,
+            },
+        ];
+        let r = row("mx-01", &o, "app-a~b", &groq);
+        assert_eq!(r["engine"], "app-a~b");
+        assert_eq!(r["answered_by"], "groq-whisper-hint");
+        assert_eq!(
+            r["passed"],
+            json!([
+                "gemini-3.5-flash skipped (rate limit)",
+                "gemini-3.5-flash-lite was slow"
+            ])
+        );
+        assert!(r["cost_usd"].as_f64().unwrap() > 0.0, "priced as Groq");
     }
 
     #[test]
     fn summary_counts_only_clean_sent_clips_for_latency() {
-        let s = Summary::of(&[
-            outcome(true, 300.0, None),
-            outcome(true, 500.0, None),
-            outcome(false, 1.0, None),
-            outcome(true, 9000.0, Some(PipelineError::Api(ApiError::Timeout))),
-        ]);
-        assert_eq!((s.clips, s.sent, s.errors), (4, 3, 1));
-        assert_eq!(s.total_p50, 400.0);
-        assert_eq!(s.request_p50, 200.0);
+        let gemini_slow = || {
+            vec![Passed {
+                engine: "gemini".into(),
+                why: Skip::Slow,
+            }]
+        };
+        let mut slow = outcome(true, 3300.0, None);
+        (slow.engine, slow.passed) = ("groq".into(), gemini_slow());
+        let mut late = outcome(true, 3500.0, None);
+        (late.engine, late.passed) = ("gemini".into(), gemini_slow());
+        let s = Summary::of(
+            &[
+                outcome(true, 300.0, None),
+                outcome(true, 500.0, None),
+                outcome(false, 1.0, None),
+                outcome(true, 9000.0, Some(PipelineError::Api(ApiError::Timeout))),
+                slow,
+                late,
+            ],
+            "gemini",
+        );
+        assert_eq!((s.clips, s.sent, s.errors), (6, 5, 1));
+        assert_eq!((s.fallback_asked, s.fallback_used), (2, 1));
+        assert_eq!(s.answers[1], ("groq".to_string(), 1));
+        assert_eq!(s.total_p50, 1900.0);
+        assert_eq!(s.request_p50, 950.0);
         assert_eq!(s.kb, 8.0);
     }
 }

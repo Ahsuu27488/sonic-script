@@ -15,7 +15,7 @@ def _write(path, rows):
 
 
 PROVIDERS = {
-    "default_engine": "free-one",
+    "chain": [{"engine": "free-one", "wait_ms": 3000}, {"engine": "paid-one"}],
     "providers": {"g": {"key_env": "G_KEY"}, "q": {"key_env": "Q_KEY"}, "o": {"key_env": "O_KEY"}},
     "engines": [
         {"id": "paid-one", "provider": "o", "refine": {"provider": "q"},
@@ -37,6 +37,7 @@ def test_catalog_groups_free_first_and_keeps_the_best_row_per_clip(tmp_path):
     assert [m["id"] for m in cat["models"]] == ["free-one", "paid-one"], "free first; uncatalogued left out"
     free = cat["models"][0]
     assert free["recommended"] and free["keys"] == ["G_KEY"]
+    assert free["fallback"] is None and cat["models"][1]["fallback"] == 1
     r = free["results"]
     # "a" failed in the new run, so the old run's success is used; "s" is silence, scored apart.
     assert (r["clips"], r["of"], r["errors"], r["accuracy"], r["silence_ok"]) == (3, 44, 0, 0.7, "1/1")

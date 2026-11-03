@@ -244,14 +244,53 @@ which free models can be a default at all. *Where:* `spec/providers.json` `catal
 `spec/models.json`, `desktop/win/src/models.rs`.
 
 **D-028 Default engine: Gemini 3.5 Flash-Lite, with Groq Whisper as the fallback for slow or failed requests.**
-(2026-11-03) Supersedes the default in D-011 (Groq). The app sends the clip to `gemini-3.5-flash-lite`; if no
+(2026-11-03) *(superseded by D-029)* Supersedes the default in D-011 (Groq). The app sends the clip to `gemini-3.5-flash-lite`; if no
 answer has come after a deadline (start with a fixed 3 s; D-017's learned deadline later), it also sends it to
 `groq-whisper-hint`, and the first good answer is pasted, with a short notice when Groq's was used. A Gemini
 error (429, 5xx, timeout) goes to Groq at once. Without a Gemini key the app runs Groq alone. Gemini 3.5 Flash,
 Gemini 3.5 Transcribe and the OpenAI models stay choices in the catalog (`--engine`). *Why:* the owner's choice
 after the benchmark (D-025, D-027): Flash-Lite is 97.0% accurate (Groq 89.2%) with a free limit that fits daily
 use (~500 requests/day), while Flash and Transcribe allow only 20 / 25 a day; but some Flash-Lite requests take
-10-20 s (2 of 44 hit the 10 s timeout in the app), and the fallback caps that wait. *Where:* to build:
-`spec/providers.json` (`default_engine`, a new `fallback_engine`), `desktop/core` (race in the client or
-pipeline), `desktop/win/src/dictate.rs` (notice). Not built yet (STATUS Next 1).
+10-20 s (2 of 44 hit the 10 s timeout in the app), and the fallback caps that wait. *Where:*
+`spec/providers.json` (`default_engine`, `fallback_engine`), `desktop/core/src/client.rs` (`Racer`,
+`FALLBACK_AFTER`), `desktop/win/src/key.rs` (pair or `--engine` alone), `dictate.rs` (notice); built
+2026-11-03, run `eval/results/m1-fallback` (local).
 
+**D-029 Engine chain: Gemini 3.5 Transcribe (+ Roman cleanup on Groq) → Gemini 3.5 Flash → Gemini 3.5 Flash-Lite
+→ Groq Whisper; a model out of free requests is skipped and the user is told.** (2026-11-03)
+Supersedes D-028. The clip goes to `gemini-3.5-transcribe+gptoss20b`; with no answer after 4 s, or on an error,
+also to `gemini-3.5-flash`; 3 s later `gemini-3.5-flash-lite`; 3 s later `groq-whisper-hint`; the first good
+answer wins, errors move on at once. A 429 that names a daily quota (`...PerDay...`) rests that model for an hour
+(asked again hourly until Google's reset at midnight Pacific, about 1 PM in Pakistan), any other 429 for at least
+60 s; resting models are skipped without a request, and the console tells the user once which model ran out, when
+its requests come back and how to pick another main model (`--engine <id>`). `--engine <id>` runs one engine
+alone. In M2 the settings page lets the user choose the main model and two fallbacks from the catalog (extends
+D-017). OpenAI stays in the catalog as a paid choice, outside the chain. *Why:* the owner's choice after the
+benchmark report: the Gemini models are the most accurate free engines (Transcribe + cleanup 97.9%, Flash 97.7%,
+Flash-Lite 97.0%, Groq 89%) and each has its own daily free limit (owner's key: Transcribe 25, Flash 20,
+Flash-Lite ~500), so the chain gives about 45 top-quality clips a day before Flash-Lite. Groq stays last (owner,
+2026-11-03) because all Gemini models slow down together on Google's busy hours, and Groq `gpt-oss-20b` stays
+the Roman cleanup after Transcribe (which writes Urdu / Devanagari script). The waits for Flash and Flash-Lite
+were 2 s in run `m1-chain` (Groq then answered 13 of the 18 clips after Transcribe ran out, 88%); the owner chose
+3 s each (2026-11-03) to keep more Gemini answers. Cost: when Google is slow on every model, Groq starts after
+10 s (3 s under D-028), or 6 s once Transcribe is out of free requests, and a model asked during a race uses its own daily quota even when
+it loses. *Where:* `spec/providers.json` `chain`, `desktop/core/src/spec.rs` `chain()`, `client.rs` `Chain`
+(`DAILY_REST`), `api.rs` (`RateLimited.daily`, `Passed`), `desktop/win/src/key.rs`, `dictate.rs`
+(`limit_notes`), `eval/sonic_eval/catalog.py` (`fallback` = place in the chain), run `eval/results/m1-chain`
+(local).
+
+**D-030 Smart formatting: one formatter for every app, on by default, on Groq `gpt-oss-120b`, after every
+engine.** (2026-11-03) The text is formatted the same way whichever app it goes into (no per-app styles, unlike
+Wispr Flow): spoken lists (three or more items, tasks, rules or steps) become "- " lists, ordered steps "1." lists,
+with the lead-in words as a first line; ordinary speech stays sentences. The same step removes empty fillers
+("matlab", "woh na", "umm"), applies take-backs ("nahi nahi", "sorry", "actually") and writes numbers as digits
+with lakh / crore grouping. On by default, with a setting to turn it off (exact words). The cleanup / format step
+moves to Groq `gpt-oss-120b` and runs after every engine in the chain, Groq Whisper included (+~1 s on that path).
+*Why:* the owner's choices (2026-11-03) after the Wispr Flow research (`docs/research/2026-11-03-wispr-flow.md`):
+Wispr formats lists well but has no Roman Urdu and no auto-detected Hinglish. In the text-only test
+(`docs/research/format-test/`) one prompt with two examples got lists, take-backs, numbers and Urdu-script
+romanizing right in ~1 s; `gpt-oss-120b` got the most details right. Same formatting after every engine keeps the
+text style from changing when the chain falls back. *Where:* to build (STATUS Next): `spec/prompts/` (format rules
+in the refine prompt and the Gemini audio prompt), `spec/providers.json` (refine model, a refine step on the
+Flash / Flash-Lite / Groq engines), spoken list sentences in `spec/fixtures/sentences.json` and a list score in
+`eval`. Not built yet; the model choice is confirmed by that benchmark first.

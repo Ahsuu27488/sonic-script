@@ -4,13 +4,22 @@
 
 use std::time::Instant;
 
-use crate::api::{ApiError, Transcript};
+use crate::api::{ApiError, Passed, Transcript};
 use crate::encode::{EncodeError, Encoded, Stream};
 use crate::normalize::Normalizer;
 use crate::vad::{self, RATE};
 
-/// Anything that turns an encoded clip into text. [`crate::client::Client`] in the app, a fake in tests.
+/// Anything that turns an encoded clip into text. [`crate::client::Client`] (in a
+/// [`crate::client::Chain`]) in the app, a fake in tests.
 pub trait Transcribe {
+    /// The engine's id from the spec (empty for fakes that do not need one).
+    fn id(&self) -> &str {
+        ""
+    }
+
+    /// Opens the connections the next request needs (blocking). Nothing by default.
+    fn warm(&self) {}
+
     fn transcribe(&self, audio: &Encoded) -> Result<Transcript, ApiError>;
 }
 
@@ -60,6 +69,10 @@ pub struct Outcome {
     pub sent_ms: u32,
     pub bytes: usize,
     pub retries: u8,
+    /// Id of the engine whose answer this is (empty when nothing was sent or every engine failed).
+    pub engine: String,
+    /// Engines the chain went past, and why (D-029).
+    pub passed: Vec<Passed>,
     /// Tokens billed: speech model (Gemini) and refine step, in and out.
     pub tokens: [u32; 4],
     pub stages: Stages,
@@ -140,6 +153,8 @@ pub fn run_streamed(
     out.stages.request = f64::from(tr.request_ms);
     out.stages.refine = f64::from(tr.refine_ms);
     out.retries = tr.retries;
+    out.engine = tr.engine;
+    out.passed = tr.passed;
     out.tokens = [
         tr.tokens_in,
         tr.tokens_out,

@@ -1,27 +1,27 @@
 //! Dictation mode, the default when `sonicscript.exe` runs without arguments (M1 plan step 5). The dictation
-//! key opens the mic and warms the engine's connections at once; stopping runs the pipeline on a worker thread and
+//! key opens the mic and warms both engines' connections at once; stopping runs the pipeline on a worker thread and
 //! prints the text. Pasting it at the cursor is step 7.
 
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use sonicscript_core::client::Client;
+use sonicscript_core::api::{ApiError, Skip};
 use sonicscript_core::keys::Action;
 use sonicscript_core::normalize::Normalizer;
-use sonicscript_core::pipeline;
-use sonicscript_core::spec::Engine;
+use sonicscript_core::pipeline::{self, Outcome, Transcribe};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_RCONTROL;
 
 use crate::audio::Recorder;
+use crate::key::{Choice, Engines};
 use crate::{hotkey, key};
 
 /// Safety cap on one recording (M1 plan step 5): a forgotten toggle does not keep the mic open.
 const MAX_RECORDING: Duration = Duration::from_secs(5 * 60);
 
-pub fn run(engine: Engine) -> Result<(), String> {
-    let id = engine.id().to_string();
-    let client = Arc::new(key::client(engine).map_err(|e| format!("{id}: {e}"))?);
+pub fn run(choice: Choice) -> Result<(), String> {
+    let client = Arc::new(key::engines(choice)?);
+    let id = key::describe(&client);
     let normalizer = Arc::new(Normalizer::new());
     let (tx, rx) = mpsc::channel();
     // The key is a setting from step 6 on (D-018); Right Ctrl is the default (D-015).
@@ -88,9 +88,8 @@ pub fn run(engine: Engine) -> Result<(), String> {
 
 /// `--record <seconds>`: the same mic → pipeline path without the key, to check the microphone (and to test
 /// it where no key can be pressed, e.g. a locked PC).
-pub fn record_for(seconds: f64, engine: Engine) -> Result<(), String> {
-    let id = engine.id().to_string();
-    let client = key::client(engine).map_err(|e| format!("{id}: {e}"))?;
+pub fn record_for(seconds: f64, choice: Choice) -> Result<(), String> {
+    let client = key::engines(choice)?;
     let normalizer = Normalizer::new();
     let warm = std::thread::spawn(move || {
         client.warm();
@@ -109,7 +108,7 @@ pub fn record_for(seconds: f64, engine: Engine) -> Result<(), String> {
 fn transcribe(
     rec: crate::audio::Recording,
     stopped: Instant,
-    client: &Client,
+    client: &Engines,
     normalizer: &Normalizer,
 ) {
     let stream = match rec.stream {
@@ -123,7 +122,13 @@ fn transcribe(
     let key_up_to_text = stopped.elapsed().as_millis();
     let seconds = f64::from(out.audio_ms) / 1000.0;
     if let Some(e) = &out.error {
-        eprintln!("  Error: {e}");
+        // In a chain, an error comes back only when every engine asked failed.
+        let both = if client.links().count() > 1 {
+            " (every engine in the chain failed)"
+        } else {
+            ""
+        };
+        eprintln!("  Error: {e}{both}");
     } else if !out.sent {
         println!("  No speech heard ({seconds:.1} s recorded): nothing sent.");
     } else if out.text.is_empty() {
@@ -145,5 +150,41 @@ fn transcribe(
             f64::from(out.sent_ms) / 1000.0,
             out.stages.request
         );
+        if let Some(note) = fallback_note(&out, client.first().id()) {
+            println!("  {note}");
+        }
     }
+    for note in limit_notes(&out) {
+        println!("  {note}");
+    }
+}
+
+/// Which engine's text this is when it is not the first one's, and why (D-029).
+fn fallback_note(out: &Outcome, first: &str) -> Option<String> {
+    if out.engine == first || out.passed.is_empty() {
+        return None;
+    }
+    let why: Vec<String> = out.passed.iter().map(ToString::to_string).collect();
+    Some(format!("Used {}: {}.", out.engine, why.join("; ")))
+}
+
+/// What to tell the user when an engine hits its free limit (once, when the 429 comes; afterwards the engine
+/// is skipped without asking until it has rested).
+fn limit_notes(out: &Outcome) -> Vec<String> {
+    out.passed
+        .iter()
+        .filter_map(|p| match &p.why {
+            Skip::Failed(ApiError::RateLimited { daily: true, .. }) => Some(format!(
+                "! {} has used up today's free requests. They come back at midnight Pacific time \
+                 (about 1 PM in Pakistan); until then the next model in the chain answers first. To make \
+                 another model your main one: sonicscript --engine <id> (list: sonicscript --models).",
+                p.engine
+            )),
+            Skip::Failed(ApiError::RateLimited { .. }) => Some(format!(
+                "! {} hit its per-minute limit: the next model answers for about a minute.",
+                p.engine
+            )),
+            _ => None,
+        })
+        .collect()
 }

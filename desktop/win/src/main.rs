@@ -19,8 +19,9 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use sonicscript_core::normalize::Normalizer;
-use sonicscript_core::pipeline;
-use sonicscript_core::spec::Engine;
+use sonicscript_core::pipeline::{self, Transcribe};
+
+use crate::key::Choice;
 
 const USAGE: &str = "\
 usage: sonicscript [--engine <id>] [mode]
@@ -29,7 +30,9 @@ usage: sonicscript [--engine <id>] [mode]
   sonicscript --record <seconds>              mic check: record, then print the text (0.5-300 s)
   sonicscript --file <wav>...                 transcribe 16 kHz mono WAV files, print the text
   sonicscript --bench <dir> [--out <file>]    run every WAV in <dir>, write eval rows (JSON lines)
---engine picks an engine from spec/providers.json (default: the spec's default_engine).
+Without --engine the spec's engine chain runs (D-029): Gemini 3.5 Transcribe, then Gemini 3.5 Flash,
+Flash-Lite and Groq Whisper, each asked when the one before is slow, fails or is out of free requests;
+--engine <id> runs that engine from spec/providers.json alone.
 Keys come from GROQ_API_KEY / GEMINI_API_KEY (this console or your Windows user environment).";
 
 fn main() -> ExitCode {
@@ -49,7 +52,7 @@ fn main() -> ExitCode {
         Some(_) => return usage(),
         None => None,
     };
-    let engine = match key::engine(engine_id.as_deref()) {
+    let choice = match key::choose(engine_id.as_deref()) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("{e}");
@@ -58,20 +61,20 @@ fn main() -> ExitCode {
     };
     let result = match args.first().map(String::as_str) {
         Some("--models") => models::print(),
-        Some("--file") if args.len() > 1 => file(&args[1..], engine),
+        Some("--file") if args.len() > 1 => file(&args[1..], choice),
         Some("--bench") => match &args[1..] {
-            [dir] => bench(Path::new(dir), None, engine),
+            [dir] => bench(Path::new(dir), None, choice),
             [dir, flag, out] if flag == "--out" => {
-                bench(Path::new(dir), Some(PathBuf::from(out)), engine)
+                bench(Path::new(dir), Some(PathBuf::from(out)), choice)
             }
             _ => return usage(),
         },
         #[cfg(windows)]
-        None => dictate::run(engine),
+        None => dictate::run(choice),
         #[cfg(windows)]
         Some("--record") => match args.get(1).and_then(|s| s.parse::<f64>().ok()) {
             Some(s) if args.len() == 2 && (0.5..=300.0).contains(&s) => {
-                dictate::record_for(s, engine)
+                dictate::record_for(s, choice)
             }
             _ => return usage(),
         },
@@ -92,9 +95,8 @@ fn usage() -> ExitCode {
 }
 
 /// Prints the text to paste for each file (one line each) and its timings to stderr.
-fn file(paths: &[String], engine: Engine) -> Result<(), String> {
-    let id = engine.id().to_string();
-    let client = key::client(engine).map_err(|e| format!("{id}: {e}"))?;
+fn file(paths: &[String], choice: Choice) -> Result<(), String> {
+    let client = key::engines(choice)?;
     let normalizer = Normalizer::new();
     client.warm();
     for path in paths {
@@ -111,16 +113,15 @@ fn file(paths: &[String], engine: Engine) -> Result<(), String> {
             _ => "",
         };
         eprintln!(
-            "{path}: {:.0} ms clip -> text, speech {:.0} ms, refine {:.0} ms, {} bytes{note}",
-            out.total_ms, out.stages.request, out.stages.refine, out.bytes
+            "{path}: {:.0} ms clip -> text, speech {:.0} ms, refine {:.0} ms, {} bytes, {}{note}",
+            out.total_ms, out.stages.request, out.stages.refine, out.bytes, out.engine
         );
     }
     Ok(())
 }
 
-fn bench(dir: &Path, out: Option<PathBuf>, engine: Engine) -> Result<(), String> {
-    let id = engine.id().to_string();
-    let client = key::client(engine).map_err(|e| format!("{id}: {e}"))?;
+fn bench(dir: &Path, out: Option<PathBuf>, choice: Choice) -> Result<(), String> {
+    let client = key::engines(choice)?;
     let summary = match &out {
         Some(path) => {
             if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {

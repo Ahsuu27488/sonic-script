@@ -4,6 +4,8 @@
 //! instruction (`gemini-audio`) and Gemini's speech-to-text model (`gemini-transcribe`), each optionally
 //! followed by a text-only `refine` step on another provider.
 
+use std::time::Duration;
+
 use serde::Deserialize;
 
 const PROVIDERS: &str = include_str!("../../../spec/providers.json");
@@ -123,9 +125,16 @@ impl Engine {
 
 #[derive(Deserialize)]
 struct File {
-    default_engine: String,
+    chain: Vec<RawLink>,
     providers: std::collections::HashMap<String, Provider>,
     engines: Vec<RawEngine>,
+}
+
+#[derive(Deserialize)]
+struct RawLink {
+    engine: String,
+    #[serde(default)]
+    wait_ms: u64,
 }
 
 #[derive(Deserialize)]
@@ -168,10 +177,29 @@ struct Price {
     out_per_m: f64,
 }
 
-/// The engine `spec/providers.json` names as `default_engine`.
+/// One step of the engine chain (D-029).
+#[derive(Debug, Clone)]
+pub struct Link {
+    pub engine: Engine,
+    /// How long to wait for this engine before also asking the next one.
+    pub wait: Duration,
+}
+
+/// The engines the apps use, in order (`chain` in `spec/providers.json`, D-029).
+pub fn chain() -> Vec<Link> {
+    parse()
+        .chain
+        .iter()
+        .map(|l| Link {
+            engine: engine(&l.engine).expect("every chain engine must be one the app can run"),
+            wait: Duration::from_millis(l.wait_ms),
+        })
+        .collect()
+}
+
+/// The first engine of the chain.
 pub fn default_engine() -> Engine {
-    let file = parse();
-    engine(&file.default_engine).expect("default_engine must be an engine the app can run")
+    chain().remove(0).engine
 }
 
 /// An engine the app can run, by id; `None` when it does not exist or is a kind only `eval` runs.
@@ -274,8 +302,26 @@ mod tests {
     }
 
     #[test]
-    fn the_default_engine_can_run() {
-        assert!(engine(&parse().default_engine).is_some());
+    fn the_chain_is_gemini_first_and_groq_last() {
+        // D-029: the most accurate free engines first, Groq when Google is slow or out of free requests.
+        let chain = chain();
+        let ids: Vec<&str> = chain.iter().map(|l| l.engine.id()).collect();
+        assert_eq!(
+            ids,
+            [
+                "gemini-3.5-transcribe+gptoss20b",
+                "gemini-3.5-flash",
+                "gemini-3.5-flash-lite",
+                "groq-whisper-hint"
+            ]
+        );
+        assert_eq!(default_engine().id(), ids[0]);
+        assert_eq!(
+            chain[3].engine.provider().key_env,
+            "GROQ_API_KEY",
+            "another provider last, so Google's bad hour does not take every engine"
+        );
+        assert!(chain[..3].iter().all(|l| l.wait >= Duration::from_secs(2)));
     }
 
     #[test]

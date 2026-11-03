@@ -3,6 +3,39 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-fallback (engine chain)
+
+- Owner chose a chain of free Gemini models with Groq last (D-029, supersedes D-028): `spec/providers.json`
+  `chain` (Transcribe + Groq Roman cleanup 4 s → Flash 3 s → Flash-Lite 3 s → Groq Whisper) replaces
+  `default_engine` / `fallback_engine`; `spec::chain()`.
+- `client::Racer` became `client::Chain`: any number of engines, each with its wait; errors move on at once; a
+  429 rests the engine (1 h for a daily quota, else ≥ 60 s) so later clips skip it without a request.
+  `ApiError::RateLimited` gained `daily` (Google's `...PerDay...` quota; never retried); `Transcript` /
+  `Outcome` list the engines `passed` over (`Slow` / `Failed` / `Resting`); `Transcribe` gained `id`.
+- App: an engine with a missing key is left out of the chain with a notice; dictation prints which model
+  answered and, once, that a model's free requests are used up (when they come back, how to change the main
+  model). Bench rows `app-<a>~<b>~...` with `passed`; the summary counts answers per engine.
+- Catalog: `fallback` is the place in the chain; `--models` shows "fallback 1 / 2 / 3".
+- Run `m1-chain`: 94.9%, 0 errors, p50 3.3 s / p95 4.3 s; Transcribe 98.5% on its 24 clips.
+- Research: Wispr Flow's formatting (`docs/research/2026-11-03-wispr-flow.md`) and a smart-list formatting test
+  (`docs/research/format-test/`): works in ~1 s on Groq; not wired in. Owner's choices: D-030 (formatting on by
+  default, one formatter for every app, `gpt-oss-120b` after every engine) and 3 s waits for Flash / Flash-Lite
+  (run `m1-chain` used 2 s).
+
+## 2026-11-03 · feat/m1-fallback
+
+- Default engine is now `gemini-3.5-flash-lite` with `groq-whisper-hint` as the fallback (D-028):
+  `spec/providers.json` `default_engine` / new `fallback_engine`, `spec::fallback_engine()`.
+- `desktop/core` `client::Racer`: primary on a thread, the fallback too after 3 s (`FALLBACK_AFTER`) or on a
+  primary error, first good answer wins, both failing returns the primary's error. `Transcript` and `Outcome`
+  say which engine answered and why the fallback was asked (`api::Fallback`); `Transcribe` gained `warm`.
+- App: without `--engine` the pair runs (a missing key runs the other engine alone, with a notice); `--engine
+  <id>` runs one engine alone. Dictation prints "Used groq-whisper-hint: ... was slow" when Groq's text is used.
+  `--bench` rows are named `app-<primary>~<fallback>` with `answered_by` and `fallback`; the summary counts
+  fallbacks.
+- Catalog: `fallback` flag per model; `--models` marks it. `spec/models.json` regenerated (same runs).
+- Run `m1-fallback`: 95.5% on speech clips, 0 errors, p50 1.5 s / p95 3.4 s; Groq answered 10 of 42.
+
 ## 2026-11-03 · docs/handoff-default-engine
 
 - PRs #6 (step 4), #7 (step 5) and #8 (engines + catalog) merged into `main` after green CI.

@@ -30,6 +30,38 @@ pub struct Transcript {
     pub tokens_out: u32,
     pub refine_tokens_in: u32,
     pub refine_tokens_out: u32,
+    /// Id of the engine that answered.
+    pub engine: String,
+    /// Engines of the [`crate::client::Chain`] that were passed over on the way, and why (D-029). The answer
+    /// can still be from one of them (a slow engine that answered first after all).
+    pub passed: Vec<Passed>,
+}
+
+/// An engine the chain went past.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Passed {
+    pub engine: String,
+    pub why: Skip,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Skip {
+    /// No answer within its wait, so the next engine was asked too.
+    Slow,
+    /// It failed (429, 5xx, timeout, ...).
+    Failed(ApiError),
+    /// Not asked: it hit a rate limit a little earlier.
+    Resting,
+}
+
+impl std::fmt::Display for Passed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.why {
+            Skip::Slow => write!(f, "{} was slow", self.engine),
+            Skip::Failed(e) => write!(f, "{} failed ({e})", self.engine),
+            Skip::Resting => write!(f, "{} skipped (rate limit)", self.engine),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +72,8 @@ pub enum ApiError {
     BadKey(String),
     RateLimited {
         retry_after_s: Option<u64>,
+        /// The provider's daily quota is used up (Google names a `...PerDay...` quota); per-minute otherwise.
+        daily: bool,
     },
     /// Any other HTTP error, with the provider's own message.
     Http(u16, String),
@@ -54,11 +88,14 @@ impl std::fmt::Display for ApiError {
         match self {
             Self::MissingKey(var) => write!(f, "no API key: set {var}"),
             Self::BadKey(var) => write!(f, "the key was refused (check {var})"),
+            Self::RateLimited { daily: true, .. } => write!(f, "today's free requests are used up"),
             Self::RateLimited {
                 retry_after_s: Some(s),
+                ..
             } => write!(f, "rate limit reached: try again in {s} s"),
             Self::RateLimited {
                 retry_after_s: None,
+                ..
             } => write!(f, "rate limit reached"),
             Self::Http(status, msg) => write!(f, "HTTP {status}: {msg}"),
             Self::Timeout => write!(f, "no answer within {} s", TIMEOUT.as_secs()),
@@ -156,16 +193,22 @@ impl Failure {
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.trim().parse::<f64>().ok())
             .map(|s| s.ceil() as u64);
-        let message = error_message(resp);
+        let body = resp.text().unwrap_or_default();
+        let message = error_message(&body);
         match status {
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
                 Self::fatal(ApiError::BadKey(key_env.to_string()))
             }
             StatusCode::TOO_MANY_REQUESTS => {
+                // Google names the quota that ran out; a daily one is not worth a retry.
+                let daily = body.contains("PerDay");
                 let wait = Duration::from_secs(retry_after_s.unwrap_or(0)).max(SERVER_ERROR_WAIT);
                 Self {
-                    error: ApiError::RateLimited { retry_after_s },
-                    wait: (wait <= MAX_RETRY_WAIT).then_some(wait),
+                    error: ApiError::RateLimited {
+                        retry_after_s,
+                        daily,
+                    },
+                    wait: (!daily && wait <= MAX_RETRY_WAIT).then_some(wait),
                 }
             }
             s if s.is_server_error() => Self {
@@ -178,12 +221,11 @@ impl Failure {
 }
 
 /// The provider's `{"error": {"message": ...}}` (Groq, OpenAI and Gemini all use it), else the body's start.
-fn error_message(resp: Response) -> String {
-    let body = resp.text().unwrap_or_default();
-    let msg = serde_json::from_str::<serde_json::Value>(&body)
+fn error_message(body: &str) -> String {
+    let msg = serde_json::from_str::<serde_json::Value>(body)
         .ok()
         .and_then(|v| v["error"]["message"].as_str().map(str::to_string))
-        .unwrap_or(body);
+        .unwrap_or_else(|| body.to_string());
     msg.chars().take(200).collect()
 }
 

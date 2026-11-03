@@ -18,7 +18,8 @@
       "label": "Gemini 3.5 Transcribe + Roman cleanup",
       "provider": "gemini",
       "tier": "free",
-      "recommended": false,
+      "recommended": true,
+      "fallback": null,
       "keys": [
         "GEMINI_API_KEY",
         "GROQ_API_KEY"
@@ -53,6 +54,7 @@
       "provider": "gemini",
       "tier": "free",
       "recommended": false,
+      "fallback": 1,
       "keys": [
         "GEMINI_API_KEY"
       ],
@@ -85,6 +87,7 @@
       "provider": "gemini",
       "tier": "free",
       "recommended": false,
+      "fallback": 2,
       "keys": [
         "GEMINI_API_KEY"
       ],
@@ -133,7 +136,8 @@
       "label": "Groq Whisper (fast)",
       "provider": "groq",
       "tier": "free",
-      "recommended": true,
+      "recommended": false,
+      "fallback": 3,
       "keys": [
         "GROQ_API_KEY"
       ],
@@ -184,6 +188,7 @@
       "provider": "openai",
       "tier": "paid",
       "recommended": false,
+      "fallback": null,
       "keys": [
         "OPENAI_API_KEY",
         "GROQ_API_KEY"
@@ -232,6 +237,7 @@
       "provider": "openai",
       "tier": "paid",
       "recommended": false,
+      "fallback": null,
       "keys": [
         "OPENAI_API_KEY",
         "GROQ_API_KEY"
