@@ -8,7 +8,7 @@ code_paths=eval/ spec/ design/ desktop/ android/
 docs_required=docs/STATUS.md docs/CHANGELOG.md
 
 # Commands that prove the code works. Run by people, agents, CI and shipshape-run. Join with &&.
-check_commands=cd eval && python -m ruff check . && python -m pytest -q
+check_commands=cd eval && python -m ruff check . && python -m pytest -q && cd ../desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 
 # The branch nobody commits to directly.
 default_branch=main

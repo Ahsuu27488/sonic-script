@@ -1,0 +1,92 @@
+{
+  "_about": [
+    "Rules for the text cleanup after Whisper (M1 plan step 1). Shared by every app; the Rust reader is",
+    "desktop/core/src/normalize.rs and the shared test cases are cases.json next to this file.",
+    "Order: remove + replace characters, count scripts (needs_llm_ratio), romanize Urdu / Devanagari runs",
+    "(whole word from *_words first, else letter by letter), drop phantoms, apply the user's word list, tidy spacing.",
+    "Urdu letters that depend on their place (kept in code): waw at the start of a word = w; yeh at the start or",
+    "before alef / waw = y; heh at the end after a consonant = a. Devanagari: consonants carry an 'a' that is",
+    "dropped at the end of a word and between a vowel and a consonant with a vowel (schwa deletion).",
+    "Phantoms: output that matches the last sentence(s) of the Whisper hint (spec/prompts/whisper-hint-v1.txt:",
+    "the last one, the last two, ... the whole hint; Whisper echoes the hint's tail on silence) or a phantom",
+    "phrase, within 1 word in 4, or that is only filler words, becomes empty text (D-007).",
+    "Word list (D-014): exact match fixes the spelling; a fuzzy match needs the same sound skeleton and at least",
+    "fuzzy_min_consonants consonants, so short everyday words are never changed."
+  ],
+  "remove": ["​", "‌", "‍", "‎", "‏", "؜", "ـ", "﻿"],
+  "replace": {
+    "ı": "i", "İ": "I", "‘": "'", "’": "'", "“": "\"", "”": "\"",
+    "–": "-", "—": "-", "…": "...", " ": " ",
+    "،": ",", "؛": ";", "؟": "?", "۔": ".", "٪": "%", "।": ".", "॥": ".",
+    "۰": "0", "۱": "1", "۲": "2", "۳": "3", "۴": "4",
+    "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9",
+    "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4",
+    "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9",
+    "०": "0", "१": "1", "२": "2", "३": "3", "४": "4",
+    "५": "5", "६": "6", "७": "7", "८": "8", "९": "9"
+  },
+  "needs_llm_ratio": 0.3,
+  "urdu_words": {
+    "اور": "aur", "ہے": "hai", "ہیں": "hain", "میں": "mein", "ہوں": "hoon", "کے": "ke", "کی": "ki",
+    "کا": "ka", "کو": "ko", "نے": "ne", "سے": "se", "کہ": "ke", "یہ": "ye", "وہ": "wo", "نہیں": "nahi",
+    "نہ": "na", "کیا": "kya", "دو": "do", "ڈال": "daal", "کر": "kar", "کرو": "karo", "کرنا": "karna",
+    "ہو": "ho", "تو": "to", "پر": "par", "پے": "pe", "بھی": "bhi", "ہم": "hum", "تم": "tum", "آپ": "aap",
+    "کیونکہ": "kyunke", "کیوں": "kyun", "ٹھیک": "theek", "اب": "ab", "ابھی": "abhi", "جی": "ji",
+    "ہاں": "haan", "اچھا": "acha", "یار": "yaar", "بھائی": "bhai", "مجھے": "mujhe", "لیکن": "lekin",
+    "پھر": "phir", "بہت": "bohat", "شکریہ": "shukriya", "کچھ": "kuch", "سب": "sab", "کب": "kab",
+    "کہاں": "kahan", "کون": "kaun", "تھا": "tha", "تھی": "thi", "تھے": "the", "گا": "ga", "گی": "gi",
+    "گے": "ge", "رہا": "raha", "رہی": "rahi", "رہے": "rahe", "لو": "lo", "دیں": "dein", "دے": "de",
+    "کل": "kal"
+  },
+  "urdu_letters": {
+    "ا": "a", "آ": "aa", "أ": "a", "ب": "b", "پ": "p", "ت": "t", "ٹ": "t", "ث": "s", "ج": "j", "چ": "ch",
+    "ح": "h", "خ": "kh", "د": "d", "ڈ": "d", "ذ": "z", "ر": "r", "ڑ": "r", "ز": "z", "ژ": "zh", "س": "s",
+    "ش": "sh", "ص": "s", "ض": "z", "ط": "t", "ظ": "z", "ع": "a", "غ": "gh", "ف": "f", "ق": "q", "ک": "k",
+    "ك": "k", "گ": "g", "ل": "l", "م": "m", "ن": "n", "ں": "n", "و": "o", "ؤ": "o", "ہ": "h", "ه": "h",
+    "ۂ": "a", "ۃ": "a", "ة": "a", "ھ": "h", "ء": "", "ی": "i", "ي": "i", "ى": "a", "ئ": "", "ے": "e",
+    "ۓ": "e"
+  },
+  "urdu_marks": {
+    "َ": "a", "ِ": "i", "ُ": "u", "ٰ": "a",
+    "ً": "", "ٌ": "", "ٍ": "", "ّ": "", "ْ": ""
+  },
+  "hindi_words": {
+    "और": "aur", "है": "hai", "हैं": "hain", "में": "mein", "मैं": "main", "हूँ": "hoon", "हूं": "hoon",
+    "के": "ke", "की": "ki", "का": "ka", "को": "ko", "ने": "ne", "से": "se", "कि": "ke", "यह": "ye",
+    "ये": "ye", "वह": "wo", "वो": "wo", "नहीं": "nahi", "ना": "na", "क्या": "kya", "दो": "do", "डाल": "daal",
+    "कर": "kar", "करो": "karo", "करना": "karna", "हो": "ho", "तो": "to", "पर": "par", "पे": "pe",
+    "भी": "bhi", "हम": "hum", "तुम": "tum", "आप": "aap", "क्योंकि": "kyunki", "ठीक": "theek", "अब": "ab",
+    "अभी": "abhi", "जी": "ji", "हाँ": "haan", "हां": "haan", "अच्छा": "acha", "यार": "yaar", "भाई": "bhai",
+    "मुझे": "mujhe", "लेकिन": "lekin", "फिर": "phir", "बहुत": "bohat", "शुक्रिया": "shukriya", "कुछ": "kuch",
+    "सब": "sab", "था": "tha", "थी": "thi", "थे": "the", "रहा": "raha", "रही": "rahi", "रहे": "rahe",
+    "देखो": "dekho", "कल": "kal"
+  },
+  "devanagari_consonants": {
+    "क": "k", "ख": "kh", "ग": "g", "घ": "gh", "ङ": "n", "च": "ch", "छ": "chh", "ज": "j", "झ": "jh",
+    "ञ": "n", "ट": "t", "ठ": "th", "ड": "d", "ढ": "dh", "ण": "n", "त": "t", "थ": "th", "द": "d",
+    "ध": "dh", "न": "n", "प": "p", "फ": "ph", "ब": "b", "भ": "bh", "म": "m", "य": "y", "र": "r",
+    "ल": "l", "ळ": "l", "व": "v", "श": "sh", "ष": "sh", "स": "s", "ह": "h",
+    "क़": "q", "ख़": "kh", "ग़": "gh", "ज़": "z", "ड़": "r", "ढ़": "rh",
+    "फ़": "f", "य़": "y"
+  },
+  "devanagari_vowels": {
+    "अ": "a", "आ": "aa", "इ": "i", "ई": "ee", "उ": "u", "ऊ": "oo", "ऋ": "ri", "ए": "e", "ऐ": "ai",
+    "ओ": "o", "औ": "au", "ऑ": "o", "ऍ": "e"
+  },
+  "devanagari_matras": {
+    "ा": "aa", "ि": "i", "ी": "ee", "ु": "u", "ू": "oo", "ृ": "ri",
+    "े": "e", "ै": "ai", "ो": "o", "ौ": "au", "ॉ": "o", "ॅ": "e"
+  },
+  "devanagari_signs": { "ँ": "n", "ं": "n", "ः": "h" },
+  "devanagari_nukta": { "k": "q", "kh": "kh", "g": "gh", "j": "z", "d": "r", "dh": "rh", "ph": "f" },
+  "phantom_phrases": [
+    "thank you for watching",
+    "thanks for watching",
+    "thank you so much for watching",
+    "please subscribe to my channel",
+    "like and subscribe",
+    "subtitles by the amara org community"
+  ],
+  "filler_words": ["tch", "hmm", "hm", "mm", "mmm", "um", "uh", "ah", "oh"],
+  "fuzzy_min_consonants": 3
+}

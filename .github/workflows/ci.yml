@@ -27,6 +27,24 @@ jobs:
       - name: Tests
         run: python -m pytest -q
 
+  # The desktop app's Rust workspace (M1). Windows runner: the app is Windows-first.
+  rust:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test
+
   # shipshape: a pull request that changes code must also update the memory docs (STATUS, CHANGELOG).
   # Commits whose message contains [no-docs] are left out. Same rule as .githooks/commit-msg, but it also
   # catches commits made with --no-verify or by tools that skip hooks.
