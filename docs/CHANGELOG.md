@@ -3,6 +3,20 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-bench
+
+- M1 step 4, golden check: new app crate `desktop/win` (binary `sonicscript.exe`) with `--file <wav>...`
+  (prints the text) and `--bench <dir> [--out <file>]` (one row per clip in `eval`'s `results.jsonl` shape,
+  paced by `rpm`, p50 / p95 summary). The Groq key is read from the process environment, then the Windows user
+  environment. `spec.rs` now reads the engine's `audio_per_hour` price for the cost column.
+- `eval` `rescore` fills in the category of rows that have none (the app's rows), so the app is scored by the
+  same scorer and report as M0. `desktop/core/examples/transcribe.rs` removed (replaced by the app).
+- Fix: the first run scored 87.2% vs M0's 89.1% on the same 41 clips. Root cause: the voice gate trimmed to
+  speech + 200 ms, and with that little silence Whisper translated `mx-02` / `nm-02` into English and cut
+  "Let's" to "La"; the whole clips came back right. Padding is now 500 ms (D-022): 89.1% accuracy, Latin 100%,
+  English 86%, silence 100%, 0 errors, clip → text p50 298 ms / p95 387 ms. No trim at all: 88.8%.
+- Housekeeping: C: was full (0 MB), which broke `git pull` and builds; npm and npx caches cleared (5.4 GB free).
+
 ## 2026-11-03 · feat/m1-encode-groq
 
 - M1 step 3, encode + Groq: `desktop/core/src/encode.rs` (Ogg/Opus 16 kbps, VoIP, written with libopus and

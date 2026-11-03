@@ -154,7 +154,7 @@ sentence `mx-01`, which is the hint's first sentence. Short words ("code", "cold
 "corrected" into list words. Cost: dictating exactly the hint's last sentence is dropped (STATUS known gap).
 *Where:* `spec/normalizer/rules.json`, `desktop/core/src/normalize.rs`, `spec/normalizer/cases.json`.
 
-**D-020 Voice gate: relative energy + zero-crossing, at least 300 ms of speech.** (2026-11-03)
+**D-020 Voice gate: relative energy + zero-crossing, at least 300 ms of speech.** (2026-11-03) *(200 ms padding superseded by D-022)*
 A 20 ms frame is speech when it is 9 dB above the clip's own noise floor (10th-percentile frame, never below
 -50 dBFS) and its zero-crossing rate is below 0.15; a clip with less than 300 ms of speech is not sent. The
 clip is trimmed to the speech frames plus 200 ms on each side. No speech model (Silero) for now.
@@ -181,3 +181,12 @@ clips vs 84.4% for M0's run); complexity 5 encoded 2x faster but lost 1 point of
 kept; a built-in encoder means no ffmpeg to ship. Cost: building needs CMake on PATH (VS Build Tools ships one;
 CI's windows-latest has it), and encoding takes ~1/32 of the clip's length, so step 5 encodes while recording.
 *Where:* `desktop/core/src/encode.rs` (`COMPLEXITY`), `groq.rs`, `spec.rs`, `spec/providers.json`.
+
+**D-022 The voice gate keeps 500 ms of audio around the speech (was 200 ms).** (2026-11-03)
+Supersedes the padding in D-020; the gate itself is unchanged. The clip sent to Whisper is the speech frames plus
+500 ms on each side (`vad::PAD`). *Why:* the step 4 golden check (`sonicscript --bench`, 44 M0 clips, scored by
+`eval rescore`) gave 87.2% accuracy with 200 ms against M0's 89.1% on the same 41 clips: with less silence around
+the speech Whisper translated `mx-02` and `nm-02` into English and cut "Let's" to "La" (`en-03`); the same
+clips sent whole came back right. 500 ms gave 89.0% (M0 level), no trim at all 88.7%. Cost: ~0.6 s more audio
+per clip, no measurable latency (p50 298 ms vs 286 ms), and Groq bills 10 s minimum per request anyway.
+*Where:* `desktop/core/src/vad.rs` (`PAD`), runs `eval/results/m1-bench`, `m1-pad500`, `m1-notrim` (local).

@@ -112,7 +112,8 @@ def test_env_file_key_wins_over_global(tmp_path, monkeypatch):
 
 def test_rescore_uses_fixed_expected_text(tmp_path):
     path = tmp_path / "results.jsonl"
-    row = {"engine": "e", "fmt": "wav", "sentence": "x-01", "repeat": 0, "text": "kar raha tha", "error": None,
+    row = {"engine": "e", "fmt": "wav", "sentence": "x-01", "category": "urdu", "repeat": 0,
+           "text": "kar raha tha", "error": None,
            "script_ok": True, "english_found": 0, "english_total": 0, "accuracy": 0.5, "wer": 0.5}
     err = dict(row, repeat=1, text="", error="HTTP 503", accuracy=0.0)
     path.write_text(json.dumps(row) + "\n" + json.dumps(err) + "\n", encoding="utf-8")
@@ -122,3 +123,14 @@ def test_rescore_uses_fixed_expected_text(tmp_path):
     assert rows[0]["accuracy"] == 1.0 and rows[0]["wer"] == 0.0
     assert rows[1]["error"] == "HTTP 503" and rows[1]["accuracy"] == 0.0  # errors are left alone
     assert (tmp_path / "results.jsonl.bak").read_text(encoding="utf-8").count("\n") == 2
+
+
+def test_rescore_fills_the_category_of_app_rows(tmp_path):
+    path = tmp_path / "results.jsonl"
+    row = {"engine": "app-groq-whisper-hint", "fmt": "opus16", "sentence": "x-01", "category": None, "repeat": 0,
+           "text": "kar raha tha", "error": None, "latency_ms": 300.0, "bytes": 8000, "cost_usd": 0.0, "retries": 0}
+    path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    assert bench.rescore(path, [Sentence(id="x-01", category="urdu", text="kar raha tha", english=[])]) == 1
+    (r,) = bench.read_rows(path)
+    assert r["category"] == "urdu" and r["accuracy"] == 1.0 and r["english_total"] == 0
+    assert bench.summarise([r])[0]["accuracy"] == 1.0

@@ -17,8 +17,10 @@ pub const MARGIN_DB: f64 = 9.0;
 pub const MIN_DB: f64 = -50.0;
 pub const MAX_ZCR: f64 = 0.15;
 pub const MIN_SPEECH_MS: u32 = 300;
-/// Kept before the first and after the last speech frame, so soft onsets ("sh", "f") are not cut.
-pub const PAD: usize = RATE / 5;
+/// Kept before the first and after the last speech frame, so soft onsets ("sh", "f") are not cut. 500 ms,
+/// not 200 ms: with less silence around the speech Whisper clipped "Let's" and translated two mixed
+/// sentences into English (D-022).
+pub const PAD: usize = RATE / 2;
 const FLOOR_PERCENTILE: usize = 10;
 
 /// What the gate found in a clip.

@@ -159,13 +159,16 @@ def rescore(path: Path, sentences: list[Sentence]) -> int:
             continue
         r = json.loads(line)
         s = by_id.get(r["sentence"])
+        new = {}
+        if s and r.get("category") is None:  # rows from the desktop app's --bench carry no category
+            new["category"] = s.category
         if s and not r.get("error"):
             sc = score(r["text"], s.text, s.english)
-            new = {"script_ok": sc.script_ok, "english_found": sc.english_found,
-                   "english_total": len(s.english), "accuracy": sc.accuracy, "wer": sc.wer}
-            if any(r.get(k) != v for k, v in new.items()):
-                changed += 1
-                r.update(new)
+            new |= {"script_ok": sc.script_ok, "english_found": sc.english_found,
+                    "english_total": len(s.english), "accuracy": sc.accuracy, "wer": sc.wer}
+        if any(r.get(k) != v for k, v in new.items()):
+            changed += 1
+            r.update(new)
         out.append(json.dumps(r, ensure_ascii=False))
     path.with_name(path.name + ".bak").write_text("\n".join(lines) + "\n", encoding="utf-8")
     path.write_text("\n".join(out) + "\n", encoding="utf-8")

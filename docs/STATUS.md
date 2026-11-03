@@ -4,14 +4,14 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-encode-groq` (step 3, PR open); PR #3 and PR #4
-merged 2026-11-03. **Merge the step 3 PR before starting step 4.**
+**Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-bench` (step 4, PR open); steps 1-3 merged
+(PR #3, #4, #5). **Merge the step 4 PR before starting step 5.**
 **In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1 (Windows dictation app in Rust): plan
-steps 1 (text cleanup), 2 (voice gate) and 3 (Opus + Groq client + pipeline) are built and tested; next is
-step 4, the app binary with `--bench`.
+steps 1-4 are built and tested (text cleanup, voice gate, Opus + Groq + pipeline, `sonicscript.exe --bench`
+golden check at M0 accuracy); next is step 5, hotkey + recording.
 
-**Start here (new session):** check the step 3 PR (`feat/m1-encode-groq`) is merged and `main` is pulled; read
-`docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top), then decisions D-011 to D-021. One plan
+**Start here (new session):** check the step 4 PR (`feat/m1-bench`) is merged and `main` is pulled; read
+`docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top), then decisions D-011 to D-022. One plan
 step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Checks: see "How to run and check".
 
 ## What works (verified)
@@ -29,12 +29,14 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
   also passes every speech clip without padding, with the room noise mixed in (also +10 dB) and 20 dB quieter,
   and drops the silence clips at +10 dB. `cargo test`: 9 tests pass (2026-11-03); the recordings test is skipped
   where they are absent (CI).
-- `desktop/core` encode + Groq + pipeline (M1 step 3, D-021): the real pipeline (`examples/transcribe`) on
-  the 44 M0 recordings against Groq, one pass (2026-11-03): 0 errors, 0 retries, both silence clips not sent,
-  accuracy 88.0% (M0 `groq-whisper-hint` opus16, same scorer: 84.4%), Latin-only 100%, English kept 86.6%
-  (= M0), ~7.7 KB per clip, Whisper request p50 178 ms / p95 228 ms, clip → text p50 341 ms / p95 455 ms.
-  `cargo test`: 26 tests pass (Ogg/Opus round trip, spec, Groq client against a local server incl. retries,
-  pipeline with a fake engine); fmt and clippy `-D warnings` clean.
+- `desktop/core` encode + Groq + pipeline (M1 step 3, D-021): Ogg/Opus 16 kbps, Groq client with warm-up and
+  one retry, gate → trim → Opus → Whisper → cleanup with per-stage timings. `cargo test`: 26 core tests pass.
+- Golden check (M1 step 4): `sonicscript.exe --bench spec/fixtures/audio` on the 44 M0 recordings against Groq,
+  scored by `eval rescore` (2026-11-03, padding 500 ms, D-022): accuracy 89.1% (speech clips; M0
+  `groq-whisper-hint` opus16: 89.2%, 89.0% vs 89.1% on the 41 clips both have), Latin-only 100% (M0 93%),
+  English kept 86% (M0 87%), silence 100% (both not sent), 0 errors, 0 retries, ~7.5 KB per clip, clip → text
+  p50 298 ms / p95 387 ms (M0 request alone: 253 / 1154 ms). Report: `eval/results/m1-pad500/report.html`
+  (local). `cargo test`: 4 app tests pass; fmt and clippy `-D warnings` clean.
 - `eval/` tool: 25 offline tests pass (2026-11-02). Runs per provider in parallel (`concurrency` in
   `spec/providers.json`); thread-safe rate limiter.
 - M0 results, opus16, owner's voice (`eval/results/m0/report.html`, local only), p50 / p95, accuracy, English kept:
@@ -58,8 +60,8 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
-  text fields, settings page and fallback model are M2 (D-016, D-017). Steps 0-2 done (PR #3, PR #4);
-  step 3 done on `feat/m1-encode-groq` (PR open); step 4 (`desktop/win` binary, `--file` / `--bench`) is next.
+  text fields, settings page and fallback model are M2 (D-016, D-017). Steps 0-3 merged (PR #3, #4, #5);
+  step 4 done on `feat/m1-bench` (PR open); step 5 (hotkey + recording, encoding while recording) is next.
 
 ## Live state
 
@@ -70,8 +72,9 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 1. Hint + LLM misses the latency target (p95 2.7 s > 1.2 s); only Whisper-hint alone meets it.
 2. Names fail on Groq; the word list fixes sound-alikes ("Jaminai" → Gemini, "Codec" → Codex) but not words
    run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM).
-3. Whisper-hint sometimes translates instead of transcribing (`mx-04` → "Take a backup and run the database."):
-   no cleanup can fix that; watch for it in M1.
+3. Whisper-hint sometimes translates instead of transcribing (`mx-04` → "Take a backup and run the database.",
+   also `nm-06`): no cleanup can fix that. It depends on the exact audio: too little silence around the speech
+   made it worse (D-022); watch for it with live recordings in step 5.
 4. Dictating exactly the hint's last sentence ("Theek hai, main abhi meeting mein hoon.") is dropped as a
    phantom (D-019). The voice gate's `speech_ms` could let the filter skip clips with clear speech (not done).
 5. The voice gate is tuned on one male voice (the owner) and one room; loud talking or TV in the background
@@ -88,10 +91,9 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 
 ## Next
 
-1. Agent: M1 step 4, the app crate `desktop/win` (`sonicscript.exe --file <wav>`, `--bench <dir>`, built on
-   `pipeline::run`) → step 5 hotkey + capture with encoding while recording (D-015, D-018) → inject → model
-   catalog → latency log. Delegate boilerplate to Gemini CLI via Foreman if the owner has signed Gemini CLI in.
-2. Owner: add CMake to PATH (known gap 9); review and merge the step 3 PR; keep or change the name "SonicScript".
+1. Agent: M1 step 5, hotkey + capture in `desktop/win` with encoding while recording (D-015, D-018) → step 6
+   changeable key → inject → model catalog → latency log. Delegate boilerplate to Gemini CLI via Foreman if the owner has signed Gemini CLI in.
+2. Owner: add CMake to PATH (known gap 9); review and merge the step 4 PR; keep or change the name "SonicScript".
 
 ## How to run and check
 
@@ -100,8 +102,10 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 - Run: `python -m sonic_eval record | probe | bench --preset compression|engines | report | rescore`
 - Try the cleanup: `cd desktop && cargo run -q --example clean -- [words.txt]` (one text per line on stdin).
 - Try the voice gate: `cd desktop && cargo run -q --example gate -- <16 kHz mono .wav files>`.
-- Try the whole pipeline against Groq: `cd desktop && cargo run -q --release --example transcribe -- ../spec/fixtures/audio/*.wav`
-  (needs `GROQ_API_KEY`; prints Whisper's text, so test recordings only).
+- Try the whole pipeline against Groq: `cd desktop && cargo run -q --release -p sonicscript -- --file <wav>...`
+  (needs `GROQ_API_KEY`; prints the text, so test recordings only).
+- Golden check: `cd desktop && cargo run -q --release -p sonicscript -- --bench ../spec/fixtures/audio --out
+  ../eval/results/m1-bench/results.jsonl`, then `cd eval && python -m sonic_eval rescore --run m1-bench`.
 - Code map: `graphify query "<question>"`; after code changes `graphify update .` (see CLAUDE.md).
-- Tests: `cd eval && python -m ruff check . && python -m pytest -q` (25 tests) and
+- Tests: `cd eval && python -m ruff check . && python -m pytest -q` (26 tests) and
   `cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`.

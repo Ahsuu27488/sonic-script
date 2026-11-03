@@ -34,6 +34,8 @@ pub struct WhisperEngine {
     pub language: Option<String>,
     /// The Whisper prompt text, already loaded.
     pub hint: Option<&'static str>,
+    /// US dollars per hour of audio sent, from the spec (for the bench cost column).
+    pub audio_per_hour: f64,
 }
 
 #[derive(Deserialize)]
@@ -51,6 +53,14 @@ struct RawEngine {
     whisper_model: Option<String>,
     language: Option<String>,
     hint: Option<String>,
+    #[serde(default)]
+    price: Price,
+}
+
+#[derive(Deserialize, Default)]
+struct Price {
+    #[serde(default)]
+    audio_per_hour: f64,
 }
 
 /// The engine `spec/providers.json` names as `default_engine` (D-011).
@@ -74,6 +84,7 @@ pub fn engine(id: &str) -> Option<WhisperEngine> {
             Some(name) => Some(prompt(&name)?),
             None => None,
         },
+        audio_per_hour: raw.price.audio_per_hour,
         id: raw.id,
     })
 }
@@ -101,6 +112,7 @@ mod tests {
         assert!(e.provider.base_url.starts_with("https://"));
         assert_eq!(e.language, None, "D-011: never forced to ur");
         assert!(e.hint.unwrap().ends_with("main abhi meeting mein hoon."));
+        assert!(e.audio_per_hour > 0.0);
     }
 
     #[test]

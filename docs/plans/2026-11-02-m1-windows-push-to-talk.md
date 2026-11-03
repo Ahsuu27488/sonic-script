@@ -9,7 +9,11 @@
   fallback; complexity 10 (D-021). Added `pipeline.rs` and `examples/transcribe.rs`; on the 44 M0 clips
   against Groq: accuracy 88.0%, Latin 100%, English 86.6%, clip → text p50 341 ms. Encoding costs ~1/32 of
   the clip length: step 5 should encode while recording.
-- Next: step 4, `--bench` golden check in the app binary (`desktop/win`), then step 5.
+- Step 4 golden check: done, `feat/m1-bench`. `sonicscript.exe --file / --bench` in `desktop/win`; rows in
+  `eval`'s results shape, scored by `eval rescore` (one scorer). First run 87.2% vs M0 89.1% on the same clips:
+  the 200 ms trim made Whisper translate; padding raised to 500 ms (D-022) → 89.1%, Latin 100%, p50 298 ms.
+  `examples/transcribe.rs` removed (the app does it).
+- Next: step 5, hotkey + capture (encode while recording).
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).
