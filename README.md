@@ -10,13 +10,14 @@ English words kept in English:
 Built-in tools (Windows `Win + H`, Gboard, Apple Dictation) write Urdu or Devanagari script and garble the English
 words in between. SonicScript fixes that.
 
-> **Status: early development.** Nothing to install yet. We are measuring which free cloud speech engine works best
-> (Milestone 0). See [blueprint.md](blueprint.md) for the plan.
+> **Status: early development.** Nothing to install yet. The engine benchmark (Milestone 0) is done: Groq Whisper
+> is the fast default, Gemini the accurate option. The Windows app (Milestone 1, Rust) is being built. See
+> [blueprint.md](blueprint.md) for the plan.
 
 ## Planned
 
-- **Windows:** hold `Right Ctrl`, speak, release, and the text appears in any app (VS Code, Chrome, Slack, Claude
-  Code and Codex in the terminal).
+- **Windows:** tap `Right Ctrl` (or a key of your choice), speak, tap again or press Enter, and the text appears
+  in any app (VS Code, Chrome, Slack, Claude Code and Codex in the terminal). Holding the key works too.
 - **Android:** a voice keyboard with one big mic button.
 - **Output modes:** Roman Urdu / Hinglish, English, Urdu script, Devanagari.
 - **Free:** bring your own free Groq or Gemini API key. No account, no server, no telemetry.
@@ -27,6 +28,9 @@ words in between. SonicScript fixes that.
 |---|---|
 | [blueprint.md](blueprint.md) | Product plan and milestones |
 | [DESIGN.md](DESIGN.md) | Design system (the Voice Ring) |
+| `eval/` | Engine benchmark (Python) |
+| `desktop/` | Windows app (Rust, in progress) |
+| `spec/` | Prompts, model ids, test sentences and text-cleanup rules shared by every app |
 | `docs/` | Project memory: status, decisions, architecture, changelog |
 
 ## License

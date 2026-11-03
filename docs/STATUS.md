@@ -4,14 +4,15 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** `feat/m1-voice-gate` (PR #4; `main` has M0, the M1 plan and
-step 1, PR #3 merged 2026-11-03)
+**Last updated:** 2026-11-03 · **Code at:** `main` once PR #4 (voice gate) is merged; PR #3 (text cleanup)
+merged 2026-11-03. **If PR #4 is still open, it must be merged before step 3** (`gh pr view 4`).
 **In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1 (Windows dictation app in Rust): plan
 steps 1 (text cleanup) and 2 (voice gate) are built and tested, each in its own PR; next is step 3, encode +
 Groq.
 
-**Start here (new session):** read `docs/plans/2026-11-02-m1-windows-push-to-talk.md`, then decisions
-D-011 to D-020. One plan step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`.
+**Start here (new session):** check PR #4 is merged and `main` is pulled; read
+`docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top), then decisions D-011 to D-020. One plan
+step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Checks: see "How to run and check".
 
 ## What works (verified)
 
@@ -44,14 +45,15 @@ D-011 to D-020. One plan step per branch and PR (`feat/m1-<step>`); the Rust wor
 - Opus 16 kbps (8 KB/clip) is as accurate as WAV (128 KB) for both providers.
 - Every Groq engine invents text on silence (always the hint's last sentence or "Tch, tch"); Gemini returns
   nothing (D-007).
-- Code knowledge graph (D-010): `graphify query "..."` works; built 2026-11-02 (code only).
+- Code knowledge graph (D-010): `graphify query "..."` works; graphify 0.9.101 reinstalled and the graph
+  rebuilt 2026-11-03 (code only).
 
 ## In progress
 
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
-  text fields, settings page and fallback model are M2 (D-016, D-017). Step 1 merged (PR #3), step 2 on
-`feat/m1-voice-gate` (PR #4).
+  text fields, settings page and fallback model are M2 (D-016, D-017). Steps 0-2 done (PR #3, PR #4);
+  step 3 (encode + Groq) is next.
 
 ## Live state
 

@@ -11,6 +11,8 @@
   room-noise clip `si-02`. The gate uses each clip's own noise floor + 9 dB and a zero-crossing limit (D-020);
   the thresholds were picked on 7 variants of every clip (no padding, room noise mixed in, +10 dB, quieter).
 - `graphify` reinstalled (`pip install --user graphifyy`, 0.9.101, Python 3.14); graph rebuilt, code only.
+- Docs check before a new session: README status (M0 done, tap-to-toggle per D-015, repo folders), a Progress
+  section at the top of the M1 plan, STATUS "Start here" says PR #4 must be merged first. PR #3 merged.
 
 ## 2026-11-03 · feat/m1-normalizer
 
