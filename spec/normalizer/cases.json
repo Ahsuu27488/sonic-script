@@ -1,0 +1,148 @@
+{
+  "_about": [
+    "Shared test cases for the text cleanup (rules.json). Every app runs all of them.",
+    "`expected` is the text before the trailing space: the app pastes expected + one space, or nothing when",
+    "expected is empty. `words` is the user's word list. `needs_llm` and `phantom` default to false.",
+    "Cases named m0-* are real groq-whisper-hint outputs from the M0 benchmark (run m0, opus16)."
+  ],
+  "cases": [
+    {
+      "id": "m0-lg-01",
+      "note": "Urdu 'aur' and 'kyunke' leak into a Roman sentence",
+      "input": "Dekho yar, main ne kal rata pura code dobarah check kia اور mujhe lagta hai, maslal authentication middleware mein hai کیunke token expire honne ke baad user ko dobarah login page, paid redirect nahi kiya jara raha toh tum please is ko dhek lo, aur ek proper fix bana do",
+      "expected": "Dekho yar, main ne kal rata pura code dobarah check kia aur mujhe lagta hai, maslal authentication middleware mein hai kiunke token expire honne ke baad user ko dobarah login page, paid redirect nahi kiya jara raha toh tum please is ko dhek lo, aur ek proper fix bana do"
+    },
+    {
+      "id": "m0-mx-06",
+      "note": "'daal do' in Urdu script",
+      "input": "API ki variable mein ڈال دو. Code mein hardcode mat karna.",
+      "expected": "API ki variable mein daal do. Code mein hardcode mat karna."
+    },
+    {
+      "id": "m0-mx-14",
+      "note": "one Urdu letter glued to a Roman word",
+      "input": "Yaae feature next release me ڈalte hai, abhi bug fix pe focus kero.",
+      "expected": "Yaae feature next release me dalte hai, abhi bug fix pe focus kero."
+    },
+    {
+      "id": "m0-ur-08",
+      "note": "Turkish dotless i",
+      "input": "Kya tu mujhe kıl sabah 10 bajay u'tha sakti ho?",
+      "expected": "Kya tu mujhe kil sabah 10 bajay u'tha sakti ho?"
+    },
+    {
+      "id": "m0-nm-06",
+      "note": "word list fixes 'Jaminai'; 'Algrock' (= 'aur Groq' run together) stays: known gap",
+      "input": "Jaminai Algrock, douno KPI ki settings me save kar do.",
+      "words": ["Gemini", "Groq", "API keys"],
+      "expected": "Gemini Algrock, douno KPI ki settings me save kar do."
+    },
+    {
+      "id": "m0-ag-05",
+      "note": "word list fixes 'Codec'",
+      "input": "Codec sikhau, ye test parallel mein chalai, aur report beijay.",
+      "words": ["Codex"],
+      "expected": "Codex sikhau, ye test parallel mein chalai, aur report beijay."
+    },
+    {
+      "id": "m0-si-01",
+      "note": "silence: Whisper echoes the last hint sentence",
+      "input": "Tarek hai, main abhi meeting mein hoon.",
+      "expected": "",
+      "phantom": true
+    },
+    {
+      "id": "m0-si-02",
+      "note": "silence: filler only",
+      "input": "Tch, tch, tch, tch.",
+      "expected": "",
+      "phantom": true
+    },
+    {
+      "id": "hint-echo",
+      "note": "the whole hint echoed",
+      "input": "Yaar, PR merge kar do aur deployment check kar lo. Build fail ho raha hai, logs dekh ke batao. Theek hai, main abhi meeting mein hoon.",
+      "expected": "",
+      "phantom": true
+    },
+    {
+      "id": "hint-fragment-kept",
+      "note": "part of a hint sentence is real dictation",
+      "input": "PR merge kar do.",
+      "expected": "PR merge kar do."
+    },
+    {
+      "id": "m0-mx-01",
+      "note": "the hint's first sentence is a real test sentence: only the hint's tail is a phantom",
+      "input": "PR merge kar do aur deployment check kar lo.",
+      "expected": "PR merge kar do aur deployment check kar lo."
+    },
+    {
+      "id": "hint-longer-kept",
+      "note": "a hint sentence inside a longer dictation is kept",
+      "input": "Theek hai, main abhi meeting mein hoon, baad mein call karta hoon.",
+      "expected": "Theek hai, main abhi meeting mein hoon, baad mein call karta hoon."
+    },
+    {
+      "id": "phrase-phantom",
+      "input": "Thank you for watching!",
+      "expected": "",
+      "phantom": true
+    },
+    {
+      "id": "thank-you-kept",
+      "input": "Thank you bhai.",
+      "expected": "Thank you bhai."
+    },
+    {
+      "id": "words-guard",
+      "note": "short everyday words never become list words",
+      "input": "Ye code bohat cold hai, codes check karo.",
+      "words": ["Codex", "Claude", "Gemini"],
+      "expected": "Ye code bohat cold hai, codes check karo."
+    },
+    {
+      "id": "words-casing",
+      "note": "exact matches get the list's spelling, phrases too",
+      "input": "github pe push karo aur claude code se poocho.",
+      "words": ["GitHub", "Claude Code"],
+      "expected": "GitHub pe push karo aur Claude Code se poocho."
+    },
+    {
+      "id": "words-grok",
+      "input": "Grok ki key daal do.",
+      "words": ["Groq"],
+      "expected": "Groq ki key daal do."
+    },
+    {
+      "id": "spacing",
+      "input": "  kar   do ,theek hai  ",
+      "expected": "kar do, theek hai"
+    },
+    {
+      "id": "empty",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "id": "urdu-mostly",
+      "note": "all Urdu script: letter table gives a rough draft, the LLM step should redo it",
+      "input": "مجھے کل صبح دس بجے اٹھا دینا",
+      "expected": "mujhe kal sbh ds bje atha dina",
+      "needs_llm": true
+    },
+    {
+      "id": "urdu-punctuation",
+      "input": "ٹھیک ہے، کل بات کرتے ہیں۔",
+      "expected": "theek hai, kal bat krte hain.",
+      "needs_llm": true
+    },
+    {
+      "id": "devanagari",
+      "note": "nukta as a separate sign; schwa deletion in daalte / agle",
+      "input": "ये फीचर अगले रिलीज़ में डालते हैं",
+      "expected": "ye pheechar agle rileez mein daalte hain",
+      "needs_llm": true
+    }
+  ]
+}

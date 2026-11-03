@@ -3,6 +3,19 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-normalizer
+
+- Toolchain confirmed: Rust 1.99.1 + VS 2022 Build Tools (C++), a test program links and runs (plan step 0).
+- M1 step 1, text cleanup: new Rust workspace `desktop/` with crate `sonicscript-core`
+  (`core/src/normalize.rs`); rules as data in `spec/normalizer/rules.json`, 22 shared test cases in
+  `spec/normalizer/cases.json` (most from real M0 failures). `examples/clean.rs` runs it on stdin.
+- On the 131 M0 Groq-hint outputs: Latin-only 93% → 100%, silence 0% → 100%, accuracy 85.1% → 90.0%.
+- Fix during the work: the first phantom filter matched any whole hint sentence and dropped the real test
+  sentence `mx-01` ("PR merge kar do aur deployment check kar lo."), which is the hint's first sentence. Root
+  cause: Whisper only echoes the hint's tail, so only runs ending with the last sentence count now (D-019).
+- CI: new `rust` job on windows-latest (fmt, clippy `-D warnings`, test); `.shipshape/config` check commands
+  include the Rust checks.
+
 ## 2026-11-02 · plan/m1-windows
 
 - STATUS rewritten as a hand-off for a fresh session ("Start here"); Rust + C++ Build Tools installing.

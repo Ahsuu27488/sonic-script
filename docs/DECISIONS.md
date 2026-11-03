@@ -143,6 +143,17 @@ Refused: keys that type or edit text, and Enter / Esc (they stop and cancel a re
 rules (D-015) are the same for every key. *Why:* the owner asked for it; some users already use Right Ctrl
 (e.g. as their only Ctrl, or for a VM / remote desktop host key). *Where:* M1 plan step 6, `blueprint.md` §3.1.
 
+**D-019 Text cleanup rules: only the hint's tail is a phantom; fuzzy word-list matches need 3 consonants.**
+(2026-11-03) Output becomes empty only when it matches the Whisper hint's last sentence(s) (the last one, the
+last two, ... the whole hint) or a phantom phrase within 1 word in 4, or is filler only ("Tch, tch"). The
+word list fixes exact matches (any case → the list's spelling) and sound-alikes with the same sound
+skeleton ("Jaminai" = "Gemini", "Codec" = "Codex") only when the skeleton has at least 3 consonants. Output
+with more than 30% Urdu / Devanagari letters is romanized letter by letter and flagged `needs_llm`.
+*Why:* on silence Whisper only ever echoed the hint's tail; matching every hint sentence dropped the real
+sentence `mx-01`, which is the hint's first sentence. Short words ("code", "cold", "room") would otherwise be
+"corrected" into list words. Cost: dictating exactly the hint's last sentence is dropped (STATUS known gap).
+*Where:* `spec/normalizer/rules.json`, `desktop/core/src/normalize.rs`, `spec/normalizer/cases.json`.
+
 <!-- Template for the next entry:
 
 **D-00N <Decision in one line>.** (YYYY-MM-DD)

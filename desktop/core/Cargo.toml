@@ -1,0 +1,11 @@
+[package]
+name = "sonicscript-core"
+version = "0.1.0"
+description = "Platform-free core of the SonicScript desktop app: text cleanup, voice gate, encoding, Groq"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

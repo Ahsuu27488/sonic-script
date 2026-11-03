@@ -5,9 +5,10 @@
 
 ## Runtime
 
-Only the Milestone 0 benchmark exists: a Python command-line tool run by hand on the owner's PC. It calls the
-Groq and Gemini HTTP APIs directly with the user's keys; there is no SonicScript server. The planned apps are
-described in `blueprint.md` §3 and §5.
+The Milestone 0 benchmark is a Python command-line tool run by hand on the owner's PC. It calls the Groq and
+Gemini HTTP APIs directly with the user's keys; there is no SonicScript server. The M1 Windows app is being
+built in Rust in `desktop/`: so far only the platform-free text cleanup (`desktop/core`), no app binary yet.
+The planned apps are described in `blueprint.md` §3 and §5.
 
 ```
 record ──► spec/fixtures/audio/<id>.wav (16 kHz mono, trimmed)
@@ -35,6 +36,10 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `eval/sonic_eval/report.py` | `build`: HTML report (recommendation, tables, latency chart, per-sentence view) |
 | `eval/sonic_eval/__main__.py` | CLI: `record`, `probe`, `bench`, `report`, `rescore` |
 | `eval/tests/` | Offline tests (mocked HTTP, synthetic audio, fake engines) |
+| `spec/normalizer/` | `rules.json` (text cleanup rules as data) and `cases.json` (shared test cases), D-019 |
+| `desktop/Cargo.toml` | Rust workspace (M1); members: `core` |
+| `desktop/core/src/normalize.rs` | `Normalizer::new().with_word_list(..).clean(raw) -> Cleaned { text, needs_llm, phantom }`: script guard, phantom filter, word list, spacing; reads `spec/normalizer/rules.json` and `spec/prompts/whisper-hint-v1.txt` at build time |
+| `desktop/core/examples/clean.rs` | Runs the cleanup on stdin lines, prints JSON lines (for re-scoring with `eval`) |
 | `.claude/settings.json`, `.graphifyignore` | Graphify hook for Claude Code and what the graph skips (D-010); graph in `graphify-out/` (git-ignored) |
 
 ## Data
@@ -66,6 +71,14 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
   environment (`HKCU\Environment`) (`config.load_env`).
 - Model ids, prices, rpm budgets and per-provider `concurrency`: `spec/providers.json`. Presets: `bench.PRESETS`.
 
+## Text cleanup (desktop/core)
+
+```
+Whisper text ─► remove / replace chars ─► count scripts (> 30% non-Latin → needs_llm)
+             ─► romanize Urdu / Devanagari runs (word table, else letters) ─► phantom? → ""
+             ─► word list (exact, then sound skeleton) ─► spacing + trailing space
+```
+
 ## Commands
 
 ```
@@ -78,6 +91,8 @@ python -m sonic_eval bench --preset engines [--formats opus16]
 python -m sonic_eval report --run m0
 python -m sonic_eval rescore --run m0      # re-score saved outputs after a sentences.json fix (no API calls)
 python -m ruff check . && python -m pytest -q
+cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+cargo run -q --example clean -- [words.txt] < texts.txt   # (in desktop/) cleanup on one text per line
 pip install --user graphifyy               # code graph (D-010); Scripts folder is on the user PATH
 GRAPHIFY_BACKEND=none graphify extract . --code-only && graphify cluster-only . --no-label   # first build
 graphify update .                          # after code changes; graphify query "..." to ask
