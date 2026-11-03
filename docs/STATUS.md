@@ -4,17 +4,21 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-engines` (PR open), stacked on `feat/m1-hotkey`
-(step 5, PR #7) on `feat/m1-bench` (step 4, PR #6); steps 1-3 merged (PR #3, #4, #5). **Merge #6, #7, then this
-PR, in that order.**
-**In one line:** M1 (Windows dictation app in Rust): the key, mic and pipeline work live (0.2 s key-up → text),
-but Groq Whisper is weak on natural Urdu / Hindi, so quality now comes first (D-025): 6 engines benchmarked,
-Gemini is the most accurate (~97% vs Groq 89%), and a model catalog (free / paid, limits, results) is in
-`spec/models.json` and `sonicscript --models`. The default is still Groq until the owner picks.
+**Last updated:** 2026-11-03 · **Code at:** `main` (PRs #3-#8 merged 2026-11-03; this hand-off is a docs PR).
+**In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live (key test passed, 0.2 s
+key-up → text with Groq), 6 engines are benchmarked and listed in a free / paid model catalog
+(`sonicscript --models`), and the owner chose **Gemini 3.5 Flash-Lite as the default with Groq as the fallback**
+(D-028), which is the next thing to build. Text is still printed in the console, not pasted (step 7).
 
-**Start here (new session):** check PRs #6, #7 and this one are merged and `main` is pulled; read
-`docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top), then decisions D-011 to D-027. One plan
-step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Checks: see "How to run and check".
+**Start here (new session):**
+1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
+   D-028 (D-025 to D-028 are the newest and change the direction), `ARCHITECTURE.md`, and the plan
+   `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top).
+2. Do "Next" below in order, one branch and PR per item (`feat/m1-<topic>`), each with its check.
+3. Keys: `GROQ_API_KEY` and `GEMINI_API_KEY` are in the owner's Windows user environment; `OPENAI_API_KEY` only
+   in `eval/.env` (paid: benchmark only, spend sparingly). CMake is on the user PATH since 2026-11-03.
+4. Long runs (bench, tests) belong in your own shell with a log file: the desktop app's hidden Terminal pane
+   throttles console output. Keys and mic need the owner's unlocked PC.
 
 ## What works (verified)
 
@@ -78,14 +82,17 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
   - Free-tier limits for the owner's key from Google's own 429s: Flash 20/day, Transcribe 25/day (reset at
     midnight Pacific = 1 PM Pakistan). Flash-Lite: not hit at 150+/day (third-party: 500/day).
 - `eval`: 29 offline tests pass; `desktop`: 49 core + 6 app tests pass, fmt and clippy clean (2026-11-03).
+- Key test (2026-11-03, `sonicscript.exe` in a private test window with simulated keys): Enter while recording
+  stops it and never reaches the app; Enter when idle passes; Esc cancels; Right Ctrl + C still copies and
+  cancels the recording it started. With the owner's earlier live test (tap, hold, Realtek mic, 0.2 s key-up →
+  text) step 5 is verified.
 
 ## In progress
 
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
   text fields, settings page and fallback model are M2 (D-016, D-017). Steps 0-3 merged (PR #3, #4, #5);
-  step 4 PR #6; step 5 PR #7 (owner tried it live: key, mic and 0.2 s latency work); engines + catalog on
-  `feat/m1-engines` (PR open). Default engine: owner's pick pending (see Next 1).
+  step 4 PR #6; step 5 PR #7 (verified live); engines + catalog PR #8. Default engine chosen (D-028), not built.
 - Benchmark `m1-engines`: Flash and Transcribe have 19-22 clips left (resume after the daily reset with the same
   `bench --run m1-engines --engines gemini-3.5-transcribe+gptoss20b gemini-3.5-flash` command, then
   `catalog`).
@@ -96,7 +103,8 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 
 ## Known gaps
 
-1. Hint + LLM misses the latency target (p95 2.7 s > 1.2 s); only Whisper-hint alone meets it.
+1. Only Groq Whisper is fast (0.3 s) but it is the least accurate (89%); every engine above 95% takes
+   1.5-2.5 s typically, which D-025 accepts. The fallback (D-028) is what keeps the slow tail bounded.
 2. Names fail on Groq; the word list fixes sound-alikes ("Jaminai" → Gemini, "Codec" → Codex) but not words
    run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM).
 3. Whisper-hint sometimes translates instead of transcribing (`mx-04` → "Take a backup and run the database.",
@@ -109,27 +117,42 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 6. Urdu-script "میں" is always romanized "mein" (it can also be "main" = I). Mostly-Urdu output only gets a
    rough letter-by-letter draft and is flagged `needs_llm`; the LLM re-ask is not wired yet (the step 3 pipeline returns `needs_llm`; the re-ask comes with the app).
 7. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
-8. Step 5 live: tap / hold, mic (Realtek array, 48 kHz) and key-up → text 0.2 s confirmed by the owner;
-   Enter / Esc swallowing and Right Ctrl + C not reported yet. Opening the mic takes 160-690 ms, which can
-   clip the first word ("Bhuaiyaar" = "Bhai yaar"?): not fixed yet.
+8. Opening the mic takes 160-690 ms after the key goes down, and that audio is lost: in the key test Enter
+   came 1.5 s after the tap but 1.2 s was recorded (mic open 406 ms). It likely clipped the owner's first word
+   ("Bhuaiyaar" = "Bhai yaar"). Not fixed (Next 2).
+9. Building `desktop/` needs CMake on PATH (for libopus): the VS Build Tools CMake folder was added to the
+   owner's user PATH on 2026-11-03 (new terminals only). On another PC: that folder or `winget install Kitware.CMake`.
+10. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 11. Gemini Flash-Lite, the most accurate engine with a usable free limit, has a slow tail (some requests
     10-20 s; 2 of 44 hit the app's 10 s timeout). As the default it needs the D-017 fallback: start Groq when
     Gemini is slow, first answer wins. Not built yet.
 12. Free-tier Gemini requests may be used by Google to improve its products (Gemini API terms); the catalog
     says so. OpenAI and Groq-only engines do not have this note (not checked).
-9. Building `desktop/` needs CMake on PATH (for libopus). VS Build Tools ships one at
-   `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin`;
-   add that folder to the user PATH or `winget install Kitware.CMake`.
-10. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 
 ## Next
 
-1. Owner: pick the default engine. Proposal: Gemini 3.5 Flash-Lite with the Groq fallback (known gap 11),
-   Transcribe / Flash as choices for people with a paid key. Then the agent builds the fallback race and sets
-   `default_engine`.
-2. Agent: finish the Flash / Transcribe benchmark after the daily reset; fix the mic-open delay (known gap 8);
-   then M1 step 6, changeable key → step 7 paste at the cursor → latency log.
-3. Owner: add CMake to PATH (known gap 9); merge PR #6, #7, then this PR; keep or change the name.
+1. **Agent: default engine with fallback (D-028)**, branch `feat/m1-fallback`.
+   - `spec/providers.json`: `default_engine` = `gemini-3.5-flash-lite`, new `fallback_engine` =
+     `groq-whisper-hint`; `spec.rs` reads both; the catalog's `recommended` follows `default_engine`.
+   - `desktop/core`: a racing transcriber (e.g. `client.rs` `Racer` implementing `pipeline::Transcribe`): send
+     the `Encoded` clip to the primary on a thread; if it fails, or has not answered after 3 s, send it to the
+     fallback too; first success wins; report which engine answered and why (`Outcome` gets the engine id and a
+     reason). Both clients warm up on key-down. Missing Gemini key → fallback alone, with a one-line notice.
+   - Tests with fake transcribers (slow primary → fallback wins at ~3 s; primary error → fallback at once;
+     fast primary → no fallback request; both fail → primary's error).
+   - Check: `sonicscript --bench ../spec/fixtures/audio --out ../eval/results/m1-fallback/results.jsonl`, then
+     `python -m sonic_eval rescore --run m1-fallback`: expect ~96-97%, 0 errors, slowest 5% about 3.5 s or less;
+     record it here, re-run `catalog` with the app run, rebuild.
+2. **Agent: mic-open delay (known gap 8)**: measure which part of `audio::Recorder::start` is slow (device
+   lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
+   it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
+   "recorded" seconds match the time between the keys.
+3. **Agent, after 1 PM Pakistan time (Gemini's daily reset):** finish the Flash / Transcribe benchmark
+   (`cd eval; python -m sonic_eval bench --run m1-engines --engines gemini-3.5-transcribe+gptoss20b
+   gemini-3.5-flash --formats opus16 --repeats 1`), then `catalog` (command under "How to run and check").
+4. **Agent: M1 step 7, paste at the cursor** (plan step 7; the biggest step to daily use), then step 6
+   (changeable key, D-018), then step 9 (latency log).
+5. Owner: keep or change the name "SonicScript"; try the app with natural speech once the default is Gemini.
 
 ## How to run and check
 

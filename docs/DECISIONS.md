@@ -243,3 +243,15 @@ quota errors for the owner's key (Gemini Flash 20 requests/day, Transcribe 25/da
 which free models can be a default at all. *Where:* `spec/providers.json` `catalog`, `eval/sonic_eval/catalog.py`,
 `spec/models.json`, `desktop/win/src/models.rs`.
 
+**D-028 Default engine: Gemini 3.5 Flash-Lite, with Groq Whisper as the fallback for slow or failed requests.**
+(2026-11-03) Supersedes the default in D-011 (Groq). The app sends the clip to `gemini-3.5-flash-lite`; if no
+answer has come after a deadline (start with a fixed 3 s; D-017's learned deadline later), it also sends it to
+`groq-whisper-hint`, and the first good answer is pasted, with a short notice when Groq's was used. A Gemini
+error (429, 5xx, timeout) goes to Groq at once. Without a Gemini key the app runs Groq alone. Gemini 3.5 Flash,
+Gemini 3.5 Transcribe and the OpenAI models stay choices in the catalog (`--engine`). *Why:* the owner's choice
+after the benchmark (D-025, D-027): Flash-Lite is 97.0% accurate (Groq 89.2%) with a free limit that fits daily
+use (~500 requests/day), while Flash and Transcribe allow only 20 / 25 a day; but some Flash-Lite requests take
+10-20 s (2 of 44 hit the 10 s timeout in the app), and the fallback caps that wait. *Where:* to build:
+`spec/providers.json` (`default_engine`, a new `fallback_engine`), `desktop/core` (race in the client or
+pipeline), `desktop/win/src/dictate.rs` (notice). Not built yet (STATUS Next 1).
+
