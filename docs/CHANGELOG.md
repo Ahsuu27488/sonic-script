@@ -3,6 +3,20 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-encode-groq
+
+- M1 step 3, encode + Groq: `desktop/core/src/encode.rs` (Ogg/Opus 16 kbps, VoIP, written with libopus and
+  the `ogg` crate, no ffmpeg), `spec.rs` (engine + hint from `spec/providers.json`, new `default_engine` field),
+  `groq.rs` (blocking reqwest + rustls, `warm()`, 10 s timeout, one retry on 429 / 5xx / dropped connection),
+  `pipeline.rs` (gate → trim → Opus → Whisper → cleanup, timings per stage) and `examples/transcribe.rs`.
+- Real run on the 44 M0 recordings (one pass, Groq): 0 errors, 0 retries, both silence clips not sent,
+  accuracy 88.0% (M0 `groq-whisper-hint` opus16 with the same scorer: 84.4%), Latin-only 100%, English kept
+  86.6% (same as M0), ~7.7 KB per clip, Whisper request p50 178 ms / p95 228 ms, clip → text p50 341 ms /
+  p95 455 ms.
+- Opus complexity tried at 5 (encode 2x faster) but accuracy fell to 86.9% and English kept to 82.9%: kept at
+  10 (D-021). Encoding takes ~125 ms per 4 s of audio, so step 5 should encode while recording.
+- The FLAC fallback was not needed: libopus builds, but needs CMake on PATH (D-021).
+
 ## 2026-11-03 · feat/m1-voice-gate
 
 - M1 step 2, voice gate: `desktop/core/src/vad.rs` (`detect` → speech ms + the samples to keep, 200 ms padding)

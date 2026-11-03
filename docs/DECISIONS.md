@@ -170,3 +170,14 @@ gives silence 20-80 ms and the weakest real speech variant ~720 ms (Python proto
 <What exactly was decided.>
 *Why:* <the problem, the alternatives considered, why this one.> *Where:* <files / functions / settings>.
 -->
+
+**D-021 Opus is encoded in the app with libopus at complexity 10; HTTP is reqwest + rustls; the default
+engine is named in the spec.** (2026-11-03)
+`encode.rs` writes Ogg/Opus 16 kbps VoIP itself (crates `opus` → `opusic-sys`, a static libopus 1.6 built with
+CMake, and `ogg`); no ffmpeg in the app. Complexity stays 10 (libopus's and M0's default). `groq.rs` uses
+blocking reqwest with rustls (aws-lc). `spec/providers.json` `default_engine` names the engine the apps use
+(`groq-whisper-hint`, D-011). *Why:* the same format as M0's `opus16` keeps M0's accuracy (88.0% on the 44
+clips vs 84.4% for M0's run); complexity 5 encoded 2x faster but lost 1 point of accuracy and 4 of English
+kept; a built-in encoder means no ffmpeg to ship. Cost: building needs CMake on PATH (VS Build Tools ships one;
+CI's windows-latest has it), and encoding takes ~1/32 of the clip's length, so step 5 encodes while recording.
+*Where:* `desktop/core/src/encode.rs` (`COMPLEXITY`), `groq.rs`, `spec.rs`, `spec/providers.json`.
