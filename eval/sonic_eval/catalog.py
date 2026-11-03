@@ -79,6 +79,7 @@ def _rows(results_dir: Path, runs: list[str]) -> dict[str, list[dict]]:
 
 
 def _summary(rows: list[dict], total: int | None = None) -> dict | None:
+    rows = [r for r in rows if r.get("category") != "format"]  # the model page reports the M0 clips (D-030)
     if not rows:
         return None
     done = [r for r in rows if not r["error"]]

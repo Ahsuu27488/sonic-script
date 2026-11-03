@@ -3,7 +3,7 @@
     "Rules for the text cleanup after Whisper (M1 plan step 1). Shared by every app; the Rust reader is",
     "desktop/core/src/normalize.rs and the shared test cases are cases.json next to this file.",
     "Order: remove + replace characters, count scripts (needs_llm_ratio), romanize Urdu / Devanagari runs",
-    "(whole word from *_words first, else letter by letter), drop phantoms, apply the user's word list, tidy spacing.",
+    "(whole word from *_words first, else letter by letter), drop phantoms, apply the user's word list, tidy spacing line by line (line breaks stay: D-030 lists).",
     "Urdu letters that depend on their place (kept in code): waw at the start of a word = w; yeh at the start or",
     "before alef / waw = y; heh at the end after a consonant = a. Devanagari: consonants carry an 'a' that is",
     "dropped at the end of a word and between a vowel and a consonant with a vowel (schwa deletion).",

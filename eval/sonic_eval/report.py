@@ -62,13 +62,13 @@ details.s summary::-webkit-details-marker{display:none}
 details.s summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-sm)}
 details.s[open] summary{border-bottom:1px solid var(--border)}
 .sid{font:500 var(--text-sm) var(--font-mono);color:var(--text-3);flex:none;width:5.5em}
-.stext{overflow-wrap:anywhere}
+.stext{overflow-wrap:anywhere;white-space:pre-line}
 .body{padding:var(--space-4);display:grid;gap:var(--space-3)}
 audio{width:100%;max-width:420px;height:36px}
 .out{display:grid;grid-template-columns:minmax(0,14em) minmax(0,1fr) auto;gap:var(--space-1) var(--space-4);
   align-items:baseline;font-size:var(--text-md)}
 .out .e{color:var(--text-3);font:400 var(--text-sm) var(--font-mono);overflow-wrap:anywhere}
-.out .t{overflow-wrap:anywhere}
+.out .t{overflow-wrap:anywhere;white-space:pre-line}
 .raw{color:var(--text-3);font-family:var(--font-urdu),var(--font-devanagari),var(--font-ui);line-height:2}
 mark{background:var(--danger-soft);color:var(--danger);border-radius:4px;padding:0 3px}
 .miss{color:var(--danger);font-size:var(--text-sm)}
@@ -179,13 +179,15 @@ def _summary_table(summary: list[dict], rec: dict | None) -> str:
             f'<td>{_chip(s["silence_ok"], 1, .5) if s["silence_ok"] is not None else "–"}</td>'
             f'<td>{_chip(s["p50"], 700, 1200, pct=False, invert=True)}</td>'
             f'<td>{_chip(s["p95"], 1200, 2000, pct=False, invert=True)}</td>'
-            f'<td class="num">{s["kb"]}</td><td class="num">${s["cost_per_1k"]:.3f}</td></tr>')
+            f'<td class="num">{s["kb"]}</td><td class="num">${s["cost_per_1k"]:.3f}</td>'
+            f'<td>{_chip(s["format"], .9, .75) if s.get("format") is not None else "–"}</td></tr>')
     return ('<h2>All engines</h2><p class="note">Latin = outputs fully in Roman script. English = expected English '
             'words kept in English spelling. Accuracy = 1 − character error rate after folding spelling variants '
             '(kar do = kardo, hai = hay). Quiet = silence clips that correctly produced no text (made-up text there '
-            'would be typed into your app). Latency in ms, speech clips only.</p><div class="scroll"><table><thead><tr>'
+            'would be typed into your app). Latency in ms, speech clips only. Accuracy, English and latency use the M0 clips; '
+            'Layout = smart formatting checks passed on the format clips (lists, take-backs, digits; D-030).</p><div class="scroll"><table><thead><tr>'
             '<th>Engine</th><th class="l">Format</th><th>Runs</th><th>Errors</th><th>Latin</th><th>English</th>'
-            '<th>Accuracy</th><th>Quiet</th><th>p50</th><th>p95</th><th>KB</th><th>$ / 1k</th></tr></thead><tbody>'
+            '<th>Accuracy</th><th>Quiet</th><th>p50</th><th>p95</th><th>KB</th><th>$ / 1k</th><th>Layout</th></tr></thead><tbody>'
             + "".join(body) + "</tbody></table></div>")
 
 

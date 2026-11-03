@@ -73,6 +73,8 @@ pub struct Outcome {
     pub engine: String,
     /// Engines the chain went past, and why (D-029).
     pub passed: Vec<Passed>,
+    /// Why the formatting step failed when the engine's own text was used instead (D-030).
+    pub unformatted: Option<String>,
     /// Tokens billed: speech model (Gemini) and refine step, in and out.
     pub tokens: [u32; 4],
     pub stages: Stages,
@@ -155,6 +157,7 @@ pub fn run_streamed(
     out.retries = tr.retries;
     out.engine = tr.engine;
     out.passed = tr.passed;
+    out.unformatted = tr.unformatted;
     out.tokens = [
         tr.tokens_in,
         tr.tokens_out,

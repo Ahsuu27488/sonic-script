@@ -4,7 +4,9 @@
   python -m sonic_eval record --free 5
   python -m sonic_eval probe [--engines ID ...]
   python -m sonic_eval bench --preset compression|engines [--run NAME] [--engines ...] [--formats ...]
+                           [--only ID|CATEGORY ...] [--format-model M]   (format step after each engine, D-030)
   python -m sonic_eval report [--run NAME]
+  python -m sonic_eval reformat --from RUN --run NEW [--model M]   format saved transcripts (text only)
   python -m sonic_eval rescore [--run NAME]   re-score saved outputs after a fixture fix (no API calls)
   python -m sonic_eval catalog [--runs ...] [--app-runs ...]   write spec/models.json (the model page)
 """
@@ -18,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import audio, bench, catalog, record, report
+from . import audio, bench, catalog, record, reformat, report
 from .config import AUDIO_DIR, MODELS_FILE, RESULTS, load_env, load_providers, load_sentences
 from .engines import build_engines, warm_up
 from .ratelimit import RateLimiter
@@ -46,6 +48,9 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--formats", nargs="+", help="override the preset's formats (wav, opus32 ... opus12)")
     b.add_argument("--repeats", type=int)
     b.add_argument("--limit", type=int, help="only the first N sentences (quick try)")
+    b.add_argument("--only", nargs="+", help="only these sentence ids or categories (e.g. format)")
+    b.add_argument("--format-model", help="run the spec's format step (D-030) with this Groq model after each "
+                   "engine, e.g. openai/gpt-oss-120b; engine ids get +fmt-<size>")
     b.add_argument("--run", help="run folder name under eval/results (default: m0)", default="m0")
     b.add_argument("--providers", type=Path, help="alternate providers.json (tests)")
     b.add_argument("--audio-dir", type=Path, default=AUDIO_DIR)
@@ -56,6 +61,13 @@ def main(argv: list[str] | None = None) -> int:
     ct = sub.add_parser("catalog", help="write spec/models.json (the model page) from benchmark runs")
     ct.add_argument("--runs", nargs="+", default=["m1-engines", "m0"], help="eval runs, best first")
     ct.add_argument("--app-runs", nargs="*", default=[], help="runs of `sonicscript --bench` (app-<id> rows)")
+    rf = sub.add_parser("reformat", help="run a text-only format step on a saved run's transcripts and score it")
+    rf.add_argument("--from", dest="src", required=True, help="the run whose transcripts are formatted")
+    rf.add_argument("--run", required=True, help="new run folder under eval/results")
+    rf.add_argument("--model", default="openai/gpt-oss-120b", help="Groq chat model")
+    rf.add_argument("--prompt", default="format-v1.md", help="prompt in spec/prompts")
+    rf.add_argument("--engines", nargs="+", help="only these engines of the saved run")
+    rf.add_argument("--rpm", type=float, default=6, help="requests per minute (8K tokens/min = ~6 format calls)")
     rs = sub.add_parser("rescore", help="re-score a run against the current sentences.json, then rebuild the report")
     rs.add_argument("--run", default="m0")
     rs.add_argument("--audio-dir", type=Path, default=AUDIO_DIR)
@@ -81,10 +93,11 @@ def main(argv: list[str] | None = None) -> int:
         preset = bench.PRESETS[args.preset]
         providers = load_providers(args.providers) if args.providers else load_providers()
         ids = args.engines or preset["engines"]
-        engines, clients = build_engines(providers, ids, RateLimiter())
+        engines, clients = build_engines(providers, ids, RateLimiter(), format_model=args.format_model)
         warm_up(providers, clients)
         run_dir = RESULTS / args.run
-        results = bench.run(engines, load_sentences(), args.formats or preset["formats"],
+        sentences = [s for s in load_sentences() if not args.only or s.id in args.only or s.category in args.only]
+        results = bench.run(engines, sentences, args.formats or preset["formats"],
                             args.repeats or preset["repeats"], run_dir, args.audio_dir, args.limit)
         print()
         bench.print_summary(bench.summarise(bench.read_rows(results)))
@@ -93,13 +106,26 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "catalog":
-        cat = catalog.build(load_providers(), RESULTS, args.runs, args.app_runs, total=len(load_sentences()))
+        cat = catalog.build(load_providers(), RESULTS, args.runs, args.app_runs,
+                            total=sum(1 for s in load_sentences() if not s.format_check))
         MODELS_FILE.write_text(json.dumps(cat, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         for m in cat["models"]:
             r = m["results"] or {}
             print(f"{m['tier']:<5} {m['id']:<38} acc {r.get('accuracy', 0):.1%}  p50 {r.get('p50_ms', 0):>5} ms  "
                   f"p95 {r.get('p95_ms', 0):>6} ms  clips {r.get('clips', 0)}")
         print(f"\nWrote {MODELS_FILE}")
+        return 0
+
+    if args.cmd == "reformat":
+        spec = reformat.refine_spec(args.model, args.prompt, args.rpm)
+        src = RESULTS / args.src / "results.jsonl"
+        results = reformat.run(src, RESULTS / args.run, load_providers(), spec, load_sentences(), args.engines)
+        before = [r for r in bench.read_rows(src)
+                  if r["repeat"] == 0 and (not args.engines or r["engine"] in args.engines)]
+        print(f"\nBefore (run {args.src}, first pass):")
+        bench.print_summary(bench.summarise(before))
+        print(f"\nAfter the format step ({args.model}, {args.prompt}):")
+        bench.print_summary(bench.summarise(bench.read_rows(results)))
         return 0
 
     if args.cmd == "rescore":

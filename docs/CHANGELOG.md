@@ -3,6 +3,29 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-format (smart formatting, D-030; not merged)
+
+- Plan `docs/plans/2026-11-03-m1-smart-formatting.md`, approved by the owner with the defaults. One change
+  while building: a top-level `format` step in `spec/providers.json` instead of four new `+fmt` engine ids and
+  a second chain (same behaviour; engine ids and the catalog untouched).
+- `spec/prompts/format-v1.md` (from `format-draft.md`): lists ("- " / "1."), take-backs, fillers, digits with
+  lakh grouping, romanizing. Tightened after a text-only check: the list replaces the sentence (120b had
+  written both on `ag-03`), joining words are never the lead-in, a sentence after a list stays (both models
+  had dropped words on `lg-02`), an "actually" take-back example.
+- Test set: 13 `format` sentences `fmt-01`..`fmt-13` with `say` (what to speak) and `format` checks;
+  `record` shows `say`. Not recorded yet.
+- `eval`: `format_score` (list kind / count, absent words, digits) per row (`format_rate`), "layout" column
+  in the summary and report; accuracy, English and latency now come from the M0 clips only, the catalog too.
+  `reformat` command (format step on saved transcripts); `bench --only` and `--format-model`; `clean_output`
+  keeps line breaks; an optional format step that fails keeps the engine's text (`unformatted`).
+- App: `spec::format()`, `Client::with_format` (replaces the engine's refine; optional after engines without
+  one), `--no-format`, cleanup per line, multi-line console output, "Not formatted" notice, bench rows
+  `app-...+fmt`. A missing Groq key turns formatting off with a notice.
+- Found: Groq's free `gpt-oss-120b` / 20b allow 8K tokens/min and 200K/day; a format call is ~1,300 tokens,
+  so ~160 formatted dictations a day (STATUS known gap 3). A first 20b / 120b run on saved transcripts was
+  stopped half-way (the prompt changed under it) and deleted; run `fmt-say-120b` (the 13 sentences as text):
+  12 of 13 right.
+
 ## 2026-11-03 · docs/handoff-formatting
 
 - PR #10 (engine chain, D-029) merged after green CI.

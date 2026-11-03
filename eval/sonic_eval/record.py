@@ -195,4 +195,6 @@ def record_free(count: int, device: int | None, audio_dir: Path = AUDIO_DIR) -> 
 
 def _show(s: Sentence, n: int, total: int) -> None:
     print(f"{DIM}{n}/{total} · {s.id} · {s.category}{RESET}")
-    print(f"  {BOLD}{s.text or s.say}{RESET}")
+    print(f"  {BOLD}{s.say or s.text}{RESET}")
+    if s.format_check:  # say it as written, take-backs and fillers included: the formatter must clean them up
+        print(f"  {DIM}Say it naturally, with the corrections and fillers as written.{RESET}")

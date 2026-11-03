@@ -14,10 +14,13 @@ pub type Engines = Chain<Client>;
 /// The engines to run, in order, each with how long to wait for it before also asking the next.
 pub struct Choice {
     pub links: Vec<(spec::Engine, Duration)>,
+    /// The smart-formatting step run after whichever engine answers (D-030); `None` with `--no-format`.
+    pub format: Option<spec::Refine>,
 }
 
 /// `--engine <id>` runs that engine alone (to measure or try one); without it, the spec's chain.
-pub fn choose(id: Option<&str>) -> Result<Choice, String> {
+/// `format: false` (`--no-format`) gives the exact words.
+pub fn choose(id: Option<&str>, format: bool) -> Result<Choice, String> {
     let links = match id {
         None => spec::chain()
             .into_iter()
@@ -33,18 +36,34 @@ pub fn choose(id: Option<&str>) -> Result<Choice, String> {
             Duration::ZERO,
         )],
     };
-    Ok(Choice { links })
+    let format = if format { spec::format() } else { None };
+    Ok(Choice { links, format })
 }
 
 /// Clients for the chosen engines. In a chain, an engine whose key is missing is left out with a one-line
-/// notice (stderr); only when none is left is it an error.
+/// notice (stderr); only when none is left is it an error. Without the format step's key the text comes out
+/// unformatted, with a notice.
 pub fn engines(choice: Choice) -> Result<Engines, String> {
     let many = choice.links.len() > 1;
+    let format = choice.format.filter(|f| {
+        let ok = !read(&f.provider.key_env).is_empty();
+        if !ok {
+            eprintln!(
+                "  Note: no smart formatting ({} is not set).",
+                f.provider.key_env
+            );
+        }
+        ok
+    });
     let mut links = Vec::new();
     let mut first_error = None;
     for (engine, wait) in choice.links {
         let id = engine.id().to_string();
-        match Client::new(engine, read) {
+        let client = Client::new(engine, read).and_then(|c| match &format {
+            Some(f) => c.with_format(f.clone(), read),
+            None => Ok(c),
+        });
+        match client {
             Ok(client) => links.push((client, wait)),
             Err(e) => {
                 if many {
@@ -96,4 +115,23 @@ fn user_env(name: &str) -> Option<String> {
 #[cfg(not(windows))]
 fn user_env(_name: &str) -> Option<String> {
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formatting_is_on_unless_no_format_is_given() {
+        // D-030: on by default, for the chain and for one engine alike; --no-format gives the exact words.
+        assert!(choose(None, true).unwrap().format.is_some());
+        assert!(
+            choose(Some("groq-whisper-hint"), true)
+                .unwrap()
+                .format
+                .is_some()
+        );
+        assert!(choose(None, false).unwrap().format.is_none());
+        assert!(choose(Some("nope"), true).is_err());
+    }
 }

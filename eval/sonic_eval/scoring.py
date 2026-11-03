@@ -12,6 +12,9 @@ from dataclasses import dataclass
 # Arabic/Urdu (incl. presentation forms) and Devanagari blocks.
 NON_LATIN = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0900-\u097F]")
 WORD = re.compile(r"[a-z0-9]+")
+# A list line: "- item", "* item", "• item", or "1. item" / "1) item".
+LIST_ITEM = re.compile(r"^\s*(?:([-*•])|(\d+)[.)])\s+\S")
+NUMBER = re.compile(r"\d(?:[\d,:]*\d)?")  # 6, 2:30, 2,50,000 (a trailing comma or full stop is not part of it)
 
 # Whole-word spelling variants -> one form.
 VARIANTS = {
@@ -60,6 +63,58 @@ def score(output: str, expected: str, english: list[str]) -> Score:
         accuracy=round(max(0.0, 1.0 - cer), 4),
         wer=round(wer, 4),
     )
+
+
+@dataclass(frozen=True)
+class FormatScore:
+    """Smart formatting (D-030) on a `format` clip: each check that the sentence asks for passes or fails."""
+
+    list_ok: bool  # the right kind of list with the right number of items, or no list when none is expected
+    absent_ok: bool  # taken-back parts and fillers are gone
+    digits_ok: bool  # numbers, amounts and times written as expected (2,50,000, 2:30)
+    checks: int
+    passed: int
+
+    @property
+    def rate(self) -> float:
+        return self.passed / self.checks if self.checks else 1.0
+
+
+def format_score(output: str, check: dict) -> FormatScore:
+    """`check` is a sentence's `format` block: list (dash / ordered / any / None), items, absent, digits."""
+    list_ok = _list_ok(output, check.get("list"), int(check.get("items") or 0))
+    absent, digits = check.get("absent") or [], check.get("digits") or []
+    numbers = set(NUMBER.findall(output))
+    absent_ok = not any(n in numbers if n[0].isdigit() else _has_phrase(output, n) for n in absent)
+    digits_ok = all(d in numbers for d in digits)
+    results = [list_ok] + ([absent_ok] if absent else []) + ([digits_ok] if digits else [])
+    return FormatScore(list_ok, absent_ok, digits_ok, len(results), sum(results))
+
+
+def list_items(text: str) -> list[tuple[str, int | None]]:
+    """The list lines of a text as (kind, number): ("dash", None) or ("ordered", 3)."""
+    items = []
+    for line in text.splitlines():
+        m = LIST_ITEM.match(line)
+        if m:
+            items.append(("dash", None) if m.group(1) else ("ordered", int(m.group(2))))
+    return items
+
+
+def _list_ok(output: str, kind: str | None, count: int) -> bool:
+    items = list_items(output)
+    if kind is None:
+        return not items
+    kinds = {k for k, _ in items}
+    if len(items) != count or len(kinds) != 1:
+        return False
+    if kinds == {"ordered"} and [n for _, n in items] != list(range(1, count + 1)):
+        return False
+    return kind == "any" or kinds == {kind}
+
+
+def _has_phrase(output: str, phrase: str) -> bool:
+    return re.search(rf"(?<![a-z0-9]){re.escape(phrase.lower())}(?![a-z0-9])", output.lower()) is not None
 
 
 def has_term(output: str, term: str) -> bool:

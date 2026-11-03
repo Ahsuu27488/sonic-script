@@ -1,7 +1,8 @@
 //! Cleans Whisper's text before it is pasted (M1 plan step 1): script guard (Urdu / Devanagari letters to
-//! Roman), phantom filter (D-007), the user's word list (D-014) and spacing. The rules are data in
-//! `spec/normalizer/rules.json` and the test cases are in `spec/normalizer/cases.json`, shared with the
-//! Android app; the order of the steps is described in the rules file.
+//! Roman), phantom filter (D-007), the user's word list (D-014) and spacing, per line so formatted lists
+//! keep their lines (D-030). The rules are data in `spec/normalizer/rules.json` and the test cases are in
+//! `spec/normalizer/cases.json`, shared with the Android app; the order of the steps is described in the
+//! rules file.
 
 use std::collections::{HashMap, HashSet};
 
@@ -197,7 +198,14 @@ impl Normalizer {
                 phantom: true,
             };
         }
-        let mut text = tidy_spacing(&self.apply_words(&text));
+        // Line by line: a formatted list (D-030) keeps one item per line.
+        let mut text = self
+            .apply_words(&text)
+            .lines()
+            .map(tidy_spacing)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
         if !text.is_empty() {
             text.push(' ');
         }
@@ -506,7 +514,7 @@ fn tokens(text: &str) -> Vec<(usize, usize)> {
     out
 }
 
-/// One space between words, none before `, . ? ! ; :`, one after `, ; ? !` when a letter follows.
+/// Within one line: one space between words, none before `, . ? ! ; :`, one after `, ; ? !` when a letter follows.
 fn tidy_spacing(text: &str) -> String {
     let mut joined = String::with_capacity(text.len());
     for word in text.split_whitespace() {

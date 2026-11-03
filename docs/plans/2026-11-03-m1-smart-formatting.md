@@ -1,6 +1,8 @@
 # Plan: smart formatting (D-030), M1
 
-**Status:** draft, waiting for the owner's go-ahead (2026-11-03). Branch `feat/m1-format`.
+**Status:** approved by the owner 2026-11-03 ("go ahead", with the defaults: these 13 sentences, Gemini audio
+prompt unchanged, either marker for "pehla / dusra / teesra"). Built on branch `feat/m1-format`; the audio
+check (6.2) waits for the owner's recordings.
 
 ## Goal
 
@@ -79,19 +81,14 @@ example, and the `{word_list}` slot that `romanize-v1.md` has. It also romanizes
 
 ### 4. Spec: formatted engines and the off switch (`spec/providers.json`)
 
-New engine ids, so the old ids, their results and the catalog stay reproducible:
-
-| new id | is | format step |
-|---|---|---|
-| `gemini-3.5-transcribe+fmt` | Transcribe | Groq `gpt-oss-120b` + `format-v1.md` (replaces the 20b romanize step) |
-| `gemini-3.5-flash+fmt` | Flash, audio prompt unchanged | same |
-| `gemini-3.5-flash-lite+fmt` | Flash-Lite, audio prompt unchanged | same |
-| `groq-whisper-hint+fmt` | Groq Whisper | same |
-
-`chain` names the `+fmt` ids (same order and waits, D-029). A new `chain_plain` lists today's chain;
-`--no-format` uses it, so "exact words" means exactly today's output. The refine step gets `"optional": true`
-on the three engines whose text is already Roman: if the format step fails, their unformatted text is used
-(point 2); Transcribe's stays required.
+**Changed while building (2026-11-03), same behaviour, simpler:** instead of four new `+fmt` engine ids and a
+second `chain_plain`, the spec has one top-level `format` step (Groq `gpt-oss-120b` + `format-v1.md`). It runs
+after whichever engine answers (chain or `--engine <id>`), in place of that engine's own `refine` step (the
+format prompt also romanizes, so Transcribe's 20b romanize step is replaced). After an engine without a
+`refine` step (Flash, Flash-Lite, Groq Whisper) it is optional: if it fails, the engine's own text is used
+(point 2); after Transcribe it stays required. `--no-format` skips it, which gives exactly today's output. The
+engine ids, their results and the catalog stay as they are; benchmark rows get `+fmt-<size>` (eval) or
+`+fmt` (app) so formatted runs never mix with old ones.
 
 **One deviation from D-030's "Where" line:** it says the format rules also go into the Gemini audio prompt. I
 plan to leave `transcribe-roman-v1.md` as it is, because the format step after every engine already does the
@@ -100,27 +97,30 @@ re-formats). If you want both, say so and I'll test both ways.
 
 ### 5. Desktop app (`desktop/`)
 
-- `spec.rs`: read `chain_plain` and the refine `optional` flag; `chain_plain()`.
-- `client.rs`: an optional refine that fails returns the engine's own text, with the error noted in the
-  `Transcript` (a new `format_skipped` field), so dictation can say "Not formatted: <reason>" once.
+- `spec.rs`: `format()` reads the top-level `format` step.
+- `client.rs`: `Client::with_format(format, key_for)`; an optional format step that fails returns the
+  engine's own text, with the error in `Transcript.unformatted`, so dictation says "Not formatted".
 - `normalize.rs`: clean line by line: `tidy_spacing` per line, keep "- " and "1. " at the start of a line,
   drop empty lines at the ends; the phantom check runs on the whole text as now. New shared cases in
   `spec/normalizer/cases.json` (a list survives; a phantom inside a list line still goes).
-- `main.rs` / `key.rs`: `--no-format` picks `chain_plain` (with `--engine <id>` it is ignored: the id says
-  whether it formats).
+- `main.rs` / `key.rs`: `--no-format` leaves the format step out (chain and `--engine` alike); without a
+  Groq key the text comes out unformatted with a notice.
 - `dictate.rs`: print multi-line text as it is (pasting in step 7 must keep the line breaks; noted there).
-- Tests: the line-by-line cleanup, optional refine falling back, `chain_plain` parsing, the flag.
+- Tests: the line-by-line cleanup, the format step replacing / following an engine, an optional one falling
+  back, the flag.
 
 ### 6. The check (benchmark, then decide)
 
-1. **Text-only, no Gemini quota:** a new `eval` command `reformat --from <run> --refine <model> --run <new>`
-   runs the format step on the saved transcripts of an existing run and re-scores them. Runs on `m1-chain`
-   and `m1-engines` (all four chain engines' saved outputs on the 44 M0 clips), once with `gpt-oss-20b` and
-   once with `gpt-oss-120b`. Pass: accuracy and English kept within 0.5 points of the unformatted run on the
-   M0 clips (formatting must not lose words), and no M0 clip turned into a list (none of them is one).
-2. **Audio, on the 13 new clips:** `bench` with `gemini-3.5-flash-lite+fmt` and `groq-whisper-hint+fmt`, each
-   with 20b and 120b (Flash-Lite has ~500 free requests a day; Groq plenty). Transcribe and Flash are not used
-   here, so tomorrow's 1:30 PM quota stays free for Next 4. Pass: format score ≥ 90% with the chosen model.
+1. **Text-only, no Gemini quota:** a new `eval` command `reformat --from <run> --model <model> --run <new>`
+   runs the format step on the saved transcripts of an existing run and re-scores them: `m1-engines`
+   (Transcribe, Flash, Flash-Lite) and `m0` (Groq Whisper, first pass), once with `gpt-oss-20b` and once with
+   `gpt-oss-120b`. Pass: accuracy and English kept within 0.5 points of the unformatted run on the M0 clips
+   (formatting must not lose words). One M0 sentence really is a list (`lg-02`, "teen cheezein ... pehli,
+   doosri, teesri"); it may become one, at a small accuracy cost for the dropped "pehli / doosri".
+2. **Audio, on the 13 new clips:** `bench --only format --format-model <model>` with `gemini-3.5-flash-lite`
+   and `groq-whisper-hint`, with 20b and 120b (Flash-Lite has ~500 free requests a day; Groq plenty).
+   Transcribe and Flash are not used here, so tomorrow's 1:30 PM quota stays free for Next 4. Pass: format
+   score ≥ 90% with the chosen model.
 3. Pick 20b or 120b on those numbers (D-030 expects 120b), record the result as a new decision, update STATUS,
    ARCHITECTURE and CHANGELOG, then the app golden check (`--bench`) with the formatted chain on the 13 clips
    and a live try by you.
@@ -148,8 +148,8 @@ chain's waits (see Risks), Silero, a Gemini audio prompt with format rules (unle
 
 ## Rollback
 
-At run time: `--no-format`. In code: revert the PR; or set `chain` back to `chain_plain`'s ids in
-`spec/providers.json` and rebuild (one-line change, the old engines are untouched).
+At run time: `--no-format`. In code: revert the PR; or remove the `format` block from `spec/providers.json`
+and rebuild (the engines are untouched, so that is exactly today's behaviour).
 
 ## Assumptions (tell me if any is wrong)
 

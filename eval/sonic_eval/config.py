@@ -24,7 +24,8 @@ class Sentence:
     category: str
     text: str
     english: list[str] = field(default_factory=list)
-    say: str = ""  # recording instruction shown instead of the text (silence items)
+    say: str = ""  # what to say when it differs from the text (format items), or how to record (silence items)
+    format_check: dict | None = None  # format items (D-030): list kind, items, absent words, digits to find
 
     @property
     def is_silence(self) -> bool:
@@ -37,8 +38,8 @@ def load_sentences(fixtures: Path = FIXTURES) -> list[Sentence]:
     free = fixtures / "audio" / "free.json"
     if free.exists():
         items += json.loads(free.read_text(encoding="utf-8"))
-    return [Sentence(i["id"], i["category"], i["text"], list(i.get("english", [])), i.get("say", ""))
-            for i in items]
+    return [Sentence(i["id"], i["category"], i["text"], list(i.get("english", [])), i.get("say", ""),
+                     i.get("format")) for i in items]
 
 
 def load_providers(path: Path = SPEC / "providers.json") -> dict:

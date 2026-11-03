@@ -18,7 +18,7 @@ from pathlib import Path
 from . import audio
 from .config import AUDIO_DIR, RESULTS, Sentence
 from .engines import Engine, FakeEngine
-from .scoring import score
+from .scoring import format_score, score
 
 PRESETS = {
     # Which Opus bitrate is enough? One engine per provider, every format, one pass.
@@ -53,6 +53,8 @@ class Row:
     accuracy: float
     wer: float
     at: float
+    format_rate: float | None = None  # format clips only (D-030): share of the sentence's format checks passed
+    unformatted: str | None = None  # the optional format step failed: why (the engine's own text was kept)
 
 
 def run(engines: list[Engine], sentences: list[Sentence], formats: list[str], repeats: int,
@@ -103,6 +105,8 @@ def run(engines: list[Engine], sentences: list[Sentence], formats: list[str], re
             script_ok=sc.script_ok if sc else False,
             english_found=sc.english_found if sc else 0, english_total=len(s.english),
             accuracy=sc.accuracy if sc else 0.0, wer=sc.wer if sc else 1.0, at=time.time(),
+            format_rate=format_score(res.text, s.format_check).rate if sc and s.format_check else None,
+            unformatted=res.unformatted,
         )
         status = f"ERROR {res.error}" if res.error else f"{res.latency_ms:6.0f} ms  acc {sc.accuracy:.2f}"
         with lock:
@@ -166,6 +170,8 @@ def rescore(path: Path, sentences: list[Sentence]) -> int:
             sc = score(r["text"], s.text, s.english)
             new |= {"script_ok": sc.script_ok, "english_found": sc.english_found,
                     "english_total": len(s.english), "accuracy": sc.accuracy, "wer": sc.wer}
+            if s.format_check:
+                new["format_rate"] = format_score(r["text"], s.format_check).rate
         if any(r.get(k) != v for k, v in new.items()):
             changed += 1
             r.update(new)
@@ -185,7 +191,8 @@ def percentile(values: list[float], p: float) -> float:
 
 
 def summarise(rows: list[dict]) -> list[dict]:
-    """One line per (engine, format)."""
+    """One line per (engine, format). Accuracy, English and latency come from the M0 speech clips only, so runs
+    with and without the `format` clips compare fairly; `format` is the format score on those clips."""
     groups: dict[tuple[str, str], list[dict]] = {}
     for r in rows:
         groups.setdefault((r["engine"], r["fmt"]), []).append(r)
@@ -193,7 +200,8 @@ def summarise(rows: list[dict]) -> list[dict]:
     for (engine, fmt), rs in sorted(groups.items()):
         done = [r for r in rs if not r["error"]]
         silent = [r for r in done if r["category"] == "silence"]
-        ok = [r for r in done if r["category"] != "silence"]  # quality and latency: speech clips only
+        ok = [r for r in done if r["category"] not in ("silence", "format")]  # quality and latency: M0 speech
+        styled = [r for r in done if r["category"] == "format"]
         lat = [r["latency_ms"] for r in ok]
         eng_total = sum(r["english_total"] for r in ok)
         out.append({
@@ -207,6 +215,8 @@ def summarise(rows: list[dict]) -> list[dict]:
             "kb": round(statistics.fmean([r["bytes"] for r in rs]) / 1024, 1) if rs else 0,
             "cost_per_1k": round(statistics.fmean([r["cost_usd"] for r in done]) * 1000, 3) if done else 0.0,
             "retries": sum(r["retries"] for r in rs),
+            "format": round(statistics.fmean([r.get("format_rate") or 0.0 for r in styled]), 4) if styled else None,
+            "format_acc": round(statistics.fmean([r["accuracy"] for r in styled]), 4) if styled else None,
         })
     return out
 
@@ -250,13 +260,13 @@ def _provider(engine_id: str) -> str:
 
 def print_summary(summary: list[dict], file=sys.stdout) -> None:
     head = f"{'engine':<24} {'fmt':<7} {'n':>4} {'err':>4} {'latin':>6} {'eng':>6} {'acc':>6} " \
-           f"{'quiet':>6} {'p50':>6} {'p95':>6} {'KB':>6} {'$/1k':>7}"
+           f"{'quiet':>6} {'p50':>6} {'p95':>6} {'KB':>6} {'$/1k':>7} {'layout':>6}"
     print(head, file=file)
     print("-" * len(head), file=file)
     for s in summary:
         print(f"{s['engine']:<24} {s['fmt']:<7} {s['n']:>4} {s['errors']:>4} {s['script_ok']:>6.0%} "
               f"{s['english']:>6.0%} {s['accuracy']:>6.1%} {_pct(s['silence_ok']):>6} "
-              f"{s['p50']:>6} {s['p95']:>6} {s['kb']:>6} {s['cost_per_1k']:>7.3f}", file=file)
+              f"{s['p50']:>6} {s['p95']:>6} {s['kb']:>6} {s['cost_per_1k']:>7.3f} {_pct(s['format']):>6}", file=file)
 
 
 def _pct(v: float | None) -> str:

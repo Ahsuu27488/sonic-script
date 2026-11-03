@@ -4,12 +4,13 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** `main` (PRs #3-#10 merged; PR #10 = engine chain, D-029).
+**Last updated:** 2026-11-03 · **Code at:** `feat/m1-format` (smart formatting built, not merged; `main` = PRs
+#3-#11).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite → Groq Whisper,
 skipping a model whose free requests are used up (run `m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors,
-p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Next: smart formatting (D-030)**:
-decided and tested in a prompt, not built.
+p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart formatting (D-030)** is built on
+`feat/m1-format` (on by default, `--no-format` for exact words) but not yet benchmarked: Next 1.
 
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
@@ -57,15 +58,18 @@ decided and tested in a prompt, not built.
 - **Pipeline pieces (M1 steps 1-4):** text cleanup (D-019: script guard, phantom filter, word list), voice gate
   (D-020, D-022: sends all 42 speech clips, drops both silence clips, keeps 500 ms around speech), Ogg/Opus
   16 kbps (D-021: as accurate as WAV at 8 KB per clip), golden check `--bench` scored by `eval rescore`.
-- **Smart formatting test (2026-11-03, text only, `docs/research/format-test/`):** one prompt with two examples
-  (`format-draft.md`) turns spoken lists into "- " lists, keeps ordinary sentences, applies take-backs
-  ("nahi nahi"), lakh numbers (2,50,000) and romanizes Urdu script, in ~1 s on Groq `gpt-oss-20b` /
-  `gpt-oss-120b` (120b got the most details right). Not wired in.
+- **Smart formatting (D-030, branch `feat/m1-format`, plan `docs/plans/2026-11-03-m1-smart-formatting.md`):**
+  `spec/providers.json` `format` (Groq `gpt-oss-120b` + `spec/prompts/format-v1.md`) runs after whichever
+  engine answers, in place of its own refine step; optional after Flash / Flash-Lite / Groq (a failure keeps
+  the engine's text and says "Not formatted"), required after Transcribe. `--no-format` = exact words. The
+  cleanup keeps line breaks (lists). Text-only check `fmt-say-120b` (the 13 `fmt` sentences as spoken, typed):
+  12 of 13 fully right (missed: filler "woh na" kept in fmt-11), ~1 s per request; `lg-02` and `ag-03` keep
+  every word. Not yet measured on audio or on the 44 M0 clips' saved transcripts (Next 1).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-03):** `eval`: 29 offline tests, ruff clean; `desktop`: 61 core + 7 app tests, fmt and
-  clippy `-D warnings` clean; CI green on PR #10.
+- **Tests (2026-11-03, `feat/m1-format`):** `eval`: 38 offline tests, ruff clean; `desktop`: 65 core + 8 app
+  tests, fmt and clippy `-D warnings` clean; CI green on PR #10 (the branch is not pushed yet).
 - Code knowledge graph (D-010): `graphify query "..."` works (code only, rebuilt 2026-11-03).
 
 ## In progress
@@ -73,8 +77,8 @@ decided and tested in a prompt, not built.
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029). Left: smart
   formatting (D-030), step 7 (paste at the cursor), step 6 (changeable key, D-018), step 9 (latency log).
   Pop-up mic on text fields, settings page (main model + 2 fallbacks, formatting switch) are M2 (D-016, D-017).
-- Smart formatting (Next 1): plan `docs/plans/2026-11-03-m1-smart-formatting.md` written on `feat/m1-format`,
-  waiting for the owner's go-ahead; no code yet.
+- Smart formatting (Next 1): plan approved, code done on `feat/m1-format` (not pushed); waiting for the
+  owner's 13 `fmt` recordings and tomorrow's Groq token quota for the checks.
 - Benchmark `m1-engines`: Flash and Transcribe still have 19-22 clips each to run (resume command in Next 4).
 
 ## Live state
@@ -90,8 +94,11 @@ decided and tested in a prompt, not built.
 2. Every Gemini model has a slow tail (some requests 10-30 s) and they slow down together; Groq last caps the
    wait. A request that loses keeps running in the background (at most 10 s) and still uses its model's daily
    quota. Bench cost counts only the answer used. The "free requests used up" notice has not been seen live.
-3. No smart formatting yet: lists, fillers ("matlab", "woh na"), take-backs and South Asian numbers come out
-   as spoken (D-030 decided; Next 1).
+3. Smart formatting is limited by Groq's free tokens, not requests: each format call is ~1,230 prompt + ~75
+   output tokens, and `gpt-oss-120b` (and 20b) allow 8K tokens/min and 200K/day (console.groq.com/docs/
+   rate-limits, 2026-11-03): about 6 formatted dictations a minute and ~160 a day. Past that the text comes out
+   unformatted (after Transcribe, Flash answers instead). Options if it bites: a shorter prompt, 20b as a
+   second formatter (its own quota), or Groq's paid tier. Benchmarks spend the same quota.
 4. Names fail on Groq Whisper; the word list fixes sound-alikes ("Jaminai" → Gemini, "Codec" → Codex) but not
    words run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM).
 5. Groq Whisper sometimes translates instead of transcribing (`mx-04`, `nm-06`); worse with too little silence
@@ -112,23 +119,25 @@ decided and tested in a prompt, not built.
 
 ## Next
 
-1. **Agent: smart formatting (D-030)**, branch `feat/m1-format` (in this checkout, not a worktree).
-   - Plan first in `docs/plans/` and get the owner's go-ahead before code (it changes every output).
-   - Test sentences: add a new category to `spec/fixtures/sentences.json` (e.g. `fmt-01`...) with the expected
-     formatted text: grocery list, to-do list, rules, ordered steps (expect "1."), a non-list with
-     "pehle ... phir", two items only (stays a sentence), take-back ("kal paanch baje ... nahi nahi chhe
-     baje"), fillers ("matlab ... woh na"), lakh amounts and "dhai baje". The owner records them
-     (`cd eval; python -m sonic_eval record --only <ids>`): ask him and wait.
-   - A format score in `eval` (`scoring.py`): lines and list markers right, take-back applied, numbers as
-     digits; offline tests.
-   - Rules in the refine prompt (a new versioned prompt in `spec/prompts/`; the tested start is
-     `docs/research/format-test/format-draft.md`, results in `results-2026-11-03.txt`). A refine step on Groq
-     `gpt-oss-120b` after every chain engine in `spec/providers.json` (Transcribe already has one on 20b;
-     add it to Flash, Flash-Lite and Groq Whisper), so the text looks the same whichever engine answers. Keep
-     the D-019 local cleanup after it.
-   - Off switch (exact words): `--no-format` now; the settings page comes in M2.
-   - Check: benchmark `gpt-oss-20b` vs `120b` on the new sentences and on the 44 M0 clips (no accuracy loss),
-     record it in DECISIONS / STATUS, then a PR with What / Why / How verified / Risk.
+1. **Smart formatting (D-030): finish the check**, branch `feat/m1-format` (code done; plan
+   `docs/plans/2026-11-03-m1-smart-formatting.md`, section 6).
+   - **Owner:** record the 13 `fmt` clips: `cd eval; python -m sonic_eval record` (only the new ones are
+     missing; say each line as shown, take-backs and fillers included).
+   - **Agent, text only (Groq quota, no Gemini):** the format step on saved transcripts, 120b first (`--rpm 6`
+     keeps under 8K tokens/min; each run ~85-90K tokens of the 200K/day):
+     `python -m sonic_eval reformat --from m1-engines --run fmt-120b --model openai/gpt-oss-120b --rpm 6
+     --engines gemini-3.5-transcribe+gptoss20b gemini-3.5-flash gemini-3.5-flash-lite`, then
+     `--from m0 --run fmt-120b ... --engines groq-whisper-hint`. Pass: accuracy / English kept within 0.5
+     points of the "Before" lines on the clips that did not become lists (`lg-02`, `ag-03` are spoken lists:
+     their M0 text is a sentence). 20b the same way only if 120b fails.
+   - **Agent, audio (after the recordings):** `python -m sonic_eval bench --run m1-format --engines
+     gemini-3.5-flash-lite groq-whisper-hint --formats opus16 --repeats 1 --only format --format-model
+     openai/gpt-oss-120b` (Flash-Lite + Groq only, so Transcribe / Flash quota stays for Next 4). Pass: Layout
+     ≥ 90%.
+   - Then: a decision entry (model, prompt, the token limit in known gap 3), the app golden check on the 13
+     clips (copy `spec/fixtures/audio/fmt-*.wav` to a folder, `sonicscript --bench <folder> --out
+     ../eval/results/m1-format-app/results.jsonl`, `rescore`), the owner's live try, PR (What / Why / How
+     verified / Risk).
 2. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
@@ -152,7 +161,7 @@ decided and tested in a prompt, not built.
   Mic check: `... -p sonicscript -- --record 5`.
 - Engines: without `--engine` the chain runs (D-029); `--engine <id>` runs one engine alone (ids:
   `... -p sonicscript -- --models`). The app reads keys from the environment / Windows user environment only,
-  not `eval/.env`.
+  not `eval/.env`. The format step runs after any engine; `--no-format` turns it off (exact words).
 - Files: `cd desktop && cargo run -q --release -p sonicscript -- --file <wav>...` (prints the text, so test
   recordings only).
 - App benchmark (golden check): `cd desktop && cargo run -q --release -p sonicscript -- --bench
@@ -160,11 +169,14 @@ decided and tested in a prompt, not built.
   `cd eval && python -m sonic_eval rescore --run <run>`. The chain run spends Gemini's daily free requests.
 - Try the cleanup / voice gate: `cd desktop && cargo run -q --example clean -- [words.txt]` (stdin lines),
   `cargo run -q --example gate -- <16 kHz mono .wav files>`.
-- Formatting test (text only): `cd eval && python ../docs/research/format-test/format_test.py
-  openai/gpt-oss-20b openai/gpt-oss-120b`.
+- Formatting, text only: `cd eval && python -m sonic_eval reformat --from <run> --run <new> --model
+  openai/gpt-oss-120b --rpm 6 [--engines ...]` (formats a run's saved transcripts and scores them; Groq
+  tokens only). Audio: `bench ... --only format --format-model openai/gpt-oss-120b` (engine ids get
+  `+fmt-120b`; the "layout" column is the format score). The older research script is
+  `docs/research/format-test/format_test.py`.
 - Catalog: `cd eval && python -m sonic_eval catalog --runs m1-engines m0 --app-runs m1-cli-groq-whisper-hint
   m1-cli-gemini-3.5-flash-lite m1-cli-openai-4o-mini-transcribe_gptoss20b m1-cli-openai-4o-transcribe_gptoss20b`
   writes `spec/models.json` (rebuild the app afterwards: it embeds the file).
-- Tests: `cd eval && python -m ruff check . && python -m pytest -q` (29 tests) and
+- Tests: `cd eval && python -m ruff check . && python -m pytest -q` (38 tests) and
   `cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`.
 - Code map: `graphify query "<question>"`; after code changes `graphify update .` (see CLAUDE.md).
