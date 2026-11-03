@@ -73,6 +73,8 @@ decided and tested in a prompt, not built.
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029). Left: smart
   formatting (D-030), step 7 (paste at the cursor), step 6 (changeable key, D-018), step 9 (latency log).
   Pop-up mic on text fields, settings page (main model + 2 fallbacks, formatting switch) are M2 (D-016, D-017).
+- Smart formatting (Next 1): plan `docs/plans/2026-11-03-m1-smart-formatting.md` written on `feat/m1-format`,
+  waiting for the owner's go-ahead; no code yet.
 - Benchmark `m1-engines`: Flash and Transcribe still have 19-22 clips each to run (resume command in Next 4).
 
 ## Live state
