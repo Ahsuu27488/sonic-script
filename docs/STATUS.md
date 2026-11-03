@@ -4,15 +4,16 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-hotkey` (step 5, PR open, stacked on
-`feat/m1-bench` = step 4, PR #6, open); steps 1-3 merged (PR #3, #4, #5). **Merge PR #6, then the step 5 PR,
-before step 6.**
-**In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1 (Windows dictation app in Rust): steps
-1-5 are built (text cleanup, voice gate, Opus + Groq + pipeline, `--bench` at M0 accuracy, dictation key +
-recording); step 5's key and mic still need the owner's live test at the PC; next is step 6, changeable key.
+**Last updated:** 2026-11-03 · **Code at:** branch `feat/m1-engines` (PR open), stacked on `feat/m1-hotkey`
+(step 5, PR #7) on `feat/m1-bench` (step 4, PR #6); steps 1-3 merged (PR #3, #4, #5). **Merge #6, #7, then this
+PR, in that order.**
+**In one line:** M1 (Windows dictation app in Rust): the key, mic and pipeline work live (0.2 s key-up → text),
+but Groq Whisper is weak on natural Urdu / Hindi, so quality now comes first (D-025): 6 engines benchmarked,
+Gemini is the most accurate (~97% vs Groq 89%), and a model catalog (free / paid, limits, results) is in
+`spec/models.json` and `sonicscript --models`. The default is still Groq until the owner picks.
 
-**Start here (new session):** check PR #6 and the step 5 PR are merged and `main` is pulled; read
-`docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top), then decisions D-011 to D-024. One plan
+**Start here (new session):** check PRs #6, #7 and this one are merged and `main` is pulled; read
+`docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top), then decisions D-011 to D-027. One plan
 step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Checks: see "How to run and check".
 
 ## What works (verified)
@@ -64,12 +65,30 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 - Code knowledge graph (D-010): `graphify query "..."` works; graphify 0.9.101 reinstalled and the graph
   rebuilt 2026-11-03 (code only).
 
+- Engines (D-026) and catalog (D-027), 2026-11-03, 44 M0 clips, opus16, scored by `eval` (speech clips):
+  - `gemini-3.5-transcribe+gptoss20b` (Gemini app's model + Roman cleanup on Groq): 97.9%, typical 2.5 s,
+    slowest 5% 3.9 s, on 22 clips only (free limit 25 requests/day reached).
+  - `gemini-3.5-flash`: 97.7%, 2.0 s / 7.5 s, on 25 clips only (free limit 20/day).
+  - `gemini-3.5-flash-lite`: 97.0%, 1.6 s / 9.1 s, 44 clips; in the app 96.6%, 1.8 s / 6.3 s, 2 of 44 hit the
+    10 s timeout (Google's slow tail).
+  - OpenAI (paid) `gpt-4o-mini-transcribe` / `gpt-4o-transcribe` + Roman cleanup: 94.7% / 93.8%, ~1.5 s / 2.6 s;
+    in the app 92.8% / 93.8%. Both write text on silence. About $0.06 spent in all.
+  - `groq-whisper-hint` (default): 89.2%; in the app 89.3%, 0.3 s / 0.5 s.
+  - `gemini-3.8-flash`: dropped, every free-tier request timed out or got 503.
+  - Free-tier limits for the owner's key from Google's own 429s: Flash 20/day, Transcribe 25/day (reset at
+    midnight Pacific = 1 PM Pakistan). Flash-Lite: not hit at 150+/day (third-party: 500/day).
+- `eval`: 29 offline tests pass; `desktop`: 49 core + 6 app tests pass, fmt and clippy clean (2026-11-03).
+
 ## In progress
 
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
   text fields, settings page and fallback model are M2 (D-016, D-017). Steps 0-3 merged (PR #3, #4, #5);
-  step 4 on `feat/m1-bench` (PR #6); step 5 on `feat/m1-hotkey` (PR open, live test pending); step 6 next.
+  step 4 PR #6; step 5 PR #7 (owner tried it live: key, mic and 0.2 s latency work); engines + catalog on
+  `feat/m1-engines` (PR open). Default engine: owner's pick pending (see Next 1).
+- Benchmark `m1-engines`: Flash and Transcribe have 19-22 clips left (resume after the daily reset with the same
+  `bench --run m1-engines --engines gemini-3.5-transcribe+gptoss20b gemini-3.5-flash` command, then
+  `catalog`).
 
 ## Live state
 
@@ -90,11 +109,14 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 6. Urdu-script "میں" is always romanized "mein" (it can also be "main" = I). Mostly-Urdu output only gets a
    rough letter-by-letter draft and is flagged `needs_llm`; the LLM re-ask is not wired yet (the step 3 pipeline returns `needs_llm`; the re-ask comes with the app).
 7. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
-8. Step 5 not tried live: the PC was locked (keys go to the lock screen, no hook sees them) and no microphone
-   was connected (only TWS / Pixel 6 / WO Mic endpoints, all disconnected). The owner's checklist: `sonicscript`
-   in a console → tap, speak, tap; tap, speak, Enter (Enter must not reach the app); hold, speak, release;
-   Esc cancels; Right Ctrl + C still copies; `--record 5` prints what was said. The audio callback, hook and
-   key-up → text latency are only checked by reading the code until then.
+8. Step 5 live: tap / hold, mic (Realtek array, 48 kHz) and key-up → text 0.2 s confirmed by the owner;
+   Enter / Esc swallowing and Right Ctrl + C not reported yet. Opening the mic takes 160-690 ms, which can
+   clip the first word ("Bhuaiyaar" = "Bhai yaar"?): not fixed yet.
+11. Gemini Flash-Lite, the most accurate engine with a usable free limit, has a slow tail (some requests
+    10-20 s; 2 of 44 hit the app's 10 s timeout). As the default it needs the D-017 fallback: start Groq when
+    Gemini is slow, first answer wins. Not built yet.
+12. Free-tier Gemini requests may be used by Google to improve its products (Gemini API terms); the catalog
+    says so. OpenAI and Groq-only engines do not have this note (not checked).
 9. Building `desktop/` needs CMake on PATH (for libopus). VS Build Tools ships one at
    `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin`;
    add that folder to the user PATH or `winget install Kitware.CMake`.
@@ -102,10 +124,12 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 
 ## Next
 
-1. Agent: M1 step 6, changeable key (`config.toml`, `--set-key`, mouse side buttons, D-018) → step 7 inject
-   (paste at the cursor) → model catalog → latency log. Fix anything the owner's live test of step 5 finds first. Delegate boilerplate to Gemini CLI via Foreman if the owner has signed Gemini CLI in.
-2. Owner: live-test step 5 at the unlocked PC with a mic (known gap 8); add CMake to PATH (known gap 9);
-   review and merge PR #6, then the step 5 PR; keep or change the name "SonicScript".
+1. Owner: pick the default engine. Proposal: Gemini 3.5 Flash-Lite with the Groq fallback (known gap 11),
+   Transcribe / Flash as choices for people with a paid key. Then the agent builds the fallback race and sets
+   `default_engine`.
+2. Agent: finish the Flash / Transcribe benchmark after the daily reset; fix the mic-open delay (known gap 8);
+   then M1 step 6, changeable key → step 7 paste at the cursor → latency log.
+3. Owner: add CMake to PATH (known gap 9); merge PR #6, #7, then this PR; keep or change the name.
 
 ## How to run and check
 
@@ -116,10 +140,14 @@ step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`. Che
 - Try the voice gate: `cd desktop && cargo run -q --example gate -- <16 kHz mono .wav files>`.
 - Dictate: `cd desktop && cargo run -q --release -p sonicscript` (tap / hold Right Ctrl; the text is printed).
   Mic check: `... -p sonicscript -- --record 5`.
-- Try the whole pipeline against Groq: `cd desktop && cargo run -q --release -p sonicscript -- --file <wav>...`
+- Models: `... -p sonicscript -- --models` (catalog); any command takes `--engine <id>` (ids in the catalog).
+  The app reads keys from the environment / Windows user environment only, not `eval/.env`.
+- Try the whole pipeline: `cd desktop && cargo run -q --release -p sonicscript -- --file <wav>...`
   (needs `GROQ_API_KEY`; prints the text, so test recordings only).
 - Golden check: `cd desktop && cargo run -q --release -p sonicscript -- --bench ../spec/fixtures/audio --out
   ../eval/results/m1-bench/results.jsonl`, then `cd eval && python -m sonic_eval rescore --run m1-bench`.
 - Code map: `graphify query "<question>"`; after code changes `graphify update .` (see CLAUDE.md).
-- Tests: `cd eval && python -m ruff check . && python -m pytest -q` (26 tests) and
+- Catalog: `cd eval && python -m sonic_eval catalog --runs m1-engines m0 --app-runs m1-cli-...` writes
+  `spec/models.json` (rebuild the app afterwards: it embeds the file).
+- Tests: `cd eval && python -m ruff check . && python -m pytest -q` (29 tests) and
   `cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`.

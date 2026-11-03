@@ -13,6 +13,7 @@ PROMPTS = SPEC / "prompts"
 FIXTURES = SPEC / "fixtures"
 AUDIO_DIR = FIXTURES / "audio"
 RESULTS = REPO / "eval" / "results"
+MODELS_FILE = SPEC / "models.json"
 TOKENS_CSS = REPO / "design" / "tokens.css"
 ENV_FILE = REPO / "eval" / ".env"
 
@@ -52,7 +53,7 @@ def load_prompt(name: str, word_list: list[str] | None = None) -> str:
     return text.replace("{word_list}", words).strip()
 
 
-KEY_NAMES = ("GROQ_API_KEY", "GEMINI_API_KEY")
+KEY_NAMES = ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY")
 
 
 def load_env(path: Path = ENV_FILE) -> None:

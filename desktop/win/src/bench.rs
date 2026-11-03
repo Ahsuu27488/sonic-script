@@ -8,25 +8,23 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
-use sonicscript_core::groq::{Groq, GroqError};
+use sonicscript_core::api::ApiError;
+use sonicscript_core::client::Client;
 use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::{self, Outcome, PipelineError};
-use sonicscript_core::spec::WhisperEngine;
+use sonicscript_core::spec::Engine;
 
 use crate::wav;
 
-/// Groq bills Whisper with a 10-second minimum per request (same as `eval` `GroqWhisper.cost_usd`).
-const MIN_BILLED_S: f64 = 10.0;
-
-pub fn run(dir: &Path, out: &mut impl Write, groq: &Groq) -> Result<Summary, String> {
+pub fn run(dir: &Path, out: &mut impl Write, client: &Client) -> Result<Summary, String> {
     let files = wav_files(dir)?;
     if files.is_empty() {
         return Err(format!("no .wav files in {}", dir.display()));
     }
-    let engine = groq.engine();
-    let gap = Duration::from_secs(60) / engine.provider.rpm.max(1);
+    let engine = client.engine();
+    let gap = Duration::from_secs(60) / engine.rpm().max(1);
     let normalizer = Normalizer::new();
-    groq.warm();
+    client.warm();
     let mut done = Vec::new();
     let mut last: Option<Instant> = None;
     for (i, path) in files.iter().enumerate() {
@@ -42,13 +40,13 @@ pub fn run(dir: &Path, out: &mut impl Write, groq: &Groq) -> Result<Summary, Str
             std::thread::sleep(gap.saturating_sub(t.elapsed()));
         }
         last = Some(Instant::now());
-        let outcome = pipeline::run(&samples, groq, &normalizer);
+        let outcome = pipeline::run(&samples, client, &normalizer);
         writeln!(out, "{}", row(&id, &outcome, engine)).map_err(|e| e.to_string())?;
         eprintln!("[{}/{}] {id:<8} {}", i + 1, files.len(), status(&outcome));
         let fatal = matches!(
             &outcome.error,
-            Some(PipelineError::Groq(
-                GroqError::BadKey | GroqError::MissingKey(_)
+            Some(PipelineError::Api(
+                ApiError::BadKey(_) | ApiError::MissingKey(_)
             ))
         );
         done.push(outcome);
@@ -76,24 +74,28 @@ fn status(o: &Outcome) -> String {
         (Some(e), _) => format!("ERROR {e}"),
         (None, false) => format!("not sent ({} ms of speech)", o.speech_ms),
         (None, true) => format!(
-            "{:5.0} ms  (Whisper {:4.0} ms){}",
+            "{:5.0} ms  (speech {:4.0} ms{}){}",
             o.total_ms,
             o.stages.request,
+            if o.stages.refine > 0.0 {
+                format!(", refine {:4.0} ms", o.stages.refine)
+            } else {
+                String::new()
+            },
             if o.phantom { "  phantom" } else { "" }
         ),
     }
 }
 
 /// A row as `eval` writes it (`bench.Row`); `rescore` adds the category and the score fields.
-pub fn row(id: &str, o: &Outcome, engine: &WhisperEngine) -> Value {
+pub fn row(id: &str, o: &Outcome, engine: &Engine) -> Value {
     let s = &o.stages;
-    let billed_s = f64::from(o.sent_ms) / 1000.0;
     let at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs_f64())
         .unwrap_or_default();
     json!({
-        "engine": format!("app-{}", engine.id),
+        "engine": format!("app-{}", engine.id()),
         "fmt": "opus16",
         "sentence": id,
         "category": null,
@@ -105,6 +107,7 @@ pub fn row(id: &str, o: &Outcome, engine: &WhisperEngine) -> Value {
             "gate": round1(s.gate),
             "encode": round1(s.encode),
             "whisper": round1(s.request),
+            "refine": round1(s.refine),
             "transcribe": round1(s.transcribe),
             "clean": round1(s.clean),
         },
@@ -112,11 +115,7 @@ pub fn row(id: &str, o: &Outcome, engine: &WhisperEngine) -> Value {
         "duration_s": f64::from(o.audio_ms) / 1000.0,
         "tokens_in": 0,
         "tokens_out": 0,
-        "cost_usd": if o.sent {
-            billed_s.max(MIN_BILLED_S) / 3600.0 * engine.audio_per_hour
-        } else {
-            0.0
-        },
+        "cost_usd": cost_usd(engine, o),
         "retries": o.retries,
         "error": o.error.as_ref().map(ToString::to_string),
         "speech_ms": o.speech_ms,
@@ -125,6 +124,26 @@ pub fn row(id: &str, o: &Outcome, engine: &WhisperEngine) -> Value {
         "needs_llm": o.needs_llm,
         "at": at,
     })
+}
+
+/// What the clip cost, by the spec's prices (as `eval` `cost_usd`): per second of audio for transcription
+/// APIs (Groq bills at least 10 s), per token for Gemini, plus the refine step's tokens.
+fn cost_usd(engine: &Engine, o: &Outcome) -> f64 {
+    if !o.sent {
+        return 0.0;
+    }
+    let [tin, tout, rin, rout] = o.tokens.map(f64::from);
+    let speech = match engine {
+        Engine::Whisper(e) => {
+            let billed_s = (f64::from(o.sent_ms) / 1000.0).max(e.provider.min_billed_s);
+            billed_s / 3600.0 * e.audio_per_hour
+        }
+        Engine::Gemini(e) => (tin * e.in_per_m + tout * e.out_per_m) / 1e6,
+    };
+    let refine = engine
+        .refine()
+        .map_or(0.0, |r| (rin * r.in_per_m + rout * r.out_per_m) / 1e6);
+    speech + refine
 }
 
 fn round1(ms: f64) -> f64 {
@@ -179,7 +198,7 @@ impl std::fmt::Display for Summary {
         )?;
         write!(
             f,
-            "clip -> text p50 {:.0} ms / p95 {:.0} ms; Whisper request p50 {:.0} ms / p95 {:.0} ms",
+            "clip -> text p50 {:.0} ms / p95 {:.0} ms; speech request p50 {:.0} ms / p95 {:.0} ms",
             self.total_p50, self.total_p95, self.request_p50, self.request_p95
         )
     }
@@ -233,7 +252,7 @@ mod tests {
 
     #[test]
     fn rows_have_the_eval_shape_and_bill_ten_seconds_minimum() {
-        let e = spec::default_engine();
+        let e = spec::engine("groq-whisper-hint").unwrap();
         let r = row("mx-01", &outcome(true, 340.0, None), &e);
         assert_eq!(r["engine"], "app-groq-whisper-hint");
         assert_eq!(r["sentence"], "mx-01");
@@ -243,7 +262,8 @@ mod tests {
         );
         assert_eq!(r["error"], Value::Null);
         let cost = r["cost_usd"].as_f64().unwrap();
-        assert!((cost - 10.0 / 3600.0 * e.audio_per_hour).abs() < 1e-12);
+        let Engine::Whisper(w) = &e else { panic!() };
+        assert!((cost - 10.0 / 3600.0 * w.audio_per_hour).abs() < 1e-12);
 
         let quiet = row("si-01", &outcome(false, 2.0, None), &e);
         assert_eq!(
@@ -260,11 +280,35 @@ mod tests {
             outcome(true, 300.0, None),
             outcome(true, 500.0, None),
             outcome(false, 1.0, None),
-            outcome(true, 9000.0, Some(PipelineError::Groq(GroqError::Timeout))),
+            outcome(true, 9000.0, Some(PipelineError::Api(ApiError::Timeout))),
         ]);
         assert_eq!((s.clips, s.sent, s.errors), (4, 3, 1));
         assert_eq!(s.total_p50, 400.0);
         assert_eq!(s.request_p50, 200.0);
         assert_eq!(s.kb, 8.0);
+    }
+}
+
+#[cfg(test)]
+mod cost_tests {
+    use super::*;
+    use sonicscript_core::spec;
+
+    #[test]
+    fn gemini_and_refine_are_priced_per_token() {
+        let e = spec::engine("gemini-3.5-transcribe+gptoss20b").unwrap();
+        let o = Outcome {
+            sent: true,
+            sent_ms: 4000,
+            tokens: [100, 20, 300, 10],
+            ..Outcome::default()
+        };
+        let Engine::Gemini(g) = &e else { panic!() };
+        let r = g.refine.as_ref().unwrap();
+        let want =
+            (100.0 * g.in_per_m + 20.0 * g.out_per_m + 300.0 * r.in_per_m + 10.0 * r.out_per_m)
+                / 1e6;
+        assert!((cost_usd(&e, &o) - want).abs() < 1e-15);
+        assert!(want > 0.0);
     }
 }

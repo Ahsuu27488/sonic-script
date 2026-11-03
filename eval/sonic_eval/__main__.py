@@ -6,18 +6,20 @@
   python -m sonic_eval bench --preset compression|engines [--run NAME] [--engines ...] [--formats ...]
   python -m sonic_eval report [--run NAME]
   python -m sonic_eval rescore [--run NAME]   re-score saved outputs after a fixture fix (no API calls)
+  python -m sonic_eval catalog [--runs ...] [--app-runs ...]   write spec/models.json (the model page)
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
 
-from . import audio, bench, record, report
-from .config import AUDIO_DIR, RESULTS, load_env, load_providers, load_sentences
+from . import audio, bench, catalog, record, report
+from .config import AUDIO_DIR, MODELS_FILE, RESULTS, load_env, load_providers, load_sentences
 from .engines import build_engines, warm_up
 from .ratelimit import RateLimiter
 
@@ -51,6 +53,9 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("report", help="build the HTML report for a run")
     rp.add_argument("--run", default="m0")
     rp.add_argument("--audio-dir", type=Path, default=AUDIO_DIR)
+    ct = sub.add_parser("catalog", help="write spec/models.json (the model page) from benchmark runs")
+    ct.add_argument("--runs", nargs="+", default=["m1-engines", "m0"], help="eval runs, best first")
+    ct.add_argument("--app-runs", nargs="*", default=[], help="runs of `sonicscript --bench` (app-<id> rows)")
     rs = sub.add_parser("rescore", help="re-score a run against the current sentences.json, then rebuild the report")
     rs.add_argument("--run", default="m0")
     rs.add_argument("--audio-dir", type=Path, default=AUDIO_DIR)
@@ -85,6 +90,16 @@ def main(argv: list[str] | None = None) -> int:
         bench.print_summary(bench.summarise(bench.read_rows(results)))
         out = report.build(run_dir, args.audio_dir)
         print(f"\nReport: {out}")
+        return 0
+
+    if args.cmd == "catalog":
+        cat = catalog.build(load_providers(), RESULTS, args.runs, args.app_runs, total=len(load_sentences()))
+        MODELS_FILE.write_text(json.dumps(cat, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        for m in cat["models"]:
+            r = m["results"] or {}
+            print(f"{m['tier']:<5} {m['id']:<38} acc {r.get('accuracy', 0):.1%}  p50 {r.get('p50_ms', 0):>5} ms  "
+                  f"p95 {r.get('p95_ms', 0):>6} ms  clips {r.get('clips', 0)}")
+        print(f"\nWrote {MODELS_FILE}")
         return 0
 
     if args.cmd == "rescore":

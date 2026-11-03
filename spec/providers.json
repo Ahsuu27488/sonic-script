@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "Engines the M0 benchmark (and later the apps) can use. Model ids live here, not in code. Prices in USD, checked 2026-10-26. rpm = requests per minute the benchmark allows itself (keep under the free tier). gemini-2.5-flash-lite was dropped on 2026-10-27: Google no longer offers it to new users. llama-3.1-8b-instant was replaced by openai/gpt-oss-120b on 2026-10-27: Groq no longer offers Llama 3.1 8B on standard keys. concurrency = requests the benchmark keeps in flight per provider (start times still follow rpm). default_engine = what the apps use out of the box (D-011).",
+  "about": "Engines the M0 benchmark (and later the apps) can use. Model ids live here, not in code. Prices in USD, checked 2026-10-26. rpm = requests per minute the benchmark allows itself (keep under the free tier). gemini-2.5-flash-lite was dropped on 2026-10-27: Google no longer offers it to new users. llama-3.1-8b-instant was replaced by openai/gpt-oss-120b on 2026-10-27: Groq no longer offers Llama 3.1 8B on standard keys. concurrency = requests the benchmark keeps in flight per provider (start times still follow rpm). default_engine = what the apps use out of the box (D-011). 2026-11-03: OpenAI added (gpt-4o-transcribe, paid, no free tier: prices from OpenAI's launch, ~$0.006 / $0.003 per minute); gemini-3.5-transcribe (preview, the Gemini app's dictation model; price as reported by third parties, $2 / $12 per 1M tokens) and gemini-3.5-flash (price not checked, so cost shows 0). gemini-3.8-flash was tried and dropped the same day: every request on the free tier timed out or got 503 \"high demand\". An engine's own rpm overrides the provider's. refine = a second, text-only step on another provider (prompt + chat model) after any engine. min_billed_s = the provider bills at least this many seconds per request (Groq: 10). catalog = what the model page shows (label, free / paid tier, free-tier limits with their source, notes); `python -m sonic_eval catalog` adds the benchmark results and writes spec/models.json.",
   "default_engine": "groq-whisper-hint",
   "providers": {
     "gemini": {
@@ -13,6 +13,13 @@
       "base_url": "https://api.groq.com/openai/v1",
       "key_env": "GROQ_API_KEY",
       "rpm": 18,
+      "concurrency": 2,
+      "min_billed_s": 10
+    },
+    "openai": {
+      "base_url": "https://api.openai.com/v1",
+      "key_env": "OPENAI_API_KEY",
+      "rpm": 30,
       "concurrency": 2
     }
   },
@@ -32,6 +39,17 @@
       "price": {
         "audio_in_per_m": 0.3,
         "out_per_m": 2.5
+      },
+      "catalog": {
+        "label": "Gemini 3.5 Flash-Lite",
+        "tier": "free",
+        "limits": {
+          "requests_per_minute": 10,
+          "requests_per_day": 500,
+          "text": "Gemini free tier: about 10 requests/min, 500/day (third-party guide; Google shows the real numbers only in AI Studio). Not hit with 150+ requests in a day.",
+          "source": "scriptbyai.com/gemini-api-free-tier-limits, 2026-11-03"
+        },
+        "notes": "Near the top for accuracy with a usable daily limit. Some requests take 10-20 s (Google's queue). Google may use free-tier requests to improve its products, and people may review them (Gemini API terms); the paid tier does not."
       }
     },
     {
@@ -128,6 +146,18 @@
       "hint": "whisper-hint-v1.txt",
       "price": {
         "audio_per_hour": 0.04
+      },
+      "catalog": {
+        "label": "Groq Whisper (fast)",
+        "tier": "free",
+        "limits": {
+          "requests_per_minute": 20,
+          "requests_per_day": 2000,
+          "audio_seconds_per_day": 28800,
+          "text": "Groq free tier: 20 requests/min, 2,000/day, 7,200 audio seconds/hour, 28,800 audio seconds/day (8 hours of speech)",
+          "source": "console.groq.com/docs/rate-limits, 2026-11-03"
+        },
+        "notes": "Fastest (~0.3 s) but weakest on natural Urdu / Hindi; writes text on silence (the voice gate stops that)."
       }
     },
     {
@@ -157,6 +187,127 @@
         "audio_per_hour": 0.04,
         "in_per_m": 0.075,
         "out_per_m": 0.3
+      }
+    },
+    {
+      "id": "gemini-3.5-transcribe+gptoss20b",
+      "kind": "gemini-transcribe",
+      "provider": "gemini",
+      "model": "gemini-3.5-transcribe",
+      "rpm": 3,
+      "refine": {
+        "provider": "groq",
+        "model": "openai/gpt-oss-20b",
+        "prompt": "romanize-v1.md",
+        "extra": {
+          "reasoning_effort": "low"
+        },
+        "price": {
+          "in_per_m": 0.075,
+          "out_per_m": 0.3
+        }
+      },
+      "price": {
+        "audio_in_per_m": 2.0,
+        "out_per_m": 12.0
+      },
+      "catalog": {
+        "label": "Gemini 3.5 Transcribe + Roman cleanup",
+        "tier": "free",
+        "limits": {
+          "requests_per_minute": 3,
+          "requests_per_day": 25,
+          "text": "Gemini free tier: 25 requests/day (Google's own quota error, 2026-11-03), about 3-4/min (429 after 4 in a minute). Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+          "source": "HTTP 429 quota GenerateRequestsPerDayPerProjectPerModel-FreeTier = 25"
+        },
+        "notes": "The Gemini app's dictation model (preview). Hears Urdu / Hindi best but writes it in its own script, so a second step romanizes it; needs a Gemini and a Groq key. Paid: about $2 / $12 per 1M tokens (third-party reports). Google may use free-tier requests to improve its products, and people may review them (Gemini API terms); the paid tier does not."
+      }
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "kind": "gemini-audio",
+      "provider": "gemini",
+      "model": "gemini-3.5-flash",
+      "prompt": "transcribe-roman-v1.md",
+      "generation_config": {
+        "temperature": 0,
+        "thinkingConfig": {
+          "thinkingLevel": "minimal"
+        }
+      },
+      "catalog": {
+        "label": "Gemini 3.5 Flash",
+        "tier": "free",
+        "limits": {
+          "requests_per_day": 20,
+          "text": "Gemini free tier: 20 requests/day per project (Google's own quota error, 2026-11-03).",
+          "source": "HTTP 429 quota GenerateRequestsPerDayPerProjectPerModel-FreeTier = 20"
+        },
+        "notes": "Top accuracy, but 20 dictations a day on the free tier. Paid price not checked. Google may use free-tier requests to improve its products, and people may review them (Gemini API terms); the paid tier does not."
+      }
+    },
+    {
+      "id": "openai-4o-transcribe+gptoss20b",
+      "kind": "whisper-only",
+      "provider": "openai",
+      "whisper_model": "gpt-4o-transcribe",
+      "language": null,
+      "hint": "whisper-hint-v1.txt",
+      "price": {
+        "audio_per_hour": 0.36
+      },
+      "refine": {
+        "provider": "groq",
+        "model": "openai/gpt-oss-20b",
+        "prompt": "romanize-v1.md",
+        "extra": {
+          "reasoning_effort": "low"
+        },
+        "price": {
+          "in_per_m": 0.075,
+          "out_per_m": 0.3
+        }
+      },
+      "catalog": {
+        "label": "OpenAI GPT-4o Transcribe + Roman cleanup",
+        "tier": "paid",
+        "limits": {
+          "text": "No free tier: about $0.006 per minute of audio. Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+          "source": "OpenAI pricing at launch; check before use"
+        },
+        "notes": "Writes Urdu / Hindi script, so it needs the Roman cleanup; writes text on silence."
+      }
+    },
+    {
+      "id": "openai-4o-mini-transcribe+gptoss20b",
+      "kind": "whisper-only",
+      "provider": "openai",
+      "whisper_model": "gpt-4o-mini-transcribe",
+      "language": null,
+      "hint": "whisper-hint-v1.txt",
+      "price": {
+        "audio_per_hour": 0.18
+      },
+      "refine": {
+        "provider": "groq",
+        "model": "openai/gpt-oss-20b",
+        "prompt": "romanize-v1.md",
+        "extra": {
+          "reasoning_effort": "low"
+        },
+        "price": {
+          "in_per_m": 0.075,
+          "out_per_m": 0.3
+        }
+      },
+      "catalog": {
+        "label": "OpenAI GPT-4o mini Transcribe + Roman cleanup",
+        "tier": "paid",
+        "limits": {
+          "text": "No free tier: about $0.003 per minute of audio. Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+          "source": "OpenAI pricing at launch; check before use"
+        },
+        "notes": "Half the price of GPT-4o Transcribe and as accurate here; writes text on silence."
       }
     }
   ],

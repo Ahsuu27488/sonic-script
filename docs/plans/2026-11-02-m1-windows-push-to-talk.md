@@ -17,7 +17,10 @@
   in `core/keys.rs` (a 300-400 ms press is a tap, D-023); `WH_KEYBOARD_LL` hook in `win/hotkey.rs`; cpal capture,
   own resampler and Opus encoded while recording (D-024: the Ogg file is cut from the packet stream, 89.3% on
   the M0 clips). Text is printed, not pasted (step 7). Added `--record <s>` as a mic check.
-- Next: the owner's live test of step 5, then step 6 (changeable key).
+- Owner's live test of step 5 (2026-11-03): key, mic and 0.2 s key-up → text work, but Groq Whisper is weak on
+  natural Urdu / Hindi. Quality first now (D-025): engines + catalog on `feat/m1-engines` (D-026, D-027; plan step
+  8, the model catalog, done early): Gemini ~97% vs Groq 89%. `--engine` and `--models` added.
+- Next: the owner picks the default (Flash-Lite + Groq fallback proposed), the fallback race, then step 6.
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).

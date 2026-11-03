@@ -209,3 +209,37 @@ otherwise (known gap from step 3). Cutting the packet stream instead of re-encod
 runs at the mix rate (usually 48 kHz), so resampling is needed; a small resampler in `core` is tested on
 48 / 44.1 / 32 kHz and keeps Android's path the same. *Where:* `desktop/core/src/encode.rs` (`Stream`),
 `resample.rs`, `pipeline.rs` (`run_streamed`), `desktop/win/src/audio.rs`, run `eval/results/m1-stream` (local).
+
+**D-025 Quality first: up to about 2 s after the key-up is fine.** (2026-11-03)
+The owner's live test of step 5 got the text 0.2 s after the key-up, but Groq Whisper mangled natural Urdu /
+Hindi ("terni" for "tareeke se"). The owner's rule now: the text should be right; 1-2 s of "loading" after
+stopping is normal (Claude, ChatGPT and the Gemini app all take that long) and nobody minds it. This replaces
+the p95 <= 1.2 s target behind D-011; the default engine is chosen by accuracy among engines whose typical wait
+is about 2 s or less, with a fallback for slow requests (D-017). *Why:* the owner's words; the big apps run a
+careful pass over the whole clip (an LLM-based recognizer, often followed by a cleanup model), which is what
+makes their text read "refined". *Where:* `spec/providers.json` `default_engine`, `blueprint.md` §2.
+
+**D-026 More engines: OpenAI transcription, Gemini Flash and the Gemini app's transcribe model, each with an
+optional Roman `refine` step; Gemini 3.8 Flash dropped.** (2026-11-03)
+`spec/providers.json` gains the `openai` provider (paid, no free tier), `gemini-3.5-flash`,
+`gemini-3.5-transcribe` (kind `gemini-transcribe`: audio only, the text comes back in `audioTranscription`) and
+a `refine` field: a text-only chat step on another provider (Groq `gpt-oss-20b` with `romanize-v1.md`) after any
+engine. The transcribe model and both OpenAI models hear Urdu / Hindi well but write it in Urdu or Devanagari
+script even with the Roman hint, so they always get the refine step. Both `eval` (`GeminiTranscribe`,
+`Refiner`) and the app (`desktop/core` `api.rs`, `gemini.rs`, `client.rs`; `sonicscript --engine <id>`) run
+every kind. `gemini-3.8-flash` was tried and dropped the same day: on the free tier every request timed out or
+got 503 "high demand". *Why:* the owner asked for the models behind the big dictation apps to be compared on
+his recordings; one shared spec keeps `eval` and the app measuring the same thing. *Where:* `spec/providers.json`,
+`eval/sonic_eval/engines.py`, `desktop/core/src/{api,gemini,client,spec}.rs`, run `eval/results/m1-engines`.
+
+**D-027 The model page lists every model as free or paid, with its free-tier limits and our results.**
+(2026-11-03) `spec/models.json` (written by `python -m sonic_eval catalog`, read by `sonicscript --models` now
+and the settings page in M2) holds per model: label, tier, the keys it needs, free-tier limits with their source,
+notes (including that Google may use free-tier Gemini requests to improve its products), and the benchmark
+results (accuracy, English kept, Roman only, silence, typical / slowest-5% wait, errors, paid price per hour of
+speech), plus the app's own run as a check. Free-tier limits come from the provider's docs (Groq) or Google's own
+quota errors for the owner's key (Gemini Flash 20 requests/day, Transcribe 25/day, 2026-11-03), never guessed.
+*Why:* the owner asked for a model-selection page with tiers, limits and results; the daily limits decide
+which free models can be a default at all. *Where:* `spec/providers.json` `catalog`, `eval/sonic_eval/catalog.py`,
+`spec/models.json`, `desktop/win/src/models.rs`.
+

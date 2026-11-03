@@ -40,7 +40,7 @@ Spoken Urdu and Hindi are close to the same language, so one tool serves both **
 
 | Metric | Target | Notes |
 |---|---|---|
-| Latency, key release → text at cursor | **p50 ≤ 700 ms, p95 ≤ 1.2 s** from Pakistan | v0 said 500 ms p95. That's a stretch goal; we measure first (Milestone 0). |
+| Latency, key release → text at cursor | **typical ≤ ~2 s**, with a fallback for slow requests (D-025) | Was p50 ≤ 700 ms, p95 ≤ 1.2 s; the owner put quality first on 2026-11-03: 1-2 s after stopping is fine. |
 | Script correctness | ≥ 99% of outputs fully in Latin script when mode = Roman | Checked automatically: no Arabic/Devanagari code points. |
 | English words kept English | ≥ 95% of English terms spelled in English | On the test set (§9). |
 | Cost | $0 on free tiers. ≈ $0.15–0.20 per 1,000 dictations if paid. | See §4.3. |

@@ -6,12 +6,20 @@ import httpx
 import pytest
 
 from sonic_eval.audio import EncodedAudio
-from sonic_eval.engines import GeminiAudio, GroqWhisper, GroqWhisperLLM, clean_output
+from sonic_eval.engines import (
+    EngineResult,
+    GeminiAudio,
+    GeminiTranscribe,
+    GroqWhisper,
+    GroqWhisperLLM,
+    Refiner,
+    clean_output,
+)
 from sonic_eval.ratelimit import RateLimiter
 
 CLIP = EncodedAudio(b"OggS-fake", "audio/ogg", "ogg", "opus16", 3.2)
 GEMINI = {"base_url": "https://g.test/v1beta", "key_env": "GEMINI_API_KEY", "rpm": 6000}
-GROQ = {"base_url": "https://q.test/openai/v1", "key_env": "GROQ_API_KEY", "rpm": 6000}
+GROQ = {"base_url": "https://q.test/openai/v1", "key_env": "GROQ_API_KEY", "rpm": 6000, "min_billed_s": 10}
 
 
 @pytest.fixture(autouse=True)
@@ -134,3 +142,43 @@ def test_rate_limiter_spaces_requests():
 def test_no_speech_marker_becomes_empty_text():
     assert clean_output("[no speech]") == ""
     assert clean_output(" [No speech]. ") == ""
+
+
+def test_gemini_transcribe_is_refined_on_another_provider():
+    calls = []
+
+    def handler(req: httpx.Request):
+        calls.append(req.url.host)
+        if req.url.host == "g.test":
+            body = json.loads(req.content)
+            assert len(body["contents"][0]["parts"]) == 1, "audio only, no instruction"
+            return httpx.Response(200, json={
+                "candidates": [{"content": {"parts": [{"audioTranscription": {"text": "पीआर मर्ज कर दो"}}]}}],
+                "usageMetadata": {"promptTokenCount": 87, "candidatesTokenCount": 14}})
+        body = json.loads(req.content)
+        assert req.headers["authorization"] == "Bearer q-key"
+        assert body["messages"][1]["content"] == "पीआर मर्ज कर दो"
+        return httpx.Response(200, json={"choices": [{"message": {"content": "PR merge kar do."}}],
+                                         "usage": {"prompt_tokens": 300, "completion_tokens": 10}})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    refine = {"provider": "groq", "model": "openai/gpt-oss-20b", "prompt": "romanize-v1.md",
+              "price": {"in_per_m": 0.1, "out_per_m": 0.3}}
+    spec = {"id": "t", "kind": "gemini-transcribe", "provider": "gemini", "model": "gemini-3.5-transcribe",
+            "price": {"audio_in_per_m": 2.0, "out_per_m": 12.0}}
+    e = GeminiTranscribe(spec, GEMINI, client, limiter(), refiner=Refiner(refine, GROQ, client, limiter()))
+    r = e.transcribe(CLIP)
+    assert r.error is None, r.error
+    assert r.text == "PR merge kar do."
+    assert r.raw_asr == "पीआर मर्ज कर दो"
+    assert calls == ["g.test", "q.test"]
+    assert set(r.stages_ms) == {"transcribe", "refine"}
+    assert e.cost_usd(r, 3.2) == pytest.approx((87 * 2.0 + 14 * 12.0 + 300 * 0.1 + 10 * 0.3) / 1e6)
+
+
+def test_openai_transcription_has_no_minimum_billing():
+    spec = {"id": "o", "kind": "whisper-only", "provider": "openai", "whisper_model": "gpt-4o-transcribe",
+            "language": None, "price": {"audio_per_hour": 0.36}}
+    openai = {"base_url": "https://o.test/v1", "key_env": "GROQ_API_KEY", "rpm": 6000}
+    e = GroqWhisper(spec, openai, httpx.Client(), limiter())
+    assert e.cost_usd(EngineResult(), 3.0) == pytest.approx(3.0 / 3600 * 0.36)
