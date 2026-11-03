@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "generated": "2026-11-03",
+  "runs": [
+    "m1-engines",
+    "m0"
+  ],
+  "app_runs": [
+    "m1-cli-groq-whisper-hint",
+    "m1-cli-gemini-3.5-flash-lite",
+    "m1-cli-openai-4o-mini-transcribe_gptoss20b",
+    "m1-cli-openai-4o-transcribe_gptoss20b"
+  ],
+  "about": "Written by `python -m sonic_eval catalog`; do not edit by hand. Accuracy, English kept and Roman-only are over speech clips; silence counts clips with no speech that gave no text (before the app's voice gate); latency is clip in -> text out; usd_per_hour is per hour of speech at paid prices (0 where the price is not in the spec).",
+  "models": [
+    {
+      "id": "gemini-3.5-transcribe+gptoss20b",
+      "label": "Gemini 3.5 Transcribe + Roman cleanup",
+      "provider": "gemini",
+      "tier": "free",
+      "recommended": false,
+      "keys": [
+        "GEMINI_API_KEY",
+        "GROQ_API_KEY"
+      ],
+      "limits": {
+        "requests_per_minute": 3,
+        "requests_per_day": 25,
+        "text": "Gemini free tier: 25 requests/day (Google's own quota error, 2026-11-03), about 3-4/min (429 after 4 in a minute). Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+        "source": "HTTP 429 quota GenerateRequestsPerDayPerProjectPerModel-FreeTier = 25"
+      },
+      "notes": "The Gemini app's dictation model (preview). Hears Urdu / Hindi best but writes it in its own script, so a second step romanizes it; needs a Gemini and a Groq key. Paid: about $2 / $12 per 1M tokens (third-party reports). Google may use free-tier requests to improve its products, and people may review them (Gemini API terms); the paid tier does not.",
+      "results": {
+        "clips": 22,
+        "of": 44,
+        "errors": 3,
+        "accuracy": 0.9785,
+        "english_kept": 0.9783,
+        "roman_only": 1.0,
+        "silence_ok": null,
+        "p50_ms": 2530,
+        "p95_ms": 3885,
+        "usd_per_hour": 0.413,
+        "runs": [
+          "m1-engines"
+        ],
+        "measured": "2026-11-03"
+      }
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "label": "Gemini 3.5 Flash",
+      "provider": "gemini",
+      "tier": "free",
+      "recommended": false,
+      "keys": [
+        "GEMINI_API_KEY"
+      ],
+      "limits": {
+        "requests_per_day": 20,
+        "text": "Gemini free tier: 20 requests/day per project (Google's own quota error, 2026-11-03).",
+        "source": "HTTP 429 quota GenerateRequestsPerDayPerProjectPerModel-FreeTier = 20"
+      },
+      "notes": "Top accuracy, but 20 dictations a day on the free tier. Paid price not checked. Google may use free-tier requests to improve its products, and people may review them (Gemini API terms); the paid tier does not.",
+      "results": {
+        "clips": 25,
+        "of": 44,
+        "errors": 6,
+        "accuracy": 0.9771,
+        "english_kept": 0.9565,
+        "roman_only": 1.0,
+        "silence_ok": null,
+        "p50_ms": 1979,
+        "p95_ms": 7454,
+        "usd_per_hour": 0.0,
+        "runs": [
+          "m1-engines"
+        ],
+        "measured": "2026-11-03"
+      }
+    },
+    {
+      "id": "gemini-3.5-flash-lite",
+      "label": "Gemini 3.5 Flash-Lite",
+      "provider": "gemini",
+      "tier": "free",
+      "recommended": false,
+      "keys": [
+        "GEMINI_API_KEY"
+      ],
+      "limits": {
+        "requests_per_minute": 10,
+        "requests_per_day": 500,
+        "text": "Gemini free tier: about 10 requests/min, 500/day (third-party guide; Google shows the real numbers only in AI Studio). Not hit with 150+ requests in a day.",
+        "source": "scriptbyai.com/gemini-api-free-tier-limits, 2026-11-03"
+      },
+      "notes": "Near the top for accuracy with a usable daily limit. Some requests take 10-20 s (Google's queue). Google may use free-tier requests to improve its products, and people may review them (Gemini API terms); the paid tier does not.",
+      "results": {
+        "clips": 44,
+        "of": 44,
+        "errors": 0,
+        "accuracy": 0.97,
+        "english_kept": 0.9573,
+        "roman_only": 1.0,
+        "silence_ok": "2/2",
+        "p50_ms": 1563,
+        "p95_ms": 9065,
+        "usd_per_hour": 0.146,
+        "runs": [
+          "m1-engines"
+        ],
+        "measured": "2026-11-03"
+      },
+      "app_check": {
+        "clips": 44,
+        "of": 44,
+        "errors": 2,
+        "accuracy": 0.9662,
+        "english_kept": 0.9419,
+        "roman_only": 1.0,
+        "silence_ok": "2/2",
+        "p50_ms": 1791,
+        "p95_ms": 6334,
+        "usd_per_hour": 0.145,
+        "runs": [
+          "m1-cli-gemini-3.5-flash-lite"
+        ],
+        "measured": "2026-11-03"
+      }
+    },
+    {
+      "id": "groq-whisper-hint",
+      "label": "Groq Whisper (fast)",
+      "provider": "groq",
+      "tier": "free",
+      "recommended": true,
+      "keys": [
+        "GROQ_API_KEY"
+      ],
+      "limits": {
+        "requests_per_minute": 20,
+        "requests_per_day": 2000,
+        "audio_seconds_per_day": 28800,
+        "text": "Groq free tier: 20 requests/min, 2,000/day, 7,200 audio seconds/hour, 28,800 audio seconds/day (8 hours of speech)",
+        "source": "console.groq.com/docs/rate-limits, 2026-11-03"
+      },
+      "notes": "Fastest (~0.3 s) but weakest on natural Urdu / Hindi; writes text on silence (the voice gate stops that).",
+      "results": {
+        "clips": 44,
+        "of": 44,
+        "errors": 0,
+        "accuracy": 0.8923,
+        "english_kept": 0.872,
+        "roman_only": 0.9286,
+        "silence_ok": "0/2",
+        "p50_ms": 246,
+        "p95_ms": 1272,
+        "usd_per_hour": 0.099,
+        "runs": [
+          "m0"
+        ],
+        "measured": "2026-10-28"
+      },
+      "app_check": {
+        "clips": 44,
+        "of": 44,
+        "errors": 0,
+        "accuracy": 0.8927,
+        "english_kept": 0.872,
+        "roman_only": 1.0,
+        "silence_ok": "2/2",
+        "p50_ms": 292,
+        "p95_ms": 450,
+        "usd_per_hour": 0.095,
+        "runs": [
+          "m1-cli-groq-whisper-hint"
+        ],
+        "measured": "2026-11-03"
+      }
+    },
+    {
+      "id": "openai-4o-mini-transcribe+gptoss20b",
+      "label": "OpenAI GPT-4o mini Transcribe + Roman cleanup",
+      "provider": "openai",
+      "tier": "paid",
+      "recommended": false,
+      "keys": [
+        "OPENAI_API_KEY",
+        "GROQ_API_KEY"
+      ],
+      "limits": {
+        "text": "No free tier: about $0.003 per minute of audio. Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+        "source": "OpenAI pricing at launch; check before use"
+      },
+      "notes": "Half the price of GPT-4o Transcribe and as accurate here; writes text on silence.",
+      "results": {
+        "clips": 44,
+        "of": 44,
+        "errors": 0,
+        "accuracy": 0.9473,
+        "english_kept": 0.9451,
+        "roman_only": 1.0,
+        "silence_ok": "0/2",
+        "p50_ms": 1490,
+        "p95_ms": 2643,
+        "usd_per_hour": 0.238,
+        "runs": [
+          "m1-engines"
+        ],
+        "measured": "2026-11-03"
+      },
+      "app_check": {
+        "clips": 44,
+        "of": 44,
+        "errors": 0,
+        "accuracy": 0.9282,
+        "english_kept": 0.939,
+        "roman_only": 1.0,
+        "silence_ok": "2/2",
+        "p50_ms": 1832,
+        "p95_ms": 2726,
+        "usd_per_hour": 0.226,
+        "runs": [
+          "m1-cli-openai-4o-mini-transcribe_gptoss20b"
+        ],
+        "measured": "2026-11-03"
+      }
+    },
+    {
+      "id": "openai-4o-transcribe+gptoss20b",
+      "label": "OpenAI GPT-4o Transcribe + Roman cleanup",
+      "provider": "openai",
+      "tier": "paid",
+      "recommended": false,
+      "keys": [
+        "OPENAI_API_KEY",
+        "GROQ_API_KEY"
+      ],
+      "limits": {
+        "text": "No free tier: about $0.006 per minute of audio. Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+        "source": "OpenAI pricing at launch; check before use"
+      },
+      "notes": "Writes Urdu / Hindi script, so it needs the Roman cleanup; writes text on silence.",
+      "results": {
+        "clips": 44,
+        "of": 44,
+        "errors": 0,
+        "accuracy": 0.9381,
+        "english_kept": 0.9268,
+        "roman_only": 1.0,
+        "silence_ok": "0/2",
+        "p50_ms": 1415,
+        "p95_ms": 2465,
+        "usd_per_hour": 0.416,
+        "runs": [
+          "m1-engines"
+        ],
+        "measured": "2026-11-03"
+      },
+      "app_check": {
+        "clips": 44,
+        "of": 44,
+        "errors": 0,
+        "accuracy": 0.9382,
+        "english_kept": 0.9207,
+        "roman_only": 1.0,
+        "silence_ok": "2/2",
+        "p50_ms": 1558,
+        "p95_ms": 2691,
+        "usd_per_hour": 0.396,
+        "runs": [
+          "m1-cli-openai-4o-transcribe_gptoss20b"
+        ],
+        "measured": "2026-11-03"
+      }
+    }
+  ]
+}

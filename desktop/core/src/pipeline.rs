@@ -4,46 +4,42 @@
 
 use std::time::Instant;
 
+use crate::api::{ApiError, Transcript};
 use crate::encode::{EncodeError, Encoded, Stream};
-use crate::groq::{Groq, GroqError, Transcript};
 use crate::normalize::Normalizer;
 use crate::vad::{self, RATE};
 
-/// Anything that turns an encoded clip into raw Whisper text. [`Groq`] in the app, a fake in tests.
+/// Anything that turns an encoded clip into text. [`crate::client::Client`] in the app, a fake in tests.
 pub trait Transcribe {
-    fn transcribe(&self, audio: &Encoded) -> Result<Transcript, GroqError>;
-}
-
-impl Transcribe for Groq {
-    fn transcribe(&self, audio: &Encoded) -> Result<Transcript, GroqError> {
-        Groq::transcribe(self, audio)
-    }
+    fn transcribe(&self, audio: &Encoded) -> Result<Transcript, ApiError>;
 }
 
 #[derive(Debug)]
 pub enum PipelineError {
     Encode(EncodeError),
-    Groq(GroqError),
+    Api(ApiError),
 }
 
 impl std::fmt::Display for PipelineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Encode(e) => e.fmt(f),
-            Self::Groq(e) => e.fmt(f),
+            Self::Api(e) => e.fmt(f),
         }
     }
 }
 
 impl std::error::Error for PipelineError {}
 
-/// Milliseconds per stage. `transcribe` includes a retry and its wait; `request` is the attempt that worked.
+/// Milliseconds per stage. `transcribe` includes both requests, retries and waits; `request` is the speech
+/// request that worked and `refine` the refine request (0 without one).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Stages {
     pub gate: f64,
     pub encode: f64,
     pub transcribe: f64,
     pub request: f64,
+    pub refine: f64,
     pub clean: f64,
 }
 
@@ -51,7 +47,8 @@ pub struct Stages {
 pub struct Outcome {
     /// Text to paste: empty when there was no speech, Whisper invented a phantom, or the request failed.
     pub text: String,
-    /// What Whisper returned before cleanup. Personal data: never logged unless the user asks.
+    /// What the speech model returned, before the refine step and the cleanup. Personal data: never logged
+    /// unless the user asks.
     pub raw: String,
     pub needs_llm: bool,
     pub phantom: bool,
@@ -63,6 +60,8 @@ pub struct Outcome {
     pub sent_ms: u32,
     pub bytes: usize,
     pub retries: u8,
+    /// Tokens billed: speech model (Gemini) and refine step, in and out.
+    pub tokens: [u32; 4],
     pub stages: Stages,
     /// Clip in → text out.
     pub total_ms: f64,
@@ -130,21 +129,27 @@ pub fn run_streamed(
     let t = Instant::now();
     let transcript = engine.transcribe(&encoded);
     out.stages.transcribe = elapsed(t);
-    match transcript {
-        Ok(tr) => {
-            out.stages.request = f64::from(tr.request_ms);
-            out.retries = tr.retries;
-            out.raw = tr.text;
-        }
+    let tr = match transcript {
+        Ok(tr) => tr,
         Err(e) => {
-            out.error = Some(PipelineError::Groq(e));
+            out.error = Some(PipelineError::Api(e));
             out.total_ms = elapsed(started);
             return out;
         }
-    }
+    };
+    out.stages.request = f64::from(tr.request_ms);
+    out.stages.refine = f64::from(tr.refine_ms);
+    out.retries = tr.retries;
+    out.tokens = [
+        tr.tokens_in,
+        tr.tokens_out,
+        tr.refine_tokens_in,
+        tr.refine_tokens_out,
+    ];
+    out.raw = tr.asr.unwrap_or_else(|| tr.text.clone());
 
     let t = Instant::now();
-    let cleaned = normalizer.clean(&out.raw);
+    let cleaned = normalizer.clean(&tr.text);
     out.stages.clean = elapsed(t);
     out.text = cleaned.text;
     out.needs_llm = cleaned.needs_llm;
@@ -167,12 +172,12 @@ mod tests {
     use std::cell::Cell;
 
     struct Fake {
-        reply: Result<&'static str, GroqError>,
+        reply: Result<&'static str, ApiError>,
         calls: Cell<u32>,
     }
 
     impl Fake {
-        fn new(reply: Result<&'static str, GroqError>) -> Self {
+        fn new(reply: Result<&'static str, ApiError>) -> Self {
             Self {
                 reply,
                 calls: Cell::new(0),
@@ -181,13 +186,13 @@ mod tests {
     }
 
     impl Transcribe for Fake {
-        fn transcribe(&self, audio: &Encoded) -> Result<Transcript, GroqError> {
+        fn transcribe(&self, audio: &Encoded) -> Result<Transcript, ApiError> {
             self.calls.set(self.calls.get() + 1);
             assert_eq!(&audio.bytes[..4], b"OggS");
             self.reply.clone().map(|text| Transcript {
                 text: text.into(),
                 request_ms: 7,
-                retries: 0,
+                ..Transcript::default()
             })
         }
     }
@@ -245,11 +250,11 @@ mod tests {
 
     #[test]
     fn groq_errors_are_returned_with_timings() {
-        let fake = Fake::new(Err(GroqError::BadKey));
+        let fake = Fake::new(Err(ApiError::BadKey("GROQ_API_KEY".into())));
         let out = run(&speechy(), &fake, &Normalizer::new());
         assert!(matches!(
             out.error,
-            Some(PipelineError::Groq(GroqError::BadKey))
+            Some(PipelineError::Api(ApiError::BadKey(_)))
         ));
         assert_eq!(out.text, "");
         assert!(out.total_ms > 0.0);

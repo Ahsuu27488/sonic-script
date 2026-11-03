@@ -30,6 +30,8 @@ class EngineResult:
     tokens_in: int = 0
     tokens_audio: int = 0
     tokens_out: int = 0
+    refine_tokens_in: int = 0
+    refine_tokens_out: int = 0
     retries: int = 0
     error: str | None = None
 
@@ -42,7 +44,7 @@ class Engine:
     """Base class. Subclasses implement `_run`, which fills an EngineResult."""
 
     def __init__(self, spec: dict, provider: dict, client: httpx.Client, limiter: RateLimiter,
-                 word_list: list[str] | None = None) -> None:
+                 word_list: list[str] | None = None, refiner: Refiner | None = None) -> None:
         self.spec = spec
         self.id: str = spec["id"]
         self.provider = provider
@@ -50,11 +52,15 @@ class Engine:
         self.limiter = limiter
         self.word_list = word_list or []
         self.key = os.environ.get(provider.get("key_env", ""), "")
+        self.refiner = refiner
 
     def transcribe(self, audio: EncodedAudio, sentence_id: str = "") -> EngineResult:
         result = EngineResult()
         try:
             self._run(audio, result, sentence_id)
+            if self.refiner and result.text.strip():
+                result.raw_asr = result.text
+                result.text = self.refiner.run(result.text, result, self.word_list)
             result.text = clean_output(result.text)
         except EngineError as exc:
             result.error = str(exc)
@@ -64,7 +70,7 @@ class Engine:
         return result
 
     def cost_usd(self, r: EngineResult, duration_s: float) -> float:
-        return 0.0
+        return self.refiner.cost_usd(r) if self.refiner else 0.0
 
     def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
         raise NotImplementedError
@@ -73,7 +79,7 @@ class Engine:
         """Rate-limit, send, retry on 429/5xx; record the time of the successful attempt only."""
         key = f"{self.spec['provider']}:{model}"
         for attempt in range(MAX_RETRIES + 1):
-            self.limiter.wait(key, float(self.provider.get("rpm", 10)))
+            self.limiter.wait(key, float(self.spec.get("rpm") or self.provider.get("rpm", 10)))
             start = time.perf_counter()
             resp = self.client.send(request)
             elapsed = (time.perf_counter() - start) * 1000
@@ -122,11 +128,38 @@ class GeminiAudio(Engine):
 
     def cost_usd(self, r: EngineResult, duration_s: float) -> float:
         p = self.spec.get("price", {})
-        return (r.tokens_in * p.get("audio_in_per_m", 0) + r.tokens_out * p.get("out_per_m", 0)) / 1e6
+        own = (r.tokens_in * p.get("audio_in_per_m", 0) + r.tokens_out * p.get("out_per_m", 0)) / 1e6
+        return own + super().cost_usd(r, duration_s)
+
+
+class GeminiTranscribe(GeminiAudio):
+    """Google's speech-to-text model (`gemini-3.5-transcribe`, the Gemini app's dictation): audio only, no
+    instruction. The text comes back in `audioTranscription`, in the speaker's own script (Devanagari or
+    Urdu for Hindi / Urdu speech), so it is paired with a `refine` step."""
+
+    def _run(self, audio: EncodedAudio, result: EngineResult, sentence_id: str = "") -> None:
+        if not self.key:
+            raise EngineError(f"missing {self.provider['key_env']} (add it to eval/.env)")
+        model = self.spec["model"]
+        body = {"contents": [{"role": "user", "parts": [
+            {"inline_data": {"mime_type": audio.mime, "data": base64.b64encode(audio.data).decode()}},
+        ]}]}
+        req = self.client.build_request(
+            "POST", f"{self.provider['base_url']}/models/{model}:generateContent",
+            json=body, headers={"x-goog-api-key": self.key})
+        data = self._send("transcribe", model, result, req)
+        cands = data.get("candidates") or []
+        parts = cands[0].get("content", {}).get("parts", []) if cands else []
+        result.text = " ".join(p.get("audioTranscription", {}).get("text", "") or p.get("text", "")
+                               for p in parts).strip()
+        usage = data.get("usageMetadata", {})
+        result.tokens_in = int(usage.get("promptTokenCount", 0))
+        result.tokens_out = int(usage.get("candidatesTokenCount", 0))
 
 
 class GroqWhisper(Engine):
-    """Whisper only, optionally steered by a Roman Urdu hint prompt."""
+    """An OpenAI-style `/audio/transcriptions` call (Groq Whisper, OpenAI gpt-4o-transcribe), optionally
+    steered by a Roman Urdu hint prompt."""
 
     def _whisper(self, audio: EncodedAudio, result: EngineResult) -> str:
         if not self.key:
@@ -147,8 +180,10 @@ class GroqWhisper(Engine):
         result.text = self._whisper(audio, result)
 
     def cost_usd(self, r: EngineResult, duration_s: float) -> float:
-        # Groq bills Whisper with a 10-second minimum per request.
-        return max(duration_s, 10.0) / 3600 * self.spec.get("price", {}).get("audio_per_hour", 0)
+        # Groq bills Whisper with a 10-second minimum per request (provider `min_billed_s`); OpenAI has none.
+        billed = max(duration_s, float(self.provider.get("min_billed_s", 0)))
+        own = billed / 3600 * self.spec.get("price", {}).get("audio_per_hour", 0)
+        return own + super().cost_usd(r, duration_s)
 
 
 class GroqWhisperLLM(GroqWhisper):
@@ -184,6 +219,44 @@ class GroqWhisperLLM(GroqWhisper):
         return super().cost_usd(r, duration_s) + llm
 
 
+class Refiner:
+    """Second step after any engine (spec `refine`): an OpenAI-style chat model turns the transcript into
+    clean Roman Urdu / Hinglish with the given prompt, on its own provider (e.g. Groq after Gemini)."""
+
+    def __init__(self, spec: dict, provider: dict, client: httpx.Client, limiter: RateLimiter) -> None:
+        self.spec = spec
+        # Reuses Engine._send for rate limits, retries and timing; the stage is named "refine".
+        self._sender = Engine({"id": "refine", "provider": spec["provider"], "rpm": spec.get("rpm")},
+                              provider, client, limiter)
+
+    def run(self, text: str, result: EngineResult, word_list: list[str]) -> str:
+        s = self._sender
+        if not s.key:
+            raise EngineError(f"missing {s.provider['key_env']} (add it to eval/.env)")
+        model = self.spec["model"]
+        body = {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": load_prompt(self.spec["prompt"], word_list)},
+                {"role": "user", "content": text},
+            ],
+            **self.spec.get("extra", {}),
+        }
+        req = s.client.build_request(
+            "POST", f"{s.provider['base_url']}/chat/completions",
+            json=body, headers={"Authorization": f"Bearer {s.key}"})
+        data = s._send("refine", model, result, req)
+        usage = data.get("usage", {})
+        result.refine_tokens_in = int(usage.get("prompt_tokens", 0))
+        result.refine_tokens_out = int(usage.get("completion_tokens", 0))
+        return str(data["choices"][0]["message"].get("content") or "")
+
+    def cost_usd(self, r: EngineResult) -> float:
+        p = self.spec.get("price", {})
+        return (r.refine_tokens_in * p.get("in_per_m", 0) + r.refine_tokens_out * p.get("out_per_m", 0)) / 1e6
+
+
 class FakeEngine(Engine):
     """Offline stand-in for tests and dry runs: returns the expected text after a simulated delay."""
 
@@ -198,6 +271,7 @@ class FakeEngine(Engine):
 
 KINDS: dict[str, type[Engine]] = {
     "gemini-audio": GeminiAudio,
+    "gemini-transcribe": GeminiTranscribe,
     "whisper-only": GroqWhisper,
     "whisper-llm": GroqWhisperLLM,
     "fake": FakeEngine,
@@ -214,13 +288,21 @@ def build_engines(providers: dict, ids: list[str] | None, limiter: RateLimiter,
             raise SystemExit(f"unknown engine(s): {', '.join(unknown)}. Known: {', '.join(sorted(known))}")
         specs = [s for s in specs if s["id"] in ids]
     clients: dict[str, httpx.Client] = {}
+
+    def client_for(name: str) -> httpx.Client:
+        if name not in clients:
+            clients[name] = httpx.Client(timeout=TIMEOUT, http2=False)
+        return clients[name]
+
     engines = []
     for spec in specs:
         prov_name = spec.get("provider", "fake")
         provider = providers.get("providers", {}).get(prov_name, {"rpm": 6000})
-        if prov_name not in clients:
-            clients[prov_name] = httpx.Client(timeout=TIMEOUT, http2=False)
-        engines.append(KINDS[spec["kind"]](spec, provider, clients[prov_name], limiter, word_list))
+        refiner = None
+        if spec.get("refine"):
+            r = spec["refine"]
+            refiner = Refiner(r, providers["providers"][r["provider"]], client_for(r["provider"]), limiter)
+        engines.append(KINDS[spec["kind"]](spec, provider, client_for(prov_name), limiter, word_list, refiner))
     return engines, clients
 
 

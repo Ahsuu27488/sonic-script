@@ -3,6 +3,27 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-engines
+
+- Owner's live test of step 5: tap / hold, mic and key-up → text in 0.2 s work, but Groq Whisper mangled natural
+  Urdu / Hindi. New rule (D-025): quality first, 1-2 s after the key-up is fine.
+- Researched how the big apps dictate (Claude: Anthropic's own transcription service; ChatGPT: GPT-4o-based
+  transcription; Gemini app: Gemini 3.5 Transcribe; Wispr Flow: recognizer + LLM cleanup).
+- New engines (D-026): OpenAI `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` (provider `openai`, paid),
+  `gemini-3.5-flash`, `gemini-3.5-transcribe` (new kind `gemini-transcribe`) and a `refine` step (Roman cleanup
+  on Groq `gpt-oss-20b`) usable after any engine; per-engine `rpm`; provider `min_billed_s`. `eval`:
+  `GeminiTranscribe`, `Refiner`; `OPENAI_API_KEY` read like the other keys. `gemini-3.8-flash` tried and
+  dropped (every request timed out or got 503 on the free tier; its rows are kept aside in the run folder).
+- App: shared HTTP layer `desktop/core/src/api.rs` (`ApiError` replaces `GroqError`), `gemini.rs`, `client.rs`
+  (speech call + refine), `spec.rs` with an `Engine` enum; `sonicscript --engine <id>` for every mode.
+- Model catalog (D-027): `catalog` info in `spec/providers.json` (label, free / paid, free-tier limits + source,
+  notes), `python -m sonic_eval catalog` → `spec/models.json`, `sonicscript --models` prints it free / paid.
+- Benchmark `m1-engines` (44 M0 clips) and the same engines through the app (`m1-cli-*`): Gemini 97-98%,
+  OpenAI 93-95%, Groq 89%; numbers in STATUS. Flash and Transcribe ran out of their free daily limit (20 / 25,
+  from Google's own 429s) after 22-25 clips. OpenAI cost about $0.06 in all.
+- Found on the way: the hidden Terminal pane in the desktop app throttles a program's console output (the
+  bench advanced only while its tab was read), so long runs go to a log file instead.
+
 ## 2026-11-03 · feat/m1-hotkey
 
 - M1 step 5, dictation key + recording. `sonicscript.exe` without arguments now listens for Right Ctrl: tap to
