@@ -4,13 +4,14 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** `feat/m1-normalizer` (PR open; `main` has M0 and the M1 plan)
-**In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1 (Windows dictation app in Rust) has begun:
-the toolchain works and plan step 1, the text cleanup (normalizer), is built and tested; next is step 2, the
-voice gate.
+**Last updated:** 2026-11-03 · **Code at:** `feat/m1-voice-gate` (PR stacked on PR #3 `feat/m1-normalizer`;
+`main` has M0 and the M1 plan)
+**In one line:** M0 is done (Groq default, Gemini opt-in, MIT). M1 (Windows dictation app in Rust): plan
+steps 1 (text cleanup) and 2 (voice gate) are built and tested, each in its own PR; next is step 3, encode +
+Groq.
 
 **Start here (new session):** read `docs/plans/2026-11-02-m1-windows-push-to-talk.md`, then decisions
-D-011 to D-019. One plan step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`.
+D-011 to D-020. One plan step per branch and PR (`feat/m1-<step>`); the Rust workspace is `desktop/`.
 
 ## What works (verified)
 
@@ -22,6 +23,11 @@ D-011 to D-019. One plan step per branch and PR (`feat/m1-<step>`); the Rust wor
 - Normalizer on all 131 M0 `groq-whisper-hint` opus16 outputs (re-scored with `eval` scoring, mean over every
   row incl. the 2 silence clips): Latin-only 93.1% → 100%, silence 0% → 100%, accuracy 85.1% → 90.0%
   (90.2% with a 10-word list), English kept 87.3% → 87.3% (88.5% with the list).
+- `desktop/core` voice gate (M1 step 2, D-020): on the 44 M0 recordings it sends all 42 speech clips (least
+  speech 1,420 ms) and drops both silence clips (20 ms and 80 ms of "speech"; the limit is 300 ms). The test
+  also passes every speech clip without padding, with the room noise mixed in (also +10 dB) and 20 dB quieter,
+  and drops the silence clips at +10 dB. `cargo test`: 9 tests pass (2026-11-03); the recordings test is skipped
+  where they are absent (CI).
 - `eval/` tool: 25 offline tests pass (2026-11-02). Runs per provider in parallel (`concurrency` in
   `spec/providers.json`); thread-safe rate limiter.
 - M0 results, opus16, owner's voice (`eval/results/m0/report.html`, local only), p50 / p95, accuracy, English kept:
@@ -44,7 +50,8 @@ D-011 to D-019. One plan step per branch and PR (`feat/m1-<step>`); the Rust wor
 
 - M1 (plan approved 2026-11-02): tap Right Ctrl to start, tap or Enter to stop and paste, hold to talk, Esc
   cancels (D-015); key changeable (D-018); model catalog `spec/models.json` from `eval` (D-017). Pop-up mic on
-  text fields, settings page and fallback model are M2 (D-016, D-017). Step 1 done on `feat/m1-normalizer`.
+  text fields, settings page and fallback model are M2 (D-016, D-017). Step 1 done on `feat/m1-normalizer`
+(PR #3), step 2 on `feat/m1-voice-gate`.
 
 ## Live state
 
@@ -58,19 +65,21 @@ D-011 to D-019. One plan step per branch and PR (`feat/m1-<step>`); the Rust wor
 3. Whisper-hint sometimes translates instead of transcribing (`mx-04` → "Take a backup and run the database."):
    no cleanup can fix that; watch for it in M1.
 4. Dictating exactly the hint's last sentence ("Theek hai, main abhi meeting mein hoon.") is dropped as a
-   phantom (D-019). The voice gate (step 2) may let the filter skip clips with clear speech.
-5. Urdu-script "میں" is always romanized "mein" (it can also be "main" = I). Mostly-Urdu output only gets a
+   phantom (D-019). The voice gate's `speech_ms` could let the filter skip clips with clear speech (not done).
+5. The voice gate is tuned on one male voice (the owner) and one room; loud talking or TV in the background
+   counts as speech (energy + zero-crossing, not a speech model). Silero VAD only if this fails in daily use.
+6. Urdu-script "میں" is always romanized "mein" (it can also be "main" = I). Mostly-Urdu output only gets a
    rough letter-by-letter draft and is flagged `needs_llm`; the LLM re-ask is not wired yet (step 3).
-6. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
-7. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
+7. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
+8. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 
 ## Next
 
-1. Agent: M1 step 2, voice gate (`desktop/core/src/vad.rs`, port of `eval` `trim_silence`; the 2 silence
-   clips must give no request, all 42 speech clips must pass), then encode + Groq → `--bench` golden check →
-   hotkey (D-015, D-018) → inject → model catalog → latency log. Delegate boilerplate to Gemini CLI via
-   Foreman if the owner has signed Gemini CLI in.
-2. Owner: review and merge the `feat/m1-normalizer` PR; keep or change the name "SonicScript".
+1. Agent: M1 step 3, encode (Ogg/Opus 16 kbps, FLAC fallback) + Groq client (`desktop/core/src/encode.rs`,
+   `groq.rs`, `spec.rs`), then `--bench` golden check → hotkey (D-015, D-018) → inject → model catalog →
+   latency log. Delegate boilerplate to Gemini CLI via Foreman if the owner has signed Gemini CLI in.
+2. Owner: review and merge PR #3 (normalizer), then the voice-gate PR (retarget it to `main` after #3 is
+   merged); keep or change the name "SonicScript".
 
 ## How to run and check
 
@@ -78,6 +87,7 @@ D-011 to D-019. One plan step per branch and PR (`feat/m1-<step>`); the Rust wor
   in the environment, the Windows user environment, or `eval/.env`.
 - Run: `python -m sonic_eval record | probe | bench --preset compression|engines | report | rescore`
 - Try the cleanup: `cd desktop && cargo run -q --example clean -- [words.txt]` (one text per line on stdin).
+- Try the voice gate: `cd desktop && cargo run -q --example gate -- <16 kHz mono .wav files>`.
 - Code map: `graphify query "<question>"`; after code changes `graphify update .` (see CLAUDE.md).
 - Tests: `cd eval && python -m ruff check . && python -m pytest -q` (25 tests) and
   `cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`.

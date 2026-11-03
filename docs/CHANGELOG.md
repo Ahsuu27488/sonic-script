@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-voice-gate
+
+- M1 step 2, voice gate: `desktop/core/src/vad.rs` (`detect` → speech ms + the samples to keep, 200 ms padding)
+  and `examples/gate.rs`. On the 44 M0 recordings: 42 speech clips sent, both silence clips dropped.
+- Not a straight port of `eval` `trim_silence`: its fixed -42 dB threshold finds 3.6 s of "speech" in the
+  room-noise clip `si-02`. The gate uses each clip's own noise floor + 9 dB and a zero-crossing limit (D-020);
+  the thresholds were picked on 7 variants of every clip (no padding, room noise mixed in, +10 dB, quieter).
+- `graphify` reinstalled (`pip install --user graphifyy`, 0.9.101, Python 3.14); graph rebuilt, code only.
+
 ## 2026-11-03 · feat/m1-normalizer
 
 - Toolchain confirmed: Rust 1.99.1 + VS 2022 Build Tools (C++), a test program links and runs (plan step 0).
