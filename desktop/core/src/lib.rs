@@ -3,7 +3,9 @@
 
 pub mod encode;
 pub mod groq;
+pub mod keys;
 pub mod normalize;
 pub mod pipeline;
+pub mod resample;
 pub mod spec;
 pub mod vad;

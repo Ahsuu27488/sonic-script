@@ -13,7 +13,11 @@
   `eval`'s results shape, scored by `eval rescore` (one scorer). First run 87.2% vs M0 89.1% on the same clips:
   the 200 ms trim made Whisper translate; padding raised to 500 ms (D-022) → 89.1%, Latin 100%, p50 298 ms.
   `examples/transcribe.rs` removed (the app does it).
-- Next: step 5, hotkey + capture (encode while recording).
+- Step 5 hotkey + audio: built on `feat/m1-hotkey`, not tried live yet (PC locked, no mic connected). Key rules
+  in `core/keys.rs` (a 300-400 ms press is a tap, D-023); `WH_KEYBOARD_LL` hook in `win/hotkey.rs`; cpal capture,
+  own resampler and Opus encoded while recording (D-024: the Ogg file is cut from the packet stream, 89.3% on
+  the M0 clips). Text is printed, not pasted (step 7). Added `--record <s>` as a mic check.
+- Next: the owner's live test of step 5, then step 6 (changeable key).
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).

@@ -3,6 +3,20 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-03 · feat/m1-hotkey
+
+- M1 step 5, dictation key + recording. `sonicscript.exe` without arguments now listens for Right Ctrl: tap to
+  start, tap or Enter to stop, hold to talk, Esc cancels, a shortcut with the key cancels (D-015); the text is
+  printed in the console (pasting is step 7). New in `core`: `keys.rs` (the key rules as a tested state machine;
+  a 300-400 ms press is a tap, D-023), `resample.rs` (any mic rate → 16 kHz) and `encode::Stream` (Opus while
+  recording; the Ogg file is cut from the packets at the end, D-024); `pipeline::run_streamed`. New in `win`:
+  `hotkey.rs` (low-level keyboard hook thread), `audio.rs` (cpal capture + worker), `dictate.rs`, and
+  `--record <seconds>` as a mic check. The console is switched to UTF-8.
+- `--bench` with the streaming encoder: 89.3% (vs 89.1% re-encoding the trimmed clip), Latin 100%.
+- Not tried live: the PC was locked and had no microphone connected while this was built (STATUS known gap 8).
+  Found on the way: Claude's shells run without a foreground window, so simulated keys only work when the PC
+  is unlocked.
+
 ## 2026-11-03 · feat/m1-bench
 
 - M1 step 4, golden check: new app crate `desktop/win` (binary `sonicscript.exe`) with `--file <wav>...`

@@ -1,8 +1,14 @@
-//! SonicScript for Windows (M1 plan: `docs/plans/2026-11-02-m1-windows-push-to-talk.md`). So far the golden
-//! check without a mic (step 4): `--file` and `--bench` run the real pipeline on WAV files. The hotkey,
-//! recording and paste come in steps 5-7.
+//! SonicScript for Windows (M1 plan: `docs/plans/2026-11-02-m1-windows-push-to-talk.md`). Without arguments
+//! it listens for the dictation key and prints what was said (step 5; pasting is step 7). `--file` and
+//! `--bench` run the same pipeline on WAV files (the golden check, step 4).
 
+#[cfg(windows)]
+mod audio;
 mod bench;
+#[cfg(windows)]
+mod dictate;
+#[cfg(windows)]
+mod hotkey;
 mod key;
 mod wav;
 
@@ -17,17 +23,32 @@ use sonicscript_core::spec;
 
 const USAGE: &str = "\
 usage:
+  sonicscript                                 dictation: tap or hold Right Ctrl, speak, get the text
+  sonicscript --record <seconds>              mic check: record, then print the text (0.5-300 s)
   sonicscript --file <wav>...                 transcribe 16 kHz mono WAV files, print the text
   sonicscript --bench <dir> [--out <file>]    run every WAV in <dir>, write eval rows (JSON lines)
 The Groq key comes from GROQ_API_KEY (this console or your Windows user environment).";
 
 fn main() -> ExitCode {
+    // Text and status symbols are UTF-8; the console's default code page would garble them.
+    #[cfg(windows)]
+    // SAFETY: plain Win32 call; failing only leaves the old code page.
+    unsafe {
+        windows_sys::Win32::System::Console::SetConsoleOutputCP(65001);
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("--file") if args.len() > 1 => file(&args[1..]),
         Some("--bench") => match &args[1..] {
             [dir] => bench(Path::new(dir), None),
             [dir, flag, out] if flag == "--out" => bench(Path::new(dir), Some(PathBuf::from(out))),
+            _ => Err(USAGE.into()),
+        },
+        #[cfg(windows)]
+        None => dictate::run(),
+        #[cfg(windows)]
+        Some("--record") => match args.get(1).and_then(|s| s.parse::<f64>().ok()) {
+            Some(s) if args.len() == 2 && (0.5..=300.0).contains(&s) => dictate::record_for(s),
             _ => Err(USAGE.into()),
         },
         _ => Err(USAGE.into()),

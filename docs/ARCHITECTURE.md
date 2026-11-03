@@ -8,8 +8,9 @@
 The Milestone 0 benchmark is a Python command-line tool run by hand on the owner's PC. It calls the Groq and
 Gemini HTTP APIs directly with the user's keys; there is no SonicScript server. The M1 Windows app is being
 built in Rust in `desktop/`: the platform-free core (`desktop/core`: text cleanup, voice gate, Opus encoding,
-Groq client, pipeline) and the app binary `sonicscript.exe` (`desktop/win`), which so far only runs the
-pipeline on WAV files (`--file`, `--bench`); hotkey, recording and paste come next.
+Groq client, pipeline, key rules, resampler) and the app binary `sonicscript.exe` (`desktop/win`). Without
+arguments it listens for the dictation key, records and prints the text (pasting comes in step 7);
+`--record`, `--file` and `--bench` run the same pipeline without the key.
 The planned apps are described in `blueprint.md` §3 and §5.
 
 ```
@@ -44,11 +45,16 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `desktop/core/examples/clean.rs` | Runs the cleanup on stdin lines, prints JSON lines (for re-scoring with `eval`) |
 | `desktop/core/src/vad.rs` | Voice gate (D-020): `detect(&[f32]) -> Detection { speech_ms, keep }`, `has_speech()`; 16 kHz mono, 20 ms frames |
 | `desktop/core/examples/gate.rs` | Runs the voice gate on WAV files: speech ms, kept seconds, send / drop |
-| `desktop/core/src/encode.rs` | `opus(&[f32]) -> Encoded { bytes, mime, ext, audio_ms }`: Ogg/Opus 16 kbps VoIP, complexity 10 (D-021) |
+| `desktop/core/src/encode.rs` | `opus(&[f32]) -> Encoded { bytes, mime, ext, audio_ms }`: Ogg/Opus 16 kbps VoIP, complexity 10 (D-021); `Stream::push` encodes 20 ms frames as they come, `finish(keep)` builds the Ogg file from the packets that cover `keep` (D-024) |
 | `desktop/core/src/spec.rs` | `default_engine()`, `engine(id) -> WhisperEngine` (provider, model, language, hint) from `spec/providers.json` + `spec/prompts/` at build time |
 | `desktop/core/src/groq.rs` | `Groq::new / from_env`, `warm()`, `transcribe(&Encoded) -> Result<Transcript, GroqError>`; 10 s timeout, one retry |
-| `desktop/core/src/pipeline.rs` | `run(samples, &impl Transcribe, &Normalizer) -> Outcome` (text, raw, sent, sizes, `Stages` timings, error) |
-| `desktop/win/src/main.rs` | `sonicscript.exe`: `--file <wav>...` (prints the text), `--bench <dir> [--out <file>]` |
+| `desktop/core/src/pipeline.rs` | `run(samples, &impl Transcribe, &Normalizer) -> Outcome` (text, raw, sent, sizes, `Stages` timings, error) for recorded clips; `run_streamed(samples, Stream, ..)` for live ones |
+| `desktop/core/src/keys.rs` | `Machine::down / up(Key, time_ms) -> Reply { action: Start / Stop / Cancel, swallow }`, `force_stop()`: the D-015 / D-023 key rules |
+| `desktop/core/src/resample.rs` | `Resampler::new(in_rate).process(&[f32]) / flush()`: any rate → 16 kHz, windowed sinc, streaming (D-024) |
+| `desktop/win/src/main.rs` | `sonicscript.exe`: no arguments = dictation, `--record <s>` (mic check), `--file <wav>...` (prints the text), `--bench <dir> [--out <file>]`; console set to UTF-8 |
+| `desktop/win/src/dictate.rs` | `run()`: the dictation loop (key actions → `Recorder` → `run_streamed` on a worker thread → console), 5-minute cap; `record_for(s)` |
+| `desktop/win/src/hotkey.rs` | `spawn(vk, Sender<Action>)`: `WH_KEYBOARD_LL` hook on its own thread, runs `keys::Machine`, swallows only what it says; `force_stop()` (cap, mic failure) |
+| `desktop/win/src/audio.rs` | `Recorder::start() / stop() -> Recording { samples, stream }`: default mic via cpal, mono, resampled and encoded on a worker thread |
 | `desktop/win/src/bench.rs` | `run(dir, out, &Groq) -> Summary`: pipeline on every WAV, paced by `rpm`, one row per clip in `eval`'s `results.jsonl` shape (`row`), p50 / p95 |
 | `desktop/win/src/key.rs` | `groq(engine)`: key from the process environment, then `HKCU\Environment`; never printed |
 | `desktop/win/src/wav.rs` | `read(path)`: 16 kHz mono WAV (16-bit or float) → samples |
@@ -86,8 +92,10 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 ## Dictation pipeline (desktop/core)
 
 ```
+key down ─► mic (cpal) ─► mono ─► resample 16 kHz ─► encode::Stream (20 ms packets while recording)
+key up / Enter ─► run_streamed:
 samples (16 kHz mono) ─► vad::detect ─► no speech? → nothing sent
-                      ─► trim (speech ± 500 ms) ─► encode::opus ─► Groq::transcribe (warm TLS, 10 s, 1 retry) ─► Normalizer::clean
+                      ─► packets for speech ± 500 ms ─► Ogg ─► Groq::transcribe (warm TLS, 10 s, 1 retry) ─► Normalizer::clean
 ```
 
 ## Text cleanup (desktop/core)
@@ -113,6 +121,8 @@ python -m ruff check . && python -m pytest -q
 cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cargo run -q --example clean -- [words.txt] < texts.txt   # (in desktop/) cleanup on one text per line
 cargo run -q --example gate -- ../spec/fixtures/audio/*.wav   # (in desktop/) voice gate per clip
+cargo run -q --release -p sonicscript                     # (in desktop/) dictation: tap / hold Right Ctrl, Esc cancels
+cargo run -q --release -p sonicscript -- --record 5       # (in desktop/) mic check: record 5 s, print the text
 cargo run -q --release -p sonicscript -- --file a.wav     # (in desktop/) real pipeline, needs GROQ_API_KEY
 cargo run -q --release -p sonicscript -- --bench ../spec/fixtures/audio --out ../eval/results/m1-bench/results.jsonl
 python -m sonic_eval rescore --run m1-bench   # (in eval/) scores the app's rows (fills category), builds the report

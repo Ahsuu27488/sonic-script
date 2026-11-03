@@ -190,3 +190,22 @@ the speech Whisper translated `mx-02` and `nm-02` into English and cut "Let's" t
 clips sent whole came back right. 500 ms gave 89.0% (M0 level), no trim at all 88.7%. Cost: ~0.6 s more audio
 per clip, no measurable latency (p50 298 ms vs 286 ms), and Groq bills 10 s minimum per request anyway.
 *Where:* `desktop/core/src/vad.rs` (`PAD`), runs `eval/results/m1-bench`, `m1-pad500`, `m1-notrim` (local).
+
+**D-023 Tap or hold is decided at 400 ms; a 300-400 ms press counts as a tap.** (2026-11-03)
+D-015 gives a tap as < 300 ms and a hold as > 400 ms; the gap between them is now a (slow) tap: the key comes
+up, recording goes on in toggle mode. *Why:* staying in toggle mode loses nothing (the next tap or Enter
+stops it), while a push-to-talk stop after less than 0.4 s would send a clip with no words in it, which looks
+like the app ignored the key. *Where:* `desktop/core/src/keys.rs` (`HOLD_MS`, test
+`the_gap_between_tap_and_hold_counts_as_a_tap`).
+
+**D-024 Recording: cpal (WASAPI shared), own resampler, Opus encoded while recording.** (2026-11-03)
+The default input device is opened through cpal at its own rate, mixed to mono and resampled to 16 kHz by a
+windowed-sinc resampler in `core` (cut-off 7.2 kHz); a worker thread encodes each 20 ms frame to Opus as it
+arrives. When recording stops, the voice gate runs on the whole clip and the Ogg file is built from the packets
+that cover what it keeps (speech ± 500 ms, D-022), so only the last frame is encoded after the key-up.
+*Why:* encoding takes ~1/32 of the clip's length (a 30 s clip ~1 s), which would come after the key-up
+otherwise (known gap from step 3). Cutting the packet stream instead of re-encoding the trimmed clip scored
+89.3% on the 44 M0 clips (re-encoding: 89.1%), so starting the decoder mid-stream costs nothing. Shared mode
+runs at the mix rate (usually 48 kHz), so resampling is needed; a small resampler in `core` is tested on
+48 / 44.1 / 32 kHz and keeps Android's path the same. *Where:* `desktop/core/src/encode.rs` (`Stream`),
+`resample.rs`, `pipeline.rs` (`run_streamed`), `desktop/win/src/audio.rs`, run `eval/results/m1-stream` (local).

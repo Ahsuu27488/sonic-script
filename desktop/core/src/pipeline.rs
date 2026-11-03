@@ -1,10 +1,10 @@
-//! One clip → text to paste, with a timing per stage (M1 plan step 3): voice gate → trim → Opus → Whisper
+//! One clip → text to paste, with a timing per stage (M1 plan steps 3, 5): voice gate → trim → Opus → Whisper
 //! → text cleanup. A clip without speech never reaches Whisper (D-007, D-020). The timings are what the
 //! latency log (plan step 9) and the learned deadline (D-017) will read.
 
 use std::time::Instant;
 
-use crate::encode::{self, EncodeError, Encoded};
+use crate::encode::{EncodeError, Encoded, Stream};
 use crate::groq::{Groq, GroqError, Transcript};
 use crate::normalize::Normalizer;
 use crate::vad::{self, RATE};
@@ -69,8 +69,34 @@ pub struct Outcome {
     pub error: Option<PipelineError>,
 }
 
-/// Mono samples in [-1, 1] at [`RATE`].
+/// A clip that is already recorded (`--file`, `--bench`): mono samples in [-1, 1] at [`RATE`]. Encodes it
+/// all, then continues as [`run_streamed`].
 pub fn run(samples: &[f32], engine: &impl Transcribe, normalizer: &Normalizer) -> Outcome {
+    let t = Instant::now();
+    let stream = Stream::new().and_then(|mut s| s.push(samples).map(|()| s));
+    let encode_ms = elapsed(t);
+    let mut out = match stream {
+        Ok(stream) => run_streamed(samples, stream, engine, normalizer),
+        Err(e) => Outcome {
+            audio_ms: ms_of(samples.len()),
+            error: Some(PipelineError::Encode(e)),
+            ..Outcome::default()
+        },
+    };
+    out.stages.encode += encode_ms;
+    out.total_ms += encode_ms;
+    out
+}
+
+/// A clip recorded live: `samples` are everything recorded and `stream` has been fed the same samples while
+/// recording (plan step 5), so only the last frame and the Ogg file are left to do here.
+pub fn run_streamed(
+    samples: &[f32],
+    stream: Stream,
+    engine: &impl Transcribe,
+    normalizer: &Normalizer,
+) -> Outcome {
+    debug_assert_eq!(stream.len(), samples.len());
     let started = Instant::now();
     let mut out = Outcome {
         audio_ms: ms_of(samples.len()),
@@ -85,11 +111,10 @@ pub fn run(samples: &[f32], engine: &impl Transcribe, normalizer: &Normalizer) -
         out.total_ms = elapsed(started);
         return out;
     }
-    let clip = &samples[detection.keep];
-    out.sent_ms = ms_of(clip.len());
+    out.sent_ms = ms_of(detection.keep.len());
 
     let t = Instant::now();
-    let encoded = encode::opus(clip);
+    let encoded = stream.finish(detection.keep);
     out.stages.encode = elapsed(t);
     let encoded = match encoded {
         Ok(e) => e,
