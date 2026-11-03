@@ -192,9 +192,10 @@ mod tests {
         assert_eq!(fake.calls.get(), 1);
         assert_eq!(out.text, "Yaar PR merge kar do ");
         assert_eq!(out.audio_ms, 3000);
+        let expected = 1000 + 2 * ms_of(vad::PAD);
         assert!(
-            (1300..=1500).contains(&out.sent_ms),
-            "trimmed to speech + pad: {}",
+            out.sent_ms.abs_diff(expected) <= 100,
+            "trimmed to speech + pad ({expected} ms): {}",
             out.sent_ms
         );
         assert!(out.bytes > 0 && out.stages.request == 7.0);
