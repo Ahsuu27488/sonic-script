@@ -1,6 +1,7 @@
 //! Dictation mode, the default when `sonicscript.exe` runs without arguments (M1 plan step 5). The dictation
 //! key opens the mic and warms both engines' connections at once; stopping runs the pipeline on a worker thread,
-//! prints the text and pastes it at the cursor of the window in front (step 7, `inject`).
+//! prints the text and pastes it at the cursor of the window in front (step 7, `inject`), then keeps the
+//! recording and the text in the local history (`history`, D-032).
 
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -12,7 +13,8 @@ use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::{self, Outcome, Transcribe};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_RCONTROL;
 
-use crate::audio::Recorder;
+use crate::audio::{Recorder, Recording};
+use crate::history::{Clip, History};
 use crate::inject::{self, Pasted};
 use crate::key::{Choice, Engines};
 use crate::{hotkey, key};
@@ -20,13 +22,24 @@ use crate::{hotkey, key};
 /// Safety cap on one recording (M1 plan step 5): a forgotten toggle does not keep the mic open.
 const MAX_RECORDING: Duration = Duration::from_secs(5 * 60);
 
-pub fn run(choice: Choice) -> Result<(), String> {
+/// One finished recording on its way to text.
+struct Job {
+    rec: Recording,
+    stopped: Instant,
+    mic_open_ms: u128,
+    /// False for `--record`: a mic check only prints (its window is in front, and text pasted into a console
+    /// could run as commands).
+    paste: bool,
+}
+
+pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
     let client = Arc::new(key::engines(choice)?);
     let mut id = key::describe(&client);
     if !client.first().formats() {
         id += "; no formatting";
     }
     let normalizer = Arc::new(Normalizer::new());
+    let history = open_history(keep_history).map(Arc::new);
     let (tx, rx) = mpsc::channel();
     // The key is a setting from step 6 on (D-018); Right Ctrl is the default (D-015).
     hotkey::spawn(VK_RCONTROL, tx)?;
@@ -37,12 +50,12 @@ pub fn run(choice: Choice) -> Result<(), String> {
          Or hold Right Ctrl while you speak. Esc cancels. Close this window or press Ctrl+C to quit."
     );
 
-    let mut recording: Option<(Recorder, Instant)> = None;
+    let mut recording: Option<(Recorder, Instant, u128)> = None;
     loop {
         let action = match rx.recv_timeout(Duration::from_millis(200)) {
             Ok(action) => action,
             Err(RecvTimeoutError::Timeout) => match &recording {
-                Some((_, since)) if since.elapsed() >= MAX_RECORDING => {
+                Some((_, since, _)) if since.elapsed() >= MAX_RECORDING => {
                     println!("  5-minute limit reached: stopping.");
                     hotkey::force_stop();
                     Action::Stop
@@ -58,13 +71,12 @@ pub fn run(choice: Choice) -> Result<(), String> {
                 let t = Instant::now();
                 match Recorder::start() {
                     Ok(r) => {
+                        let mic_open_ms = t.elapsed().as_millis();
                         println!(
-                            "● Recording ({}, {} Hz, mic open in {} ms)",
-                            r.device,
-                            r.rate,
-                            t.elapsed().as_millis()
+                            "● Recording ({}, {} Hz, mic open in {mic_open_ms} ms)",
+                            r.device, r.rate,
                         );
-                        recording = Some((r, Instant::now()));
+                        recording = Some((r, Instant::now(), mic_open_ms));
                     }
                     Err(e) => {
                         hotkey::force_stop();
@@ -73,19 +85,26 @@ pub fn run(choice: Choice) -> Result<(), String> {
                 }
             }
             Action::Cancel => {
-                if let Some((r, _)) = recording.take() {
+                if let Some((r, ..)) = recording.take() {
                     drop(r.stop());
                     println!("  Cancelled.");
                 }
             }
             Action::Stop => {
-                let Some((r, _)) = recording.take() else {
+                let Some((r, _, mic_open_ms)) = recording.take() else {
                     continue;
                 };
-                let stopped = Instant::now();
-                let rec = r.stop();
-                let (client, normalizer) = (client.clone(), normalizer.clone());
-                std::thread::spawn(move || transcribe(rec, stopped, &client, &normalizer, true));
+                let job = Job {
+                    stopped: Instant::now(),
+                    rec: r.stop(),
+                    mic_open_ms,
+                    paste: true,
+                };
+                let (client, normalizer, history) =
+                    (client.clone(), normalizer.clone(), history.clone());
+                std::thread::spawn(move || {
+                    transcribe(job, &client, &normalizer, history.as_deref());
+                });
             }
         }
     }
@@ -93,40 +112,70 @@ pub fn run(choice: Choice) -> Result<(), String> {
 
 /// `--record <seconds>`: the same mic → pipeline path without the key, to check the microphone (and to test
 /// it where no key can be pressed, e.g. a locked PC).
-pub fn record_for(seconds: f64, choice: Choice) -> Result<(), String> {
+pub fn record_for(seconds: f64, choice: Choice, keep_history: bool) -> Result<(), String> {
     let client = key::engines(choice)?;
     let normalizer = Normalizer::new();
+    let history = open_history(keep_history);
     let warm = std::thread::spawn(move || {
         client.warm();
         client
     });
+    let t = Instant::now();
     let r = Recorder::start()?;
+    let mic_open_ms = t.elapsed().as_millis();
     println!("● Recording {seconds} s ({}, {} Hz)", r.device, r.rate);
     std::thread::sleep(Duration::from_secs_f64(seconds));
-    let stopped = Instant::now();
-    let rec = r.stop();
+    let job = Job {
+        stopped: Instant::now(),
+        rec: r.stop(),
+        mic_open_ms,
+        paste: false,
+    };
     let client = warm.join().map_err(|_| "warm-up thread panicked")?;
-    // A mic check only prints: its window is in front, and text pasted into a console could run as commands.
-    transcribe(rec, stopped, &client, &normalizer, false);
+    transcribe(job, &client, &normalizer, history.as_ref());
     Ok(())
 }
 
-fn transcribe(
-    rec: crate::audio::Recording,
-    stopped: Instant,
-    client: &Engines,
-    normalizer: &Normalizer,
-    paste: bool,
-) {
-    let stream = match rec.stream {
+/// The history folder, or `None` with a notice when it is turned off or cannot be made (dictation goes on).
+fn open_history(keep: bool) -> Option<History> {
+    if !keep {
+        println!("History is off (--no-history): recordings and text are not kept.");
+        return None;
+    }
+    match History::open() {
+        Ok(h) => {
+            println!(
+                "Each recording and its text are kept in {} (--no-history to turn off).",
+                h.dir().display()
+            );
+            Some(h)
+        }
+        Err(e) => {
+            eprintln!("  ! History is off: could not create its folder: {e}");
+            None
+        }
+    }
+}
+
+fn transcribe(job: Job, client: &Engines, normalizer: &Normalizer, history: Option<&History>) {
+    let Job {
+        rec,
+        stopped,
+        mic_open_ms,
+        paste,
+    } = job;
+    let mut stream = match rec.stream {
         Ok(s) => s,
         Err(e) => {
             eprintln!("  {e}");
             return;
         }
     };
-    let out = pipeline::run_streamed(&rec.samples, stream, client, normalizer);
+    let out = pipeline::run_streamed(&rec.samples, &mut stream, client, normalizer);
     let key_up_to_text = stopped.elapsed().as_millis();
+    let mut app = None;
+    let mut paste_result = if paste { "not pasted" } else { "off" }.to_string();
+    let mut paste_ms = None;
     let seconds = f64::from(out.audio_ms) / 1000.0;
     if let Some(e) = &out.error {
         // In a chain, an error comes back only when every engine asked failed.
@@ -143,16 +192,24 @@ fn transcribe(
     } else {
         println!("→ {}", out.text.trim_end().replace('\n', "\n  "));
         let pasted = if paste {
+            app = inject::app_in_front();
             let t = Instant::now();
-            match inject::paste(&out.text) {
-                Ok(Pasted::Pasted) => format!(" · pasted in {} ms", t.elapsed().as_millis()),
+            let result = inject::paste(&out.text);
+            paste_ms = Some(t.elapsed().as_millis());
+            match result {
+                Ok(Pasted::Pasted) => {
+                    paste_result = "pasted".into();
+                    format!(" · pasted in {} ms", t.elapsed().as_millis())
+                }
                 Ok(Pasted::Copied(why)) => {
+                    paste_result = format!("copied: {why}");
                     println!(
                         "  ! Copied, not pasted ({why}): press Ctrl+V where you want the text."
                     );
                     String::new()
                 }
                 Err(e) => {
+                    paste_result = format!("failed: {e}");
                     eprintln!("  ! Not pasted: {e}");
                     String::new()
                 }
@@ -184,6 +241,26 @@ fn transcribe(
     }
     for note in limit_notes(&out) {
         println!("  {note}");
+    }
+    // After the paste, so keeping the history adds nothing to the wait.
+    if let Some(history) = history {
+        let clip = Clip {
+            audio: stream
+                .finish(0..stream.len())
+                .map(|e| e.bytes)
+                .map_err(|e| e.to_string()),
+            mic_open_ms,
+            key_up_to_text_ms: key_up_to_text,
+            mode: if paste { "dictation" } else { "record" },
+            main_engine: client.first().id(),
+            formatting: client.first().formats(),
+            app,
+            paste: paste_result,
+            paste_ms,
+        };
+        if let Err(e) = history.save(&out, clip) {
+            eprintln!("  ! Not kept in the history: {e}");
+        }
     }
 }
 

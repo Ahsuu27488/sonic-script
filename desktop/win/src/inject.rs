@@ -27,7 +27,8 @@ use windows_sys::Win32::System::Memory::{
 };
 use windows_sys::Win32::System::Ole::CF_UNICODETEXT;
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
+    GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_NAME_WIN32,
+    PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput,
@@ -125,6 +126,39 @@ fn for_window(text: &str, class: &str) -> String {
 fn keep_format(format: u32) -> bool {
     const NOT_MEMORY: [u32; 8] = [2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E];
     !NOT_MEMORY.contains(&format) && !(0x0300..=0x03FF).contains(&format)
+}
+
+/// The app in front: its program's file name (`WhatsApp.exe`) and window class, for the dictation history.
+pub fn app_in_front() -> Option<(String, String)> {
+    // SAFETY: plain Win32 call.
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.is_null() {
+        return None;
+    }
+    Some((exe_name(hwnd).unwrap_or_default(), class_name(hwnd)))
+}
+
+fn exe_name(hwnd: HWND) -> Option<String> {
+    let mut pid = 0u32;
+    let mut buf = [0u16; 1024];
+    let mut len = buf.len() as u32;
+    // SAFETY: plain Win32 calls; `buf` is writable for `len` characters; the handle is closed below.
+    let ok = unsafe {
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process.is_null() {
+            return None;
+        }
+        let ok =
+            QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len);
+        CloseHandle(process);
+        ok
+    };
+    if ok == 0 {
+        return None;
+    }
+    let path = String::from_utf16_lossy(&buf[..len as usize]);
+    path.rsplit('\\').next().map(str::to_string)
 }
 
 fn class_name(hwnd: HWND) -> String {

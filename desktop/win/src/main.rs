@@ -1,12 +1,15 @@
 //! SonicScript for Windows (M1 plan: `docs/plans/2026-11-02-m1-windows-push-to-talk.md`). Without arguments
 //! it listens for the dictation key and types what was said at the cursor (steps 5 and 7). `--file` and
-//! `--bench` run the same pipeline on WAV files (the golden check, step 4).
+//! `--bench` run the same pipeline on WAV files (the golden check, step 4). Dictation keeps each recording and
+//! its text in the local history (`history`, D-032) unless `--no-history`.
 
 #[cfg(windows)]
 mod audio;
 mod bench;
 #[cfg(windows)]
 mod dictate;
+#[cfg(windows)]
+mod history;
 #[cfg(windows)]
 mod hotkey;
 #[cfg(windows)]
@@ -26,7 +29,7 @@ use sonicscript_core::pipeline::{self, Transcribe};
 use crate::key::Choice;
 
 const USAGE: &str = "\
-usage: sonicscript [--engine <id>] [--no-format] [mode]
+usage: sonicscript [--engine <id>] [--no-format] [--no-history] [mode]
   sonicscript                                 dictation: tap or hold Right Ctrl, speak; the text is typed at the cursor
   sonicscript --models                        the models you can use: free / paid, limits, test results
   sonicscript --record <seconds>              mic check: record, then print the text (0.5-300 s)
@@ -37,6 +40,8 @@ Flash-Lite and Groq Whisper, each asked when the one before is slow, fails or is
 --engine <id> runs that engine from spec/providers.json alone.
 The text is formatted (lists, take-backs, fillers, numbers as digits) on Groq after whichever engine answers;
 --no-format gives the exact words.
+Dictation and --record keep each recording (Opus, about 2 KB a second) and its text in
+%LOCALAPPDATA%\\SonicScript\\history (history.jsonl + audio\\); --no-history keeps nothing.
 Keys come from GROQ_API_KEY / GEMINI_API_KEY (this console or your Windows user environment).";
 
 fn main() -> ExitCode {
@@ -63,6 +68,13 @@ fn main() -> ExitCode {
         }
         None => true,
     };
+    let keep_history = match args.iter().position(|a| a == "--no-history") {
+        Some(i) => {
+            args.remove(i);
+            false
+        }
+        None => true,
+    };
     let choice = match key::choose(engine_id.as_deref(), format) {
         Ok(e) => e,
         Err(e) => {
@@ -81,11 +93,11 @@ fn main() -> ExitCode {
             _ => return usage(),
         },
         #[cfg(windows)]
-        None => dictate::run(choice),
+        None => dictate::run(choice, keep_history),
         #[cfg(windows)]
         Some("--record") => match args.get(1).and_then(|s| s.parse::<f64>().ok()) {
             Some(s) if args.len() == 2 && (0.5..=300.0).contains(&s) => {
-                dictate::record_for(s, choice)
+                dictate::record_for(s, choice, keep_history)
             }
             _ => return usage(),
         },

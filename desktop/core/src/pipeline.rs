@@ -90,7 +90,7 @@ pub fn run(samples: &[f32], engine: &impl Transcribe, normalizer: &Normalizer) -
     let stream = Stream::new().and_then(|mut s| s.push(samples).map(|()| s));
     let encode_ms = elapsed(t);
     let mut out = match stream {
-        Ok(stream) => run_streamed(samples, stream, engine, normalizer),
+        Ok(mut stream) => run_streamed(samples, &mut stream, engine, normalizer),
         Err(e) => Outcome {
             audio_ms: ms_of(samples.len()),
             error: Some(PipelineError::Encode(e)),
@@ -103,10 +103,11 @@ pub fn run(samples: &[f32], engine: &impl Transcribe, normalizer: &Normalizer) -
 }
 
 /// A clip recorded live: `samples` are everything recorded and `stream` has been fed the same samples while
-/// recording (plan step 5), so only the last frame and the Ogg file are left to do here.
+/// recording (plan step 5), so only the last frame and the Ogg file are left to do here. The stream keeps its
+/// packets: `stream.finish(0..stream.len())` afterwards gives the whole recording (the dictation history).
 pub fn run_streamed(
     samples: &[f32],
-    stream: Stream,
+    stream: &mut Stream,
     engine: &impl Transcribe,
     normalizer: &Normalizer,
 ) -> Outcome {

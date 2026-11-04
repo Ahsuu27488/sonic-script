@@ -126,8 +126,9 @@ impl Stream {
 
     /// The Ogg/Opus file for `keep` (sample indexes, as [`crate::vad::Detection::keep`]). It starts at the
     /// frame that holds `keep.start`: a decoder starting mid-stream needs a few ms to settle, which falls in
-    /// the voice gate's padding. `0..len()` gives the whole clip.
-    pub fn finish(mut self, keep: std::ops::Range<usize>) -> Result<Encoded, EncodeError> {
+    /// the voice gate's padding. `0..len()` gives the whole clip. The packets stay, so it can be called again
+    /// (the trimmed clip for the engine, then the whole recording for the history).
+    pub fn finish(&mut self, keep: std::ops::Range<usize>) -> Result<Encoded, EncodeError> {
         let end = keep.end.min(self.len);
         if !self.pending.is_empty() || self.packets.is_empty() {
             self.encode_pending()?;
@@ -146,7 +147,7 @@ impl Stream {
         )?;
         w.write_packet(opus_tags(), SERIAL, PacketWriteEndInfo::EndPage, 0)?;
         let count = last - first;
-        for (i, packet) in self.packets.drain(first..last).enumerate() {
+        for (i, packet) in self.packets[first..last].iter().enumerate() {
             let done = i + 1 == count;
             let granule = self.pre_skip
                 + if done {
@@ -159,7 +160,7 @@ impl Stream {
             } else {
                 PacketWriteEndInfo::NormalPacket
             };
-            w.write_packet(packet, SERIAL, info, granule)?;
+            w.write_packet(packet.clone(), SERIAL, info, granule)?;
         }
         Ok(Encoded {
             bytes: w.into_inner(),
@@ -278,6 +279,17 @@ mod tests {
         }
         assert_eq!(s.len(), samples.len());
         assert_eq!(s.finish(0..samples.len()).unwrap().bytes, whole.bytes);
+    }
+
+    #[test]
+    fn finish_can_be_called_again_for_the_whole_clip() {
+        let samples = tone(1.3, 180.0);
+        let whole = opus(&samples).unwrap();
+        let mut s = Stream::new().unwrap();
+        s.push(&samples).unwrap();
+        let part = s.finish(5 * FRAME..20 * FRAME).unwrap();
+        assert!(part.bytes.len() < whole.bytes.len());
+        assert_eq!(s.finish(0..s.len()).unwrap().bytes, whole.bytes);
     }
 
     #[test]
