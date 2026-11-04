@@ -33,6 +33,9 @@
 - Step 7 inject: built on `feat/m1-paste` (2026-11-04) as written, plus: our own console's input cleared after
   each paste, line breaks as spaces in old console windows, `--record` never pastes, injected keys ignored by
   the hook. Not tried live yet.
+- Step 9 latency log: built 2026-11-04 on `feat/m1-history` as the dictation history (D-032): the owner
+  asked for the audio and the text too, so the "no audio and no text" rule below is replaced; the file is
+  `%LOCALAPPDATA%\SonicScript\history\history.jsonl`, the recordings sit next to it, `--no-history` turns it off.
 - Next (STATUS Next): merge PR #12 after the owner's live try, model catalog PR, mic-open delay, chain
   benchmark with 3 s waits, then step 7 (paste), step 6 (key), step 9 (latency log).
 

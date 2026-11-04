@@ -320,3 +320,17 @@ dictations a minute; STATUS known gap 3); past that the text comes out unformatt
 `spec/providers.json` `format`, `spec/prompts/format-v1.md`, `desktop/core/src/spec.rs` `format()`,
 `client.rs` `Client::with_format`, `normalize.rs` (per line), `desktop/win/src/key.rs` (`Choice.format`),
 `main.rs` (`--no-format`), `eval/sonic_eval/scoring.py` `format_score`, `reformat.py`, sentences `fmt-01`..`13`.
+
+**D-032 Dictation history: every recording and its text are kept on the PC, on by default.** (2026-11-04)
+Dictation and `--record` save the whole recording (key-down to key-up, the same Ogg/Opus 16 kbps packets that
+were encoded while recording: ~2 KB a second, ~7 MB per hour of speech) to
+`%LOCALAPPDATA%\SonicScript\history\audio\<date>\<time>.ogg` and append one line to `history.jsonl`: the raw
+engine text, the final text, which engines answered or were passed over, the app in front, the paste result and
+every timing. This line is also the latency log of M1 plan step 9, which had planned "no audio and no text"
+(text only with `--log-text`): that part of the plan is replaced. `--no-history` keeps nothing. Written after the
+paste. Nothing is deleted automatically yet; nothing leaves the PC; the folder is outside the repo (D-004
+still holds for `spec/fixtures/audio/`). *Why:* the owner asked for it before the live paste test (2026-11-04),
+to check later what was said, what was recorded and what came back; compressed so it cannot fill the nearly full
+drive C:. *Where:* `desktop/win/src/history.rs`, `dictate.rs` (`transcribe`, `open_history`), `main.rs`
+(`--no-history`), `encode.rs` (`Stream::finish` reusable), `inject.rs` (`app_in_front`). Before launch (M2): a
+settings switch, a size or age limit, and whether it starts on or off for other users.

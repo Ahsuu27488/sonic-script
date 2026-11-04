@@ -3,6 +3,17 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-history (D-032, M1 step 9)
+
+- Dictation history: new `desktop/win/src/history.rs`; dictation and `--record` keep the whole recording
+  (Ogg/Opus 16 kbps, ~2 KB/s) and one JSON line (raw and final text, engines, app in front, paste result,
+  timings) in `%LOCALAPPDATA%\SonicScript\history`; `--no-history` turns it off. It is also step 9's latency
+  log, which the plan had without audio or text: the owner asked for both (D-032).
+- `encode::Stream::finish` takes `&mut self` and keeps its packets, so the whole recording can be built after
+  the trimmed clip; `pipeline::run_streamed` takes `&mut Stream`. `inject::app_in_front` names the app.
+- Tests: `finish_can_be_called_again_for_the_whole_clip`, `a_dictation_leaves_its_recording_and_one_line`;
+  a real 2 s `--record` into a scratch folder (3.5 KB, plays back at 2.0 s).
+
 ## 2026-11-04 · feat/m1-paste (M1 step 7)
 
 - Paste at the cursor: new `desktop/win/src/inject.rs`; dictation pastes the text into the window in front and

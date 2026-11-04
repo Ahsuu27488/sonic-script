@@ -4,12 +4,13 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `feat/m1-paste` (paste at the cursor, M1 step 7; PR open, on top of
-`feat/m1-format-baje`, PR #15); `main` = PRs #3-#14.
+**Last updated:** 2026-11-04 · **Code at:** `feat/m1-history` (dictation history, D-032; PR open, on top of
+`feat/m1-paste`, PR #16, which is on top of `feat/m1-format-baje`, PR #15); `main` = PRs #3-#14.
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite → Groq Whisper,
 skipping a model whose free requests are used up (run `m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors,
-p95 4.3 s). **Paste at the cursor (step 7)** is built on `feat/m1-paste`, tests pass, not tried live yet. **Smart formatting (D-030, D-031)** is
+p95 4.3 s). **Paste at the cursor (step 7)** is built on `feat/m1-paste`, tests pass, not tried live yet.
+**Dictation history (D-032)** keeps every recording (Opus, ~2 KB/s) and its text on this PC. **Smart formatting (D-030, D-031)** is
 merged (PR #12; on by default, `--no-format` for exact words; Layout 96%, no word loss; live list, take-back
 and lakh amount right).
 
@@ -68,6 +69,14 @@ and lakh amount right).
   commands in PowerShell after it quits); old console windows get line breaks as spaces. `--record` never
   pastes. The key hook ignores injected keys. Checked: unit tests (keys per window class, line breaks, saved
   formats) and a manual round-trip on the real clipboard (`cargo test -p sonicscript inject -- --ignored`).
+- **Dictation history (D-032, branch `feat/m1-history`, also plan step 9's latency log):** dictation and
+  `--record` keep the whole recording (key-down to key-up, Ogg/Opus 16 kbps: ~2 KB a second, ~7 MB per hour
+  of speech) in `%LOCALAPPDATA%\SonicScript\history\audio\<date>\<time>.ogg` and one line in
+  `history.jsonl`: time, recording, recorded / speech / sent length, engines (main, answered, passed), raw
+  engine text, final text, formatted or not, app in front (exe, window class), paste result, timings (mic open,
+  key-up → text, paste, every stage), tokens, error. Written after the paste (no extra wait); `--no-history`
+  keeps nothing. Checked: unit test (files and lines) and a real 2 s `--record` (3.5 KB file, 14 kbps,
+  plays back at 2.0 s). Not tried in a live dictation yet.
 - **Pipeline pieces (M1 steps 1-4):** text cleanup (D-019: script guard, phantom filter, word list), voice gate
   (D-020, D-022: sends all 42 speech clips, drops both silence clips, keeps 500 ms around speech), Ogg/Opus
   16 kbps (D-021: as accurate as WAV at 8 KB per clip), golden check `--bench` scored by `eval rescore`.
@@ -105,7 +114,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 65 core + 11 app (+1 manual clipboard test)
+- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 66 core + 12 app (+1 manual clipboard test)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -114,8 +123,8 @@ and lakh amount right).
 ## In progress
 
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029); smart
-  formatting merged (D-031, PR #12); step 7 (paste) built, waiting for the owner's live try. Left: step 6 (changeable key,
-  D-018), step 9 (latency log). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
+  formatting merged (D-031, PR #12); step 7 (paste) built, waiting for the owner's live try; step 9 (latency log) built as part
+  of the dictation history (D-032). Left: step 6 (changeable key, D-018). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
 - Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
   and Claude's dictation. Measured 2026-11-04 (runs `fmt-120b`, `m1-format-app`): after Transcribe the format
@@ -176,11 +185,12 @@ and lakh amount right).
 1. **Owner: merge the format-prompt PR** (`feat/m1-format-baje`: "6:00" → "6 baje" in Urdu / Hindi).
 2. **Owner: punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
    into Claude's dictation too); then the agent changes the prompt's punctuation rule and re-runs D-031's checks.
-3. **Owner, then agent: try paste live** (`feat/m1-paste`; close any running SonicScript window first, then
-   `cd desktop; cargo run -q --release -p sonicscript`): dictate into Notepad, WhatsApp, a browser, Claude in
+3. **Owner, then agent: try paste live** (`feat/m1-history`, which has paste too; close any running
+   SonicScript window first, then `cd desktop; cargo run -q --release -p sonicscript`): dictate into Notepad, WhatsApp, a browser, Claude in
    Windows Terminal (a list keeps its lines), with an image copied before (it must be on the clipboard again
    after), and into an app run as administrator (text copied, console says Ctrl+V); Win+V must show no
-   dictated text. Agent: then merge, then step 6 (changeable key, D-018), then step 9 (latency log). M1's open
+   dictated text. Agent: then read `history.jsonl` against what the owner says happened, merge #15, #16 and
+   the history PR, then step 6 (changeable key, D-018). M1's open
    steps come before anything else (owner, 2026-11-04: milestones unchanged, M1 first).
 4. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
