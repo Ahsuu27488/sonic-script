@@ -347,3 +347,19 @@ it the free engine; Groq stays for Google outages. Cost: on a slow Google hour t
 model's, up to ~18 s in the worst case (Flash-Lite asked at 7 s, timing out at 10 s, then Groq). *Where:*
 `spec/providers.json` `chain`, `desktop/core/src/spec.rs` (`Link.last_resort`), `client.rs`
 (`Chain::with_last_resort`, `is_last_resort`), `desktop/win/src/key.rs` (`Choice.links`, `describe`).
+
+**D-034 My words: one plain list for every user, filled six ways, used in the cleanup and both prompts.**
+(2026-11-04) The format: one entry per line, `Word` or `Word = how it gets misheard, ...`, `#` for notes; the
+parser also takes any list (bullets, numbers, commas, a chatbot's answer) and shows what it found before
+adding. Ways to add (the owner settled them 2026-11-04): type them, load a file, the "copy prompt" for the
+user's own AI assistant (the owner's idea, the main one), collect mode (dictate words to that assistant),
+starter packs (M2), suggestions from the history and from corrections, accepted one by one (never silent). No
+limit on the list; each request gets a small part: the Gemini audio prompt the first 300 words, the format
+step the whole list up to 40 or else only the words close to the transcript (Groq's free 8K tokens a minute),
+the local cleanup all of them (mishearings become exact replacements); never Whisper's prompt (D-014).
+Built for the command line first (`words.txt` + `--words*` commands), the settings box in M2. *Why:* the owner:
+it is for every user, not just him; nobody should have to write a dictionary, so their AI assistant writes it
+from what it knows about them. *Where:* `desktop/core/src/words.rs`, `normalize.rs` (`with_words`), `spec.rs`
+(`with_words`, `words_at`), `gemini.rs`, `client.rs` (`Client::with_words`), `desktop/win/src/mywords.rs`,
+`key.rs` (`Choice.words`, `normalizer`), `spec/prompts/words-assistant-v1.md`,
+`docs/plans/2026-11-04-word-list.md`.

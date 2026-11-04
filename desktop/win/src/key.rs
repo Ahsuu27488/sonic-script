@@ -2,11 +2,14 @@
 //! (`HKCU\Environment`), which a console opened before the key was set does not see yet. Same order as
 //! `eval` `load_env`, without `eval/.env`. Keys are never printed or logged.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use sonicscript_core::client::{Chain, Client};
+use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::Transcribe;
 use sonicscript_core::spec;
+use sonicscript_core::words::WordList;
 
 /// What the app runs: engines in order of preference (D-029).
 pub type Engines = Chain<Client>;
@@ -17,6 +20,8 @@ pub struct Choice {
     pub links: Vec<(spec::Engine, Duration, bool)>,
     /// The smart-formatting step run after whichever engine answers (D-030); `None` with `--no-format`.
     pub format: Option<spec::Refine>,
+    /// The user's words (D-034), for dictation and `--file`; `None` for `--bench` (comparable runs).
+    pub words: Option<Arc<WordList>>,
 }
 
 /// `--engine <id>` runs that engine alone (to measure or try one); without it, the spec's chain.
@@ -39,7 +44,19 @@ pub fn choose(id: Option<&str>, format: bool) -> Result<Choice, String> {
         )],
     };
     let format = if format { spec::format() } else { None };
-    Ok(Choice { links, format })
+    Ok(Choice {
+        links,
+        format,
+        words: None,
+    })
+}
+
+/// The text cleanup with the user's words (D-034), when the choice has them.
+pub fn normalizer(choice: &Choice) -> Normalizer {
+    match &choice.words {
+        Some(w) => Normalizer::new().with_words(w),
+        None => Normalizer::new(),
+    }
 }
 
 /// Clients for the chosen engines. In a chain, an engine whose key is missing is left out with a one-line
@@ -66,7 +83,13 @@ pub fn engines(choice: Choice) -> Result<Engines, String> {
             None => Ok(c),
         });
         match client {
-            Ok(client) => links.push((client, wait, last_resort)),
+            Ok(client) => {
+                let client = match &choice.words {
+                    Some(w) if !w.is_empty() => client.with_words(w.clone()),
+                    _ => client,
+                };
+                links.push((client, wait, last_resort));
+            }
             Err(e) => {
                 if many {
                     eprintln!("  Note: {id} left out ({e}).");

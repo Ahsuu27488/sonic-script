@@ -330,6 +330,34 @@ impl Drop for Clipboard {
     }
 }
 
+/// Puts `text` on the clipboard for the user to paste (kept out of clipboard history, like a dictation).
+pub fn copy(text: &str) -> Result<(), String> {
+    set_text(&text.replace("\r\n", "\n").replace('\n', "\r\n")).map(|_| ())
+}
+
+/// The text on the clipboard (`--words-paste`).
+pub fn clipboard_text() -> Result<String, String> {
+    let _open = Clipboard::open()?;
+    // SAFETY: the clipboard is open; the handle stays the clipboard's (only read, never freed); the text is a
+    // NUL-terminated UTF-16 string within the block's size.
+    unsafe {
+        let mem = GetClipboardData(u32::from(CF_UNICODETEXT));
+        if mem.is_null() {
+            return Err("there is no text on the clipboard: copy the list first".into());
+        }
+        let ptr = GlobalLock(mem).cast::<u16>();
+        if ptr.is_null() {
+            return Err("could not read the clipboard".into());
+        }
+        let max = GlobalSize(mem) / 2;
+        let units = std::slice::from_raw_parts(ptr, max);
+        let len = units.iter().position(|&u| u == 0).unwrap_or(max);
+        let text = String::from_utf16_lossy(&units[..len]);
+        GlobalUnlock(mem);
+        Ok(text)
+    }
+}
+
 /// Every format on the clipboard that is a block of memory (text, rich text, HTML, images as DIB, files).
 fn save() -> Result<Vec<(u32, Vec<u8>)>, String> {
     let _open = Clipboard::open()?;

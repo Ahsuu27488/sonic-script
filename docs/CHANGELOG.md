@@ -3,6 +3,18 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-words (D-034)
+
+- My words, phase A of the word-list plan (owner's go-ahead 2026-11-04: "for every user, not just me"): new
+  `desktop/core/src/words.rs` (forgiving parser, merge, `prompt_line` with near-word choice for long lists,
+  `GUIDE`), `desktop/win/src/mywords.rs` (`words.txt` in `%APPDATA%\SonicScript`, `--words`, `--words-prompt`,
+  `--words-add`, `--words-paste`, `--words-suggest`), `spec/prompts/words-assistant-v1.md` (the prompt for the
+  user's AI assistant). The list goes to the cleanup (`Normalizer::with_words`, mishearings as replacements),
+  the Gemini audio prompt and the format step (`spec::with_words` fills `{word_list}` at request time;
+  `Client::with_words`). `inject::copy`, `inject::clipboard_text`.
+- Tests: 6 new (parser on our format and on a chatbot answer, merge, near words, words in both requests,
+  mishearing replacement, history names, the assistant prompt); real runs of every command.
+
 ## 2026-11-04 · feat/m1-sound
 
 - Start / stop chimes (owner, live try: "show that my click registered"): new `desktop/win/src/cue.rs`; a rising

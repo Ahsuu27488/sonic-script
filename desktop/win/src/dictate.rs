@@ -34,13 +34,17 @@ struct Job {
 }
 
 pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
+    let normalizer = Arc::new(key::normalizer(&choice));
+    let words = choice.words.as_ref().map(|w| crate::mywords::summary(w));
     let client = Arc::new(key::engines(choice)?);
     let mut id = key::describe(&client);
     if !client.first().formats() {
         id += "; no formatting";
     }
-    let normalizer = Arc::new(Normalizer::new());
     let history = open_history(keep_history).map(Arc::new);
+    if let Some(words) = words {
+        println!("{words}");
+    }
     let (tx, rx) = mpsc::channel();
     // The key is a setting from step 6 on (D-018); Right Ctrl is the default (D-015).
     hotkey::spawn(VK_RCONTROL, tx)?;
@@ -120,8 +124,8 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
 /// `--record <seconds>`: the same mic → pipeline path without the key, to check the microphone (and to test
 /// it where no key can be pressed, e.g. a locked PC).
 pub fn record_for(seconds: f64, choice: Choice, keep_history: bool) -> Result<(), String> {
+    let normalizer = key::normalizer(&choice);
     let client = key::engines(choice)?;
-    let normalizer = Normalizer::new();
     let history = open_history(keep_history);
     let warm = std::thread::spawn(move || {
         client.warm();

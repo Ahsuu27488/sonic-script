@@ -16,6 +16,7 @@ use crate::gemini::Gemini;
 use crate::groq::Groq;
 use crate::pipeline::Transcribe;
 use crate::spec::{Engine, Refine};
+use crate::words::{AUDIO_PROMPT_MAX, FORMAT_PROMPT_MAX, WordList};
 
 enum Speech {
     Groq(Groq),
@@ -30,6 +31,8 @@ pub struct Client {
     /// that text is used unformatted (D-030).
     optional: bool,
     formats: bool,
+    /// The user's words (D-034): in the Gemini prompt and the format / refine step.
+    words: Option<Arc<WordList>>,
 }
 
 impl Client {
@@ -51,7 +54,19 @@ impl Client {
             refiner,
             optional: false,
             formats: false,
+            words: None,
         })
+    }
+
+    /// The user's word list ("My words", D-034): the first [`AUDIO_PROMPT_MAX`] words go with the audio to a
+    /// Gemini model that takes a prompt; the format / refine step gets the whole list when it is short, else
+    /// the words that come close to the transcript. Never in the Whisper prompt (D-014).
+    pub fn with_words(mut self, words: Arc<WordList>) -> Self {
+        if let Speech::Gemini(g) = &mut self.speech {
+            g.set_words(words.prompt_line(None, AUDIO_PROMPT_MAX));
+        }
+        self.words = Some(words);
+        self
     }
 
     /// Runs the smart-formatting step (D-030, `spec::format`) after the speech call, in place of the engine's
@@ -106,7 +121,7 @@ impl Transcribe for Client {
         };
         match &self.refiner {
             Some(r) if !heard.text.trim().is_empty() => {
-                let refined = match r.run(&heard.text) {
+                let refined = match r.run(&heard.text, self.words.as_deref()) {
                     Ok(refined) => refined,
                     Err(e) if self.optional => {
                         return Ok(Transcript {
@@ -357,13 +372,17 @@ impl Refiner {
             .send();
     }
 
-    fn run(&self, text: &str) -> Result<Transcript, ApiError> {
+    fn run(&self, text: &str, words: Option<&WordList>) -> Result<Transcript, ApiError> {
         let s = &self.spec;
+        let line = words
+            .map(|w| w.prompt_line(Some(text), FORMAT_PROMPT_MAX))
+            .unwrap_or_default();
+        let prompt = crate::spec::with_words(&s.prompt, s.words_at, &line);
         let mut body = json!({
             "model": s.model,
             "temperature": 0,
             "messages": [
-                { "role": "system", "content": s.prompt },
+                { "role": "system", "content": prompt },
                 { "role": "user", "content": text },
             ],
         });
@@ -465,6 +484,33 @@ mod tests {
                 .unwrap()
                 .contains("You turn a raw dictation transcript")
         );
+    }
+
+    #[test]
+    fn the_users_words_go_with_the_audio_and_to_the_format_step() {
+        let (gemini_url, gemini_requests) = server(vec![(200, "", GEMINI_REPLY)]);
+        let (groq_url, groq_requests) = server(vec![(
+            200,
+            "",
+            r#"{"choices":[{"message":{"content":"Doodh"}}]}"#,
+        )]);
+        let mut format = spec::format().unwrap();
+        format.provider.base_url = groq_url;
+        let words = Arc::new(WordList::from_text("Claude = McCloud\nTaskvane"));
+        let client = flash_lite_at(gemini_url)
+            .with_format(format, |var| format!("{var}-value"))
+            .unwrap()
+            .with_words(words);
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        client.transcribe(&audio).unwrap();
+        let line = "Spell these words exactly like this when you hear them: Claude (may come out as \
+                    McCloud), Taskvane.";
+        let gemini = gemini_requests.recv().unwrap();
+        assert!(gemini.contains(line), "Gemini prompt: {gemini}");
+        let groq = groq_requests.recv().unwrap();
+        assert!(groq.contains(line), "format prompt: {groq}");
+        // In the slot: just before the closing instruction, not at the end of the prompt.
+        assert!(groq.contains(&format!("{line}\\n\\nOutput only the final text")));
     }
 
     #[test]

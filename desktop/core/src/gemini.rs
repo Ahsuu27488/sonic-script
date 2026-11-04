@@ -18,6 +18,8 @@ pub struct Gemini {
     http: Client,
     engine: GeminiEngine,
     key: String,
+    /// The user's words for the prompt's `{word_list}` slot (`words::WordList::prompt_line`), or "".
+    words: String,
 }
 
 impl Gemini {
@@ -28,7 +30,14 @@ impl Gemini {
             http: api::client()?,
             engine,
             key,
+            words: String::new(),
         })
+    }
+
+    /// The user's words for the prompt (a `words::WordList::prompt_line`); the speech-to-text model has no
+    /// prompt and ignores them.
+    pub fn set_words(&mut self, line: String) {
+        self.words = line;
     }
 
     pub fn engine(&self) -> &GeminiEngine {
@@ -51,6 +60,7 @@ impl Gemini {
         let e = &self.engine;
         let mut parts = Vec::new();
         if let Some(prompt) = &e.prompt {
+            let prompt = crate::spec::with_words(prompt, e.words_at, &self.words);
             parts.push(json!({ "text": prompt }));
         }
         parts.push(json!({ "inline_data": {

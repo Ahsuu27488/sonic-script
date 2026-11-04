@@ -12,3 +12,4 @@ pub mod pipeline;
 pub mod resample;
 pub mod spec;
 pub mod vad;
+pub mod words;
