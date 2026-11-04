@@ -47,8 +47,10 @@ def build(providers: dict, results_dir: Path, runs: list[str], app_runs: list[st
         if app:
             entry["app_check"] = app
         models.append(entry)
-    # Free first, then by measured accuracy.
-    models.sort(key=lambda m: (m["tier"] != "free", -(m["results"] or {}).get("accuracy", 0)))
+    # Free first; within a tier the chain's order (the default, then fallback 1, 2, ...), then the rest by
+    # measured accuracy. Sorting the chain by accuracy could list a fallback above the default.
+    models.sort(key=lambda m: (m["tier"] != "free", 0 if m["recommended"] else m["fallback"] or len(chain),
+                               -(m["results"] or {}).get("accuracy", 0)))
     return {
         "version": 1,
         "generated": dt.date.today().isoformat(),
