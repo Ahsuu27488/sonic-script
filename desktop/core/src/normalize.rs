@@ -136,29 +136,41 @@ impl Normalizer {
         }
     }
 
-    /// Adds the user's word list (`words.txt`): one entry per line or comma, `#` starts a comment line.
-    pub fn with_word_list(mut self, list: &str) -> Self {
-        for line in list.lines() {
-            if line.trim_start().starts_with('#') {
-                continue;
+    /// Adds the user's word list (`words.txt`, the format in [`crate::words`]): each word, and each "heard as"
+    /// mishearing as an exact replacement by that word.
+    pub fn with_word_list(self, list: &str) -> Self {
+        self.with_words(&crate::words::WordList::from_text(list))
+    }
+
+    pub fn with_words(mut self, list: &crate::words::WordList) -> Self {
+        for entry in &list.entries {
+            let text = entry.word.clone();
+            let lower = words_of(&text);
+            match lower.len() {
+                0 => {}
+                1 => {
+                    let skeleton = skeleton(&text)
+                        .filter(|(_, consonants)| *consonants >= self.fuzzy_min_consonants)
+                        .map(|(s, _)| s);
+                    let lower = lower.into_iter().next().unwrap_or_default();
+                    self.words.push(Entry::Word {
+                        text: text.clone(),
+                        lower,
+                        skeleton,
+                    });
+                }
+                _ => self.words.push(Entry::Phrase {
+                    text: text.clone(),
+                    lower,
+                }),
             }
-            for item in line.split(',') {
-                let text = item.split_whitespace().collect::<Vec<_>>().join(" ");
-                let lower = words_of(&text);
-                match lower.len() {
-                    0 => {}
-                    1 => {
-                        let skeleton = skeleton(&text)
-                            .filter(|(_, consonants)| *consonants >= self.fuzzy_min_consonants)
-                            .map(|(s, _)| s);
-                        let lower = lower.into_iter().next().unwrap_or_default();
-                        self.words.push(Entry::Word {
-                            text,
-                            lower,
-                            skeleton,
-                        });
-                    }
-                    _ => self.words.push(Entry::Phrase { text, lower }),
+            for heard in &entry.heard_as {
+                let lower = words_of(heard);
+                if !lower.is_empty() {
+                    self.words.push(Entry::Phrase {
+                        text: text.clone(),
+                        lower,
+                    });
                 }
             }
         }
@@ -450,7 +462,7 @@ fn is_urdu_vowel(c: char) -> bool {
 /// How a Latin word sounds, roughly: consonants folded by sound, every vowel run one `V`, doubled
 /// letters once. "Gemini" and "Jaminai" both give `jVmVnV`. Also returns the number of consonants.
 /// `None` when the word is not plain ASCII letters.
-fn skeleton(word: &str) -> Option<(String, usize)> {
+pub(crate) fn skeleton(word: &str) -> Option<(String, usize)> {
     if word.is_empty() || !word.bytes().all(|b| b.is_ascii_alphabetic()) {
         return None;
     }
@@ -637,6 +649,18 @@ mod tests {
         let n = Normalizer::new().with_word_list("# my words\nGemini, Groq\n\n  VS   Code ,\n");
         assert_eq!(n.words.len(), 3);
         assert!(matches!(&n.words[0], Entry::Phrase { text, .. } if text == "VS Code"));
+    }
+
+    #[test]
+    fn mishearings_in_the_word_list_are_replaced() {
+        let n = Normalizer::new().with_word_list("Claude = McCloud, Mc Cloud\nhun = hoon");
+        assert_eq!(
+            n.clean("Maine claude bola, isne McCloud likha. Main ghar pe hoon.")
+                .text
+                .trim_end(),
+            "Maine Claude bola, isne Claude likha. Main ghar pe hun."
+        );
+        assert_eq!(n.clean("Mc Cloud").text.trim_end(), "Claude");
     }
 
     #[test]

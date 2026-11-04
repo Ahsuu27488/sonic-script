@@ -18,6 +18,8 @@ mod hotkey;
 mod inject;
 mod key;
 mod models;
+#[cfg(windows)]
+mod mywords;
 mod wav;
 
 use std::fs::File;
@@ -25,7 +27,6 @@ use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::{self, Transcribe};
 
 use crate::key::Choice;
@@ -45,6 +46,12 @@ The text is formatted (lists, take-backs, fillers, numbers as digits) on Groq af
 Dictation and --record keep each recording (Opus, about 2 KB a second) and its text in
 %LOCALAPPDATA%\\SonicScript\\history (history.jsonl + audio\\); --no-history keeps nothing.
 A short chime plays when dictation starts, stops or is cancelled; --no-sound turns it off.
+Your words (names and terms to always get right): %APPDATA%\\SonicScript\\words.txt
+  sonicscript --words                         open your word list in Notepad (the format is explained at the top)
+  sonicscript --words-prompt                  copy a prompt for your AI assistant: it writes your word list
+  sonicscript --words-add <file>...           add the words in text files (any list works)
+  sonicscript --words-paste                   add the words on the clipboard (e.g. your AI assistant's answer)
+  sonicscript --words-suggest                 pick names from your dictation history to add
 Keys come from GROQ_API_KEY / GEMINI_API_KEY (this console or your Windows user environment).";
 
 fn main() -> ExitCode {
@@ -83,13 +90,28 @@ fn main() -> ExitCode {
         #[cfg(windows)]
         cue::set_enabled(false);
     }
-    let choice = match key::choose(engine_id.as_deref(), format) {
+    #[cfg(windows)]
+    if let Some(result) = mywords::command(&args) {
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        };
+    }
+    let mut choice = match key::choose(engine_id.as_deref(), format) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("{e}");
             return ExitCode::from(2);
         }
     };
+    // The user's words for dictation and --file; --bench stays without them (comparable runs).
+    #[cfg(windows)]
+    if args.first().map(String::as_str) != Some("--bench") {
+        choice.words = Some(std::sync::Arc::new(mywords::load()));
+    }
     let result = match args.first().map(String::as_str) {
         Some("--models") => models::print(),
         Some("--file") if args.len() > 1 => file(&args[1..], choice),
@@ -127,8 +149,8 @@ fn usage() -> ExitCode {
 
 /// Prints the text to paste for each file (one line each) and its timings to stderr.
 fn file(paths: &[String], choice: Choice) -> Result<(), String> {
+    let normalizer = key::normalizer(&choice);
     let client = key::engines(choice)?;
-    let normalizer = Normalizer::new();
     client.warm();
     for path in paths {
         let samples = wav::read(Path::new(path)).map_err(|e| format!("{path}: {e}"))?;

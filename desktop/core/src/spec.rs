@@ -68,6 +68,8 @@ pub struct GeminiEngine {
     pub model: String,
     /// The instruction sent with the audio (`gemini-audio`); `None` for the speech-to-text model.
     pub prompt: Option<String>,
+    /// Where the prompt's `{word_list}` slot was (byte offset in `prompt`): the user's words go there.
+    pub words_at: Option<usize>,
     pub generation_config: Option<serde_json::Value>,
     /// US dollars per million tokens, from the spec.
     pub in_per_m: f64,
@@ -82,6 +84,8 @@ pub struct Refine {
     pub provider: Provider,
     pub model: String,
     pub prompt: String,
+    /// Where the prompt's `{word_list}` slot was (byte offset in `prompt`): the user's words go there.
+    pub words_at: Option<usize>,
     /// Extra fields for the chat request (e.g. `reasoning_effort`).
     pub extra: serde_json::Map<String, serde_json::Value>,
     pub in_per_m: f64,
@@ -235,21 +239,28 @@ pub fn engine(id: &str) -> Option<Engine> {
             rpm: raw.rpm,
             refine,
         })),
-        kind @ ("gemini-audio" | "gemini-transcribe") => Some(Engine::Gemini(GeminiEngine {
-            id: raw.id.clone(),
-            provider,
-            model: raw.model.clone()?,
-            prompt: match (kind, &raw.prompt) {
-                ("gemini-audio", Some(name)) => Some(fill(prompt(name)?)),
+        kind @ ("gemini-audio" | "gemini-transcribe") => {
+            let (prompt, words_at) = match (kind, &raw.prompt) {
+                ("gemini-audio", Some(name)) => {
+                    let (p, at) = fill(prompt(name)?);
+                    (Some(p), at)
+                }
                 ("gemini-audio", None) => return None,
-                _ => None,
-            },
-            generation_config: raw.generation_config.clone(),
-            in_per_m: raw.price.audio_in_per_m,
-            out_per_m: raw.price.out_per_m,
-            rpm: raw.rpm,
-            refine,
-        })),
+                _ => (None, None),
+            };
+            Some(Engine::Gemini(GeminiEngine {
+                id: raw.id.clone(),
+                provider,
+                model: raw.model.clone()?,
+                prompt,
+                words_at,
+                generation_config: raw.generation_config.clone(),
+                in_per_m: raw.price.audio_in_per_m,
+                out_per_m: raw.price.out_per_m,
+                rpm: raw.rpm,
+                refine,
+            }))
+        }
         _ => None,
     }
 }
@@ -262,10 +273,12 @@ pub fn format() -> Option<Refine> {
 }
 
 fn refine(file: &File, r: &RawRefine) -> Option<Refine> {
+    let (prompt, words_at) = fill(prompt(&r.prompt)?);
     Some(Refine {
         provider: file.providers.get(&r.provider)?.clone(),
         model: r.model.clone(),
-        prompt: fill(prompt(&r.prompt)?),
+        prompt,
+        words_at,
         extra: r.extra.clone(),
         in_per_m: r.price.in_per_m,
         out_per_m: r.price.out_per_m,
@@ -297,9 +310,22 @@ fn prompt(name: &str) -> Option<&'static str> {
         .map(|(_, text)| text.trim())
 }
 
-/// Same as `eval` `load_prompt` without a word list: the `{word_list}` slot is left empty.
-fn fill(prompt: &str) -> String {
-    prompt.replace("{word_list}", "").trim().to_string()
+/// Same as `eval` `load_prompt` without a word list: the `{word_list}` slot is left empty; its place is
+/// returned so the user's words can go there ([`with_words`]).
+fn fill(prompt: &str) -> (String, Option<usize>) {
+    let t = prompt.trim();
+    let at = t.find("{word_list}");
+    (t.replacen("{word_list}", "", 1).trim().to_string(), at)
+}
+
+/// The prompt with the user's words (a [`crate::words::WordList::prompt_line`]) in its `{word_list}` slot.
+pub fn with_words(prompt: &str, at: Option<usize>, line: &str) -> String {
+    match at {
+        Some(i) if !line.is_empty() && i <= prompt.len() && prompt.is_char_boundary(i) => {
+            format!("{}{line}{}", &prompt[..i], &prompt[i..])
+        }
+        _ => prompt.to_string(),
+    }
 }
 
 fn parse() -> File {

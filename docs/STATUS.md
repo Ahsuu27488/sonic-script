@@ -4,7 +4,8 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `feat/m1-sound` (start / stop chimes; PR open) on top of
+**Last updated:** 2026-11-04 · **Code at:** `feat/m1-words` (My words, D-034; PR open) on top of
+`feat/m1-sound` (start / stop chimes; PR #19) on top of
 `feat/m1-chain-gemini-first` (Groq only after every Gemini model failed, D-033; PR #18) on top of `feat/m1-history` (PR #17) → `feat/m1-paste` (PR #16) →
 `feat/m1-format-baje` (PR #15); `main` = PRs #3-#14.
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
@@ -85,6 +86,18 @@ and lakh amount right).
   keeps nothing. Checked: unit test (files and lines) and a real 2 s `--record` (3.5 KB file, 14 kbps,
   plays back at 2.0 s). Live 2026-11-04: 16 dictations kept (392 KB); it showed where "Nain" came from (Groq
   Whisper, Transcribe out of free requests, Flash / Flash-Lite slow) and that a 62 s clip held no speech.
+- **My words (D-034, branch `feat/m1-words`, phase A of `docs/plans/2026-11-04-word-list.md`):** the user's
+  list is `%APPDATA%\SonicScript\words.txt` (created with a format guide at the top: `Word` or
+  `Word = how it gets misheard`); commands: `--words` (Notepad), `--words-prompt` (copies the prompt for the
+  user's own AI assistant, `spec/prompts/words-assistant-v1.md`, with a collect mode), `--words-add <file>`,
+  `--words-paste` (clipboard), `--words-suggest` (names from the history); each shows what it found ("8 found, 8
+  new", skipped sentences) and asks first. The forgiving parser (`core/src/words.rs`) takes our format, bullets,
+  numbers, commas, bold, code fences, "Word: note", "Word → misheard". Used by dictation, `--record`, `--file`
+  (not `--bench`): the local cleanup (mishearings become exact replacements), the Gemini audio prompt (first 300
+  words), the format step (whole list up to 40, else only words close to the transcript); never Whisper's
+  prompt (D-014). Checked: unit tests (parser, merge, near words, the words in both requests, cleanup), real
+  runs of every command on a scratch folder, clip #12 with and without a list on Flash (right both times: the
+  live "McCloud" was a one-off). Not checked yet: a before / after where an engine gets a name wrong.
 - **Start / stop chimes (branch `feat/m1-sound`, until M2's on-screen ring):** dictation plays a soft rising
   chime when recording starts (before the mic opens, ~110 ms), a falling one after the mic closes, one low note
   on cancel or a mic failure (`cue.rs`: sine notes built in memory, `PlaySoundW` without waiting); `--no-sound`
@@ -128,7 +141,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 69 core + 13 app (+1 manual clipboard test, +1 manual sound test)
+- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 15 app (+1 manual clipboard test, +1 manual sound test)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -167,10 +180,9 @@ and lakh amount right).
    limit is not known. Options if it bites: a shorter prompt, 20b as a second formatter (its own quota), or
    Groq's paid tier. Benchmarks spend the same quota.
 4. Names fail on Groq Whisper; the word list fixes sound-alikes ("Jaminai" → Gemini, "Codec" → Codex) but not
-   words run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM). The app does not load a
-   user word list yet (`Normalizer::new()` without one; the format prompt's `{word_list}` slot is empty): names
-   like Taskvane come out as heard ("Taskman", live try 2026-11-04). A word-list setting comes with the config
-   file (step 6) or M2.
+   words run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM). Since D-034 the user's
+   own list is loaded (`words.txt`), and "Word = mishearing" fixes run-together ones; an empty list (the
+   default) changes nothing. Whether the list makes Gemini spell names right more often is not measured yet.
 5. Groq Whisper sometimes translates instead of transcribing (`mx-04`, `nm-06`); worse with too little silence
    around the speech (D-022). Only matters when Groq answers (last in the chain).
 6. Dictating exactly the Whisper hint's last sentence ("Theek hai, main abhi meeting mein hoon.") is dropped as
@@ -216,10 +228,10 @@ and lakh amount right).
    clips spend Transcribe / Flash quota too), after 1 PM Pakistan time; update known gaps 1 and 13.
 6. **Owner:** keep or change the name "SonicScript"; say if the "free requests used up" notice reads well when
    it shows up.
-7. **Owner: approve the word-list plan** (`docs/plans/2026-11-04-word-list.md`; the six ways to add words
-   were settled with the owner 2026-11-04: type, file, ask your AI assistant with our prompt, dictate to it in
-   collect mode, starter packs, learning as one-click suggestions; no limit on the list, small prompts). Phase A
-   comes with step 6 once approved.
+7. **Owner: try My words** (`sonicscript --words-prompt`, give it to your AI assistant, copy the answer,
+   `sonicscript --words-paste`; or `--words` / `--words-suggest`), then dictate names. Agent, after Google's
+   reset: a before / after on clips with names the engines got wrong. Starter packs and the settings box come
+   in M2 (phase B).
 
 ## How to run and check
 
