@@ -75,8 +75,9 @@ waiting for the owner's live try and merge.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-03, `feat/m1-format`):** `eval`: 38 offline tests, ruff clean; `desktop`: 65 core + 8 app
-  tests, fmt and clippy `-D warnings` clean; CI green on PR #10 (the branch is not pushed yet).
+- **Tests (2026-11-04, `feat/m1-format`):** `eval`: 38 offline tests, ruff clean; `desktop`: 65 core + 8 app
+  tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
+  the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): `graphify query "..."` works (code only, rebuilt 2026-11-03).
 
 ## In progress

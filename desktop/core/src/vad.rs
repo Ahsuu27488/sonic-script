@@ -171,6 +171,8 @@ mod tests {
             .filter_map(Result::ok)
             .map(|e| e.path())
             .filter(|p| p.extension().is_some_and(|x| x == "wav"))
+            // The M0 set only: the formatting clips (D-030, `fmt-*`) came later.
+            .filter(|p| !p.file_stem().unwrap().to_string_lossy().starts_with("fmt-"))
             .map(|p| {
                 (
                     p.file_stem().unwrap().to_string_lossy().into_owned(),

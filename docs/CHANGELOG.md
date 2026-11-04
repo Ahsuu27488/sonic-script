@@ -9,6 +9,9 @@
   "Office ke rules" example; the owner's rules clip fmt-03 stayed a sentence on both engines before), lakh
   grouping "never 250,000" and "1.5 lakh" → 1,50,000, "wo na" as a filler spelling.
 - Scoring: "6:00" counts as "6"; fmt-11 also checks "wo na".
+- Fix: `vad::tests::m0_recordings` read every WAV in `spec/fixtures/audio` and expected 44; with the 13
+  `fmt-*` recordings it found 57 and failed (only on the owner's PC: CI has no recordings). It now reads the
+  M0 clips only.
 - Results: app `m1-format-app` Layout 96%, 0 errors, p50 2.6 s; `fmt-lite-v3` 96% after Flash-Lite and after
   Groq Whisper; no word loss on the 40 non-list M0 clips (`fmt-120b`, `fmt-120b-final`). Decision D-031.
 - Next 4's bench ran (Transcribe all 44 M0 clips, Flash 41; it also asked 2 new `fmt` clips before Google's
