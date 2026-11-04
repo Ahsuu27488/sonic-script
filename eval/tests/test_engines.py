@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from sonic_eval.audio import EncodedAudio
+from sonic_eval.config import load_providers
 from sonic_eval.engines import (
     EngineResult,
     GeminiAudio,
@@ -13,6 +14,7 @@ from sonic_eval.engines import (
     GroqWhisper,
     GroqWhisperLLM,
     Refiner,
+    build_engines,
     clean_output,
 )
 from sonic_eval.ratelimit import RateLimiter
@@ -121,7 +123,8 @@ def test_missing_key_is_reported(monkeypatch):
 def test_clean_output_strips_quotes_and_fences():
     assert clean_output('  "Theek hai."  ') == "Theek hai."
     assert clean_output("```\nPR merge kar do\n```") == "PR merge kar do"
-    assert clean_output("a   b\n c") == "a b c"
+    assert clean_output("a   b\n c") == "a b\nc"
+    assert clean_output("Lana hai:\n\n-  Doodh\n- Anday  \n") == "Lana hai:\n- Doodh\n- Anday"
 
 
 def test_rate_limiter_spaces_requests():
@@ -174,6 +177,38 @@ def test_gemini_transcribe_is_refined_on_another_provider():
     assert calls == ["g.test", "q.test"]
     assert set(r.stages_ms) == {"transcribe", "refine"}
     assert e.cost_usd(r, 3.2) == pytest.approx((87 * 2.0 + 14 * 12.0 + 300 * 0.1 + 10 * 0.3) / 1e6)
+
+
+def test_format_model_replaces_the_refine_step_and_renames_engines():
+    providers = load_providers()
+    engines, _ = build_engines(providers, ["gemini-3.5-flash-lite", "gemini-3.5-transcribe+gptoss20b"],
+                               limiter(), format_model="openai/gpt-oss-20b")
+    by_id = {e.id: e for e in engines}
+    assert set(by_id) == {"gemini-3.5-flash-lite+fmt-20b", "gemini-3.5-transcribe+gptoss20b+fmt-20b"}
+    lite, transcribe = by_id["gemini-3.5-flash-lite+fmt-20b"], by_id["gemini-3.5-transcribe+gptoss20b+fmt-20b"]
+    for e in engines:
+        assert (e.refiner.spec["model"], e.refiner.spec["prompt"]) == ("openai/gpt-oss-20b", "format-v1.md")
+    # Optional only where the engine's own text is already Roman (D-030); Transcribe writes Urdu script.
+    assert (lite.optional_refine, transcribe.optional_refine) == (True, False)
+
+
+def test_a_failed_optional_format_step_keeps_the_engines_text():
+    def handler(req: httpx.Request):
+        if req.url.host == "g.test":
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "Doodh aur anday"}]}}]})
+        return httpx.Response(400, json={"error": {"message": "bad request"}})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    fmt = {"provider": "groq", "model": "openai/gpt-oss-120b", "prompt": "format-v1.md"}
+    spec = {"id": "lite", "kind": "gemini-audio", "provider": "gemini", "model": "m",
+            "prompt": "transcribe-roman-v1.md"}
+    e = GeminiAudio(spec, GEMINI, client, limiter(), refiner=Refiner(fmt, GROQ, client, limiter()))
+    e.optional_refine = True
+    r = e.transcribe(CLIP)
+    assert (r.error, r.text) == (None, "Doodh aur anday")
+    assert "HTTP 400" in r.unformatted
+    e.optional_refine = False
+    assert "HTTP 400" in e.transcribe(CLIP).error
 
 
 def test_openai_transcription_has_no_minimum_billing():

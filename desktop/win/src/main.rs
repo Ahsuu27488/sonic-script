@@ -24,7 +24,7 @@ use sonicscript_core::pipeline::{self, Transcribe};
 use crate::key::Choice;
 
 const USAGE: &str = "\
-usage: sonicscript [--engine <id>] [mode]
+usage: sonicscript [--engine <id>] [--no-format] [mode]
   sonicscript                                 dictation: tap or hold Right Ctrl, speak, get the text
   sonicscript --models                        the models you can use: free / paid, limits, test results
   sonicscript --record <seconds>              mic check: record, then print the text (0.5-300 s)
@@ -33,6 +33,8 @@ usage: sonicscript [--engine <id>] [mode]
 Without --engine the spec's engine chain runs (D-029): Gemini 3.5 Transcribe, then Gemini 3.5 Flash,
 Flash-Lite and Groq Whisper, each asked when the one before is slow, fails or is out of free requests;
 --engine <id> runs that engine from spec/providers.json alone.
+The text is formatted (lists, take-backs, fillers, numbers as digits) on Groq after whichever engine answers;
+--no-format gives the exact words.
 Keys come from GROQ_API_KEY / GEMINI_API_KEY (this console or your Windows user environment).";
 
 fn main() -> ExitCode {
@@ -52,7 +54,14 @@ fn main() -> ExitCode {
         Some(_) => return usage(),
         None => None,
     };
-    let choice = match key::choose(engine_id.as_deref()) {
+    let format = match args.iter().position(|a| a == "--no-format") {
+        Some(i) => {
+            args.remove(i);
+            false
+        }
+        None => true,
+    };
+    let choice = match key::choose(engine_id.as_deref(), format) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("{e}");

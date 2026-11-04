@@ -35,6 +35,8 @@ pub struct Transcript {
     /// Engines of the [`crate::client::Chain`] that were passed over on the way, and why (D-029). The answer
     /// can still be from one of them (a slow engine that answered first after all).
     pub passed: Vec<Passed>,
+    /// Why the smart-formatting step (D-030) failed when the engine's own text was used instead.
+    pub unformatted: Option<String>,
 }
 
 /// An engine the chain went past.

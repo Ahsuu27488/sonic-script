@@ -3,6 +3,64 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-format (live list / take-back try)
+
+- Owner's second live try, 5 dictations: list, take-back (5 → 6) and lakh amount ("3,50,000") came out right;
+  "6 baje" written "6:00" (prompt follow-up noted). Transcribe hit a per-minute 429, then its daily limit;
+  both limit notices seen live for the first time; Groq Whisper answered the last clip after 7.6 s, garbled.
+- PR #12 CI all green (`checks`, `docs-gate`, `rust`). STATUS: Next 1 is now only the owner's merge; C: has
+  13 GB free.
+
+## 2026-11-04 · feat/m1-format (hand-off)
+
+- PR #12 opened. Owner's first live try with formatting: 2 natural dictations right (2.9 s / 3.8 s key-up →
+  text); "hmm" kept, names as heard (no user word list in the app yet); no list dictated live yet.
+- Docs brought up to date for a new session: STATUS (Start here, In progress, Next re-ordered: PR #12, catalog,
+  mic delay, chain run with formatting, paste), known gaps 4 / 9 / 13, the M1 plan's Progress, README, blueprint
+  §4.4 / §4.5, the Wispr research note, ARCHITECTURE (`reformat.py`); D-029 / D-030 headings note what D-031
+  changed.
+
+## 2026-11-04 · feat/m1-format (checks done, D-031)
+
+- `format-v1.md` final tweaks from the audio checks: a lead-in ending in a full stop still makes a list (an
+  "Office ke rules" example; the owner's rules clip fmt-03 stayed a sentence on both engines before), lakh
+  grouping "never 250,000" and "1.5 lakh" → 1,50,000, "wo na" as a filler spelling.
+- Scoring: "6:00" counts as "6"; fmt-11 also checks "wo na".
+- Fix: `vad::tests::m0_recordings` read every WAV in `spec/fixtures/audio` and expected 44; with the 13
+  `fmt-*` recordings it found 57 and failed (only on the owner's PC: CI has no recordings). It now reads the
+  M0 clips only.
+- Results: app `m1-format-app` Layout 96%, 0 errors, p50 2.6 s; `fmt-lite-v3` 96% after Flash-Lite and after
+  Groq Whisper; no word loss on the 40 non-list M0 clips (`fmt-120b`, `fmt-120b-final`). Decision D-031.
+- Next 4's bench ran (Transcribe all 44 M0 clips, Flash 41; it also asked 2 new `fmt` clips before Google's
+  per-day 429); catalog left for its own PR. Groq: ~350K tokens on 120b in a day without a daily 429 (known
+  gap 3 corrected).
+
+## 2026-11-03 · feat/m1-format (smart formatting, D-030; not merged)
+
+- Plan `docs/plans/2026-11-03-m1-smart-formatting.md`, approved by the owner with the defaults. One change
+  while building: a top-level `format` step in `spec/providers.json` instead of four new `+fmt` engine ids and
+  a second chain (same behaviour; engine ids and the catalog untouched).
+- `spec/prompts/format-v1.md` (from `format-draft.md`): lists ("- " / "1."), take-backs, fillers, digits with
+  lakh grouping, romanizing. Tightened after a text-only check: the list replaces the sentence (120b had
+  written both on `ag-03`), joining words are never the lead-in, a sentence after a list stays (both models
+  had dropped words on `lg-02`), an "actually" take-back example.
+- Test set: 13 `format` sentences `fmt-01`..`fmt-13` with `say` (what to speak) and `format` checks;
+  `record` shows `say`. Not recorded yet.
+- `eval`: `format_score` (list kind / count, absent words, digits) per row (`format_rate`), "layout" column
+  in the summary and report; accuracy, English and latency now come from the M0 clips only, the catalog too.
+  `reformat` command (format step on saved transcripts); `bench --only` and `--format-model`; `clean_output`
+  keeps line breaks; an optional format step that fails keeps the engine's text (`unformatted`).
+- App: `spec::format()`, `Client::with_format` (replaces the engine's refine; optional after engines without
+  one), `--no-format`, cleanup per line, multi-line console output, "Not formatted" notice, bench rows
+  `app-...+fmt`. A missing Groq key turns formatting off with a notice.
+- Found: Groq's free `gpt-oss-120b` / 20b allow 8K tokens/min and 200K/day; a format call is ~1,300 tokens,
+  so ~160 formatted dictations a day (STATUS known gap 3). A first 20b / 120b run on saved transcripts was
+  stopped half-way (the prompt changed under it) and deleted; run `fmt-say-120b` (the 13 sentences as text):
+  12 of 13 right.
+- Owner recorded the 13 `fmt` clips. Run `m1-format`: Groq Whisper + format, Layout 88.5% with both 120b and
+  20b (20b lost words on fmt-11); Flash-Lite timed out on all 13 (Google). `spec/providers.json` `format`
+  gained `rpm: 6` (benchmarks only: 8K tokens/min).
+
 ## 2026-11-03 · docs/handoff-formatting
 
 - PR #10 (engine chain, D-029) merged after green CI.

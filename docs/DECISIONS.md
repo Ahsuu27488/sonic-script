@@ -257,7 +257,8 @@ use (~500 requests/day), while Flash and Transcribe allow only 20 / 25 a day; bu
 2026-11-03, run `eval/results/m1-fallback` (local).
 
 **D-029 Engine chain: Gemini 3.5 Transcribe (+ Roman cleanup on Groq) → Gemini 3.5 Flash → Gemini 3.5 Flash-Lite
-→ Groq Whisper; a model out of free requests is skipped and the user is told.** (2026-11-03)
+→ Groq Whisper; a model out of free requests is skipped and the user is told.** (2026-11-03) *(the Groq
+`gpt-oss-20b` Roman cleanup after Transcribe is replaced by the D-031 format step while formatting is on)*
 Supersedes D-028. The clip goes to `gemini-3.5-transcribe+gptoss20b`; with no answer after 4 s, or on an error,
 also to `gemini-3.5-flash`; 3 s later `gemini-3.5-flash-lite`; 3 s later `groq-whisper-hint`; the first good
 answer wins, errors move on at once. A 429 that names a daily quota (`...PerDay...`) rests that model for an hour
@@ -280,7 +281,8 @@ it loses. *Where:* `spec/providers.json` `chain`, `desktop/core/src/spec.rs` `ch
 (local).
 
 **D-030 Smart formatting: one formatter for every app, on by default, on Groq `gpt-oss-120b`, after every
-engine.** (2026-11-03) The text is formatted the same way whichever app it goes into (no per-app styles, unlike
+engine.** (2026-11-03) *(its "Where" line superseded by D-031: built as one `format` step, the Gemini audio
+prompt unchanged)* The text is formatted the same way whichever app it goes into (no per-app styles, unlike
 Wispr Flow): spoken lists (three or more items, tasks, rules or steps) become "- " lists, ordered steps "1." lists,
 with the lead-in words as a first line; ordinary speech stays sentences. The same step removes empty fillers
 ("matlab", "woh na", "umm"), applies take-backs ("nahi nahi", "sorry", "actually") and writes numbers as digits
@@ -294,3 +296,27 @@ text style from changing when the chain falls back. *Where:* to build (STATUS Ne
 in the refine prompt and the Gemini audio prompt), `spec/providers.json` (refine model, a refine step on the
 Flash / Flash-Lite / Groq engines), spoken list sentences in `spec/fixtures/sentences.json` and a list score in
 `eval`. Not built yet; the model choice is confirmed by that benchmark first.
+
+**D-031 Smart formatting as built: one `format` step on Groq `gpt-oss-120b` after every engine; the Gemini
+audio prompt stays as it is.** (2026-11-04)
+Builds D-030 (its "Where" line changes). `spec/providers.json` `format` (Groq `openai/gpt-oss-120b`,
+`reasoning_effort` low, `spec/prompts/format-v1.md`) runs after whichever engine answers, chain or `--engine`,
+in place of that engine's own `refine` step (the prompt also romanizes, so Transcribe's 20b romanize step is
+replaced). After an engine without a refine step (Flash, Flash-Lite, Groq Whisper) it is optional: a failed
+format request keeps the engine's text and the console says "Not formatted"; after Transcribe it is required
+(its text is in Urdu / Devanagari script). `--no-format` skips it and gives exactly the old output.
+`transcribe-roman-v1.md` (the Gemini audio prompt) gets no format rules: formatting twice could fight, and
+one step after every engine already makes the text look the same whatever answered. *Why:* the owner's
+go-ahead on the plan (`docs/plans/2026-11-03-m1-smart-formatting.md`) with these defaults, and the check:
+- word loss, 120b on saved transcripts of the 44 M0 clips (runs `fmt-120b`, `fmt-120b-final`): accuracy and
+  English kept unchanged on the 40 clips that are not spoken lists (Transcribe 97.2 → 97.1%, Flash 97.4 →
+  97.4%, Flash-Lite 96.9 → 96.9%, again with the final prompt); the two spoken lists (`ag-03`, `lg-02`) became lists;
+- layout, the owner's 13 `fmt` recordings (run `fmt-lite-v3`): 96% of format checks after Flash-Lite and
+  after Groq Whisper (misses: the filler "wo na" kept once; Whisper's garbled `fmt-13`);
+- 120b over 20b: same layout on Groq Whisper's text (88.5% each, earlier prompt) but 20b paraphrased `fmt-11`
+  ("Kya kal chutti hai?"), losing words; format step p50 ~0.7 s, p95 ~1.3 s.
+Cost: one Groq request of ~1,300 tokens per dictation; the free tier allows 8K tokens/min (about 6
+dictations a minute; STATUS known gap 3); past that the text comes out unformatted. *Where:*
+`spec/providers.json` `format`, `spec/prompts/format-v1.md`, `desktop/core/src/spec.rs` `format()`,
+`client.rs` `Client::with_format`, `normalize.rs` (per line), `desktop/win/src/key.rs` (`Choice.format`),
+`main.rs` (`--no-format`), `eval/sonic_eval/scoring.py` `format_score`, `reformat.py`, sentences `fmt-01`..`13`.

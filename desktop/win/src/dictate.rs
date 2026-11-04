@@ -21,7 +21,10 @@ const MAX_RECORDING: Duration = Duration::from_secs(5 * 60);
 
 pub fn run(choice: Choice) -> Result<(), String> {
     let client = Arc::new(key::engines(choice)?);
-    let id = key::describe(&client);
+    let mut id = key::describe(&client);
+    if !client.first().formats() {
+        id += "; no formatting";
+    }
     let normalizer = Arc::new(Normalizer::new());
     let (tx, rx) = mpsc::channel();
     // The key is a setting from step 6 on (D-018); Right Ctrl is the default (D-015).
@@ -134,7 +137,7 @@ fn transcribe(
     } else if out.text.is_empty() {
         println!("  Nothing to type (the engine only heard its own hint).");
     } else {
-        println!("→ {}", out.text.trim_end());
+        println!("→ {}", out.text.trim_end().replace('\n', "\n  "));
         let note = if out.needs_llm {
             " · mostly Urdu script, rough romanization"
         } else {
@@ -152,6 +155,9 @@ fn transcribe(
         );
         if let Some(note) = fallback_note(&out, client.first().id()) {
             println!("  {note}");
+        }
+        if let Some(why) = &out.unformatted {
+            println!("  Not formatted (exact words): the formatting step failed: {why}");
         }
     }
     for note in limit_notes(&out) {

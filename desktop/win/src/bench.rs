@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use sonicscript_core::api::ApiError;
 use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::{self, Outcome, PipelineError, Transcribe};
-use sonicscript_core::spec::Engine;
+use sonicscript_core::spec::{self, Engine, Refine};
 
 use crate::key::Engines;
 use crate::wav;
@@ -25,7 +25,18 @@ pub fn run(dir: &Path, out: &mut impl Write, client: &Engines) -> Result<Summary
     let engines: Vec<&Engine> = client.links().map(|(c, _)| c.engine()).collect();
     let primary = engines[0];
     let ids: Vec<&str> = engines.iter().map(|e| e.id()).collect();
-    let name = format!("app-{}", ids.join("~"));
+    // With smart formatting (D-030) the format step replaces each engine's own refine step, and its price.
+    let format = client
+        .links()
+        .next()
+        .is_some_and(|(c, _)| c.formats())
+        .then(spec::format)
+        .flatten();
+    let name = format!(
+        "app-{}{}",
+        ids.join("~"),
+        if format.is_some() { "+fmt" } else { "" }
+    );
     let gap = Duration::from_secs(60) / primary.rpm().max(1);
     let normalizer = Normalizer::new();
     client.warm();
@@ -50,7 +61,12 @@ pub fn run(dir: &Path, out: &mut impl Write, client: &Engines) -> Result<Summary
             .copied()
             .find(|e| e.id() == outcome.engine)
             .unwrap_or(primary);
-        writeln!(out, "{}", row(&id, &outcome, &name, answered)).map_err(|e| e.to_string())?;
+        writeln!(
+            out,
+            "{}",
+            row(&id, &outcome, &name, answered, format.as_ref())
+        )
+        .map_err(|e| e.to_string())?;
         eprintln!("[{}/{}] {id:<8} {}", i + 1, files.len(), status(&outcome));
         let fatal = matches!(
             &outcome.error,
@@ -107,8 +123,9 @@ fn passed(o: &Outcome) -> Vec<String> {
 }
 
 /// A row as `eval` writes it (`bench.Row`); `rescore` adds the category and the score fields. `name` is the
-/// row's engine name; `engine` is the one that answered, which sets the cost.
-pub fn row(id: &str, o: &Outcome, name: &str, engine: &Engine) -> Value {
+/// row's engine name; `engine` is the one that answered, which sets the cost, with `format` when the
+/// formatting step ran in place of its refine step.
+pub fn row(id: &str, o: &Outcome, name: &str, engine: &Engine, format: Option<&Refine>) -> Value {
     let s = &o.stages;
     let at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -135,7 +152,7 @@ pub fn row(id: &str, o: &Outcome, name: &str, engine: &Engine) -> Value {
         "duration_s": f64::from(o.audio_ms) / 1000.0,
         "tokens_in": 0,
         "tokens_out": 0,
-        "cost_usd": cost_usd(engine, o),
+        "cost_usd": cost_usd(engine, format, o),
         "retries": o.retries,
         "error": o.error.as_ref().map(ToString::to_string),
         "speech_ms": o.speech_ms,
@@ -144,6 +161,7 @@ pub fn row(id: &str, o: &Outcome, name: &str, engine: &Engine) -> Value {
         "needs_llm": o.needs_llm,
         "answered_by": if o.sent && o.error.is_none() { Some(&o.engine) } else { None },
         "passed": passed(o),
+        "unformatted": o.unformatted,
         "at": at,
     })
 }
@@ -151,7 +169,7 @@ pub fn row(id: &str, o: &Outcome, name: &str, engine: &Engine) -> Value {
 /// What the clip cost, by the spec's prices (as `eval` `cost_usd`): per second of audio for transcription
 /// APIs (Groq bills at least 10 s), per token for Gemini, plus the refine step's tokens. Only the answer
 /// that was used is counted; a losing request's cost is unknown (its tokens never come back).
-fn cost_usd(engine: &Engine, o: &Outcome) -> f64 {
+fn cost_usd(engine: &Engine, format: Option<&Refine>, o: &Outcome) -> f64 {
     if !o.sent {
         return 0.0;
     }
@@ -163,8 +181,8 @@ fn cost_usd(engine: &Engine, o: &Outcome) -> f64 {
         }
         Engine::Gemini(e) => (tin * e.in_per_m + tout * e.out_per_m) / 1e6,
     };
-    let refine = engine
-        .refine()
+    let refine = format
+        .or(engine.refine())
         .map_or(0.0, |r| (rin * r.in_per_m + rout * r.out_per_m) / 1e6);
     speech + refine
 }
@@ -317,6 +335,7 @@ mod tests {
             &outcome(true, 340.0, None),
             "app-groq-whisper-hint",
             &e,
+            None,
         );
         assert_eq!(r["engine"], "app-groq-whisper-hint");
         assert_eq!(r["sentence"], "mx-01");
@@ -334,6 +353,7 @@ mod tests {
             &outcome(false, 2.0, None),
             "app-groq-whisper-hint",
             &e,
+            None,
         );
         assert_eq!(
             quiet["raw_asr"],
@@ -359,7 +379,7 @@ mod tests {
                 why: Skip::Slow,
             },
         ];
-        let r = row("mx-01", &o, "app-a~b", &groq);
+        let r = row("mx-01", &o, "app-a~b", &groq, None);
         assert_eq!(r["engine"], "app-a~b");
         assert_eq!(r["answered_by"], "groq-whisper-hint");
         assert_eq!(
@@ -423,7 +443,7 @@ mod cost_tests {
         let want =
             (100.0 * g.in_per_m + 20.0 * g.out_per_m + 300.0 * r.in_per_m + 10.0 * r.out_per_m)
                 / 1e6;
-        assert!((cost_usd(&e, &o) - want).abs() < 1e-15);
+        assert!((cost_usd(&e, None, &o) - want).abs() < 1e-15);
         assert!(want > 0.0);
     }
 }

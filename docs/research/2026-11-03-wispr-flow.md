@@ -52,6 +52,9 @@
 
 ## What it means for our pipeline
 
+> Written before the build. As built (D-031): one `format` step (`spec/prompts/format-v1.md` on Groq
+> `gpt-oss-120b`) runs after every engine, Groq Whisper included; the Gemini audio prompt was left unchanged.
+
 - Formatting needs a language model; it belongs in the prompts: `spec/prompts/transcribe-roman-v1.md` (Gemini
   Flash / Flash-Lite, audio → text) and `spec/prompts/romanize-v1.md` (the Groq refine step after Transcribe).
   The same rules must be in both, or the text style changes when the chain falls back (D-029).

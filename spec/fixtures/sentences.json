@@ -1,6 +1,6 @@
 {
  "version": 1,
- "about": "M0 test set. Read each 'text' aloud naturally, the way you would say it to a friend or an AI agent (don't read it word by word). 'english' lists words that must come out in English spelling. Audio files go to spec/fixtures/audio/<id>.wav (not committed). Silence items (text empty) check that an engine writes nothing when nobody speaks.",
+ "about": "M0 test set. Read each 'text' aloud naturally, the way you would say it to a friend or an AI agent (don't read it word by word). 'english' lists words that must come out in English spelling. Audio files go to spec/fixtures/audio/<id>.wav (not committed). Silence items (text empty) check that an engine writes nothing when nobody speaks. Format items (category 'format', D-030): 'say' is what to speak, 'text' the expected formatted output (lines, lists, digits); 'format' says what the format score checks: list = dash / ordered / any / null (no list), items = list items, absent = words that must be gone (take-backs, fillers), digits = strings that must appear.",
  "sentences": [
   {
    "id": "ur-01",
@@ -466,6 +466,237 @@
    "text": "",
    "english": [],
    "say": "Don't speak. Type on your keyboard or tap the desk for about 3 seconds."
+  },
+  {
+   "id": "fmt-01",
+   "category": "format",
+   "text": "Ammi ne kaha hai market se ye cheezein le aana:\n- Doodh\n- Anday\n- Bread\n- 2 kilo aloo",
+   "english": [
+    "market",
+    "bread"
+   ],
+   "say": "Ammi ne kaha hai market se ye cheezein le aana, doodh, anday, bread aur do kilo aloo",
+   "format": {
+    "list": "dash",
+    "items": 4,
+    "absent": [],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-02",
+   "category": "format",
+   "text": "Kal ke kaam:\n- Bank jana hai\n- Bijli ka bill jama karwana hai\n- Ali ko call karni hai",
+   "english": [
+    "bank",
+    "bill",
+    "call"
+   ],
+   "say": "Kal ke kaam: pehla bank jana hai, dusra bijli ka bill jama karwana hai, teesra Ali ko call karni hai",
+   "format": {
+    "list": "any",
+    "items": 3,
+    "absent": [],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-03",
+   "category": "format",
+   "text": "Server ke rules simple hain:\n- Spam nahi karna\n- Kisi ko gaali nahi deni\n- Memes sirf memes channel mein",
+   "english": [
+    "server",
+    "rules",
+    "simple",
+    "spam",
+    "memes",
+    "channel"
+   ],
+   "say": "Server ke rules simple hain, spam nahi karna, kisi ko gaali nahi deni, aur memes sirf memes channel mein",
+   "format": {
+    "list": "dash",
+    "items": 3,
+    "absent": [],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-04",
+   "category": "format",
+   "text": "Chai banane ka tareeqa:\n1. Paani ubaalo\n2. Patti daalo\n3. Doodh aur cheeni daalo\n4. 2 minute pakao",
+   "english": [
+    "minute"
+   ],
+   "say": "Chai banane ka tareeqa, pehle paani ubaalo, phir patti daalo, phir doodh aur cheeni daalo, aur do minute pakao",
+   "format": {
+    "list": "ordered",
+    "items": 4,
+    "absent": [],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-05",
+   "category": "format",
+   "text": "Is weekend ke plans ye hain:\n- Friday ko movie\n- Saturday ko cricket\n- Sunday ko family dinner",
+   "english": [
+    "weekend",
+    "plans",
+    "Friday",
+    "movie",
+    "Saturday",
+    "cricket",
+    "Sunday",
+    "family",
+    "dinner"
+   ],
+   "say": "Is weekend ke plans ye hain, Friday ko movie, Saturday ko cricket aur Sunday ko family dinner",
+   "format": {
+    "list": "dash",
+    "items": 3,
+    "absent": [],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-06",
+   "category": "format",
+   "text": "For the trip I need to pack three things:\n- My passport\n- The charger\n- Some cash",
+   "english": [
+    "trip",
+    "pack",
+    "passport",
+    "charger",
+    "cash"
+   ],
+   "say": "For the trip I need to pack three things, my passport, the charger and some cash",
+   "format": {
+    "list": "dash",
+    "items": 3,
+    "absent": [],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-07",
+   "category": "format",
+   "text": "Pehle main socha ke aaj gym jaun, lekin phir baarish shuru ho gayi aur main ghar pe hi raha.",
+   "english": [
+    "gym"
+   ],
+   "say": "Pehle main socha ke aaj gym jaun, lekin phir baarish shuru ho gayi aur main ghar pe hi raha",
+   "format": {
+    "list": null,
+    "items": 0,
+    "absent": [],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-08",
+   "category": "format",
+   "text": "Mujhe bas do cheezein chahiye, charger aur headphones.",
+   "english": [
+    "charger",
+    "headphones"
+   ],
+   "say": "Mujhe bas do cheezein chahiye, charger aur headphones",
+   "format": {
+    "list": null,
+    "items": 0,
+    "absent": [],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-09",
+   "category": "format",
+   "text": "Theek hai, kal 6 baje milte hain.",
+   "english": [],
+   "say": "Theek hai kal paanch baje milte hain, nahi nahi, chhe baje",
+   "format": {
+    "list": null,
+    "items": 0,
+    "absent": [
+     "paanch",
+     "5",
+     "nahi"
+    ],
+    "digits": [
+     "6"
+    ]
+   }
+  },
+  {
+   "id": "fmt-10",
+   "category": "format",
+   "text": "Meeting Tuesday ko rakh lo.",
+   "english": [
+    "meeting",
+    "Tuesday"
+   ],
+   "say": "Meeting Monday ko rakh lo, actually Tuesday ko",
+   "format": {
+    "list": null,
+    "items": 0,
+    "absent": [
+     "Monday",
+     "actually"
+    ],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-11",
+   "category": "format",
+   "text": "Yaar, main keh raha tha ke kal chhutti hai kya?",
+   "english": [],
+   "say": "Matlab yaar woh na main keh raha tha ke kal chhutti hai kya",
+   "format": {
+    "list": null,
+    "items": 0,
+    "absent": [
+     "matlab",
+     "woh na",
+     "wo na"
+    ],
+    "digits": []
+   }
+  },
+  {
+   "id": "fmt-12",
+   "category": "format",
+   "text": "Bhai, 2,50,000 rupay bhej do 2:30 baje tak.",
+   "english": [],
+   "say": "Bhai do lakh pachaas hazaar rupay bhej do dhai baje tak",
+   "format": {
+    "list": null,
+    "items": 0,
+    "absent": [],
+    "digits": [
+     "2,50,000",
+     "2:30"
+    ]
+   }
+  },
+  {
+   "id": "fmt-13",
+   "category": "format",
+   "text": "1,50,000 ka budget hai aur meeting 3:30 baje hai.",
+   "english": [
+    "budget",
+    "meeting"
+   ],
+   "say": "Dedh lakh ka budget hai aur meeting saadhe teen baje hai",
+   "format": {
+    "list": null,
+    "items": 0,
+    "absent": [],
+    "digits": [
+     "1,50,000",
+     "3:30"
+    ]
+   }
   }
  ]
 }

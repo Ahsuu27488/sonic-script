@@ -120,12 +120,12 @@ The romanization prompt is the heart of the project, so it's treated like code:
 - Rules: Latin script only; English words in standard English spelling; preserve meaning exactly (never translate, summarise or answer); add punctuation and casing; numbers as digits.
 - **Spelling style.** Roman Urdu has no standard spelling ("kar do" / "kardo", "hai" / "hay"). Ship a sensible default (common chat spellings: *hai, kar do, nahi, kya*), plus a user setting and a **personal word list** (names, product terms like "Taskvane", "PR", "Kubernetes") injected into the prompt.
 - Output modes: **Roman Urdu/Hinglish** (default), **English only**, **Urdu script**, **Devanagari**. The last two are cheap to add and widen the audience.
-- **Smart formatting** (D-030, on by default, one switch to turn it off): spoken lists become lists, empty fillers ("matlab", "umm") and taken-back words ("nahi nahi", "actually") are removed, numbers become digits with lakh / crore grouping. The same for every app (no per-app styles).
+- **Smart formatting** (D-030, on by default, one switch to turn it off): spoken lists become lists, empty fillers ("matlab", "umm") and taken-back words ("nahi nahi", "actually") are removed, numbers become digits with lakh / crore grouping. The same for every app (no per-app styles). Built as one text step after whichever engine answers (D-031: `spec/prompts/format-v1.md` on Groq `gpt-oss-120b`).
 
 ### 4.5 Normalizer (runs locally after the model)
 - **Script guard:** if Arabic/Devanagari characters slip through in Roman mode, re-ask the LLM once, or transliterate with rules.
 - **Hallucination filter:** Whisper invents text on near-silence ("Thank you for watching", "Subtitles by..."). Drop clips that VAD says are empty, and strip known phantom phrases.
-- **Spacing:** add a leading space when inserting after a word; no double spaces.
+- **Spacing:** add a leading space when inserting after a word; no double spaces; line breaks kept (formatted lists).
 - Rules live as data in `spec/normalizer/` with shared test cases, so every platform behaves identically.
 
 ---

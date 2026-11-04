@@ -27,6 +27,10 @@ const PROMPTS: &[(&str, &str)] = &[
         "romanize-v1.md",
         include_str!("../../../spec/prompts/romanize-v1.md"),
     ),
+    (
+        "format-v1.md",
+        include_str!("../../../spec/prompts/format-v1.md"),
+    ),
 ];
 
 #[derive(Debug, Clone, Deserialize)]
@@ -126,6 +130,7 @@ impl Engine {
 #[derive(Deserialize)]
 struct File {
     chain: Vec<RawLink>,
+    format: Option<RawRefine>,
     providers: std::collections::HashMap<String, Provider>,
     engines: Vec<RawEngine>,
 }
@@ -208,14 +213,7 @@ pub fn engine(id: &str) -> Option<Engine> {
     let raw = file.engines.iter().find(|e| e.id == id)?;
     let provider = file.providers.get(&raw.provider)?.clone();
     let refine = match &raw.refine {
-        Some(r) => Some(Refine {
-            provider: file.providers.get(&r.provider)?.clone(),
-            model: r.model.clone(),
-            prompt: fill(prompt(&r.prompt)?),
-            extra: r.extra.clone(),
-            in_per_m: r.price.in_per_m,
-            out_per_m: r.price.out_per_m,
-        }),
+        Some(r) => Some(refine(&file, r)?),
         None => None,
     };
     match raw.kind.as_str() {
@@ -249,6 +247,24 @@ pub fn engine(id: &str) -> Option<Engine> {
         })),
         _ => None,
     }
+}
+
+/// The smart-formatting step (D-030, `format` in the spec): run after whichever engine answers, in place of
+/// its own `refine` step.
+pub fn format() -> Option<Refine> {
+    let file = parse();
+    refine(&file, file.format.as_ref()?)
+}
+
+fn refine(file: &File, r: &RawRefine) -> Option<Refine> {
+    Some(Refine {
+        provider: file.providers.get(&r.provider)?.clone(),
+        model: r.model.clone(),
+        prompt: fill(prompt(&r.prompt)?),
+        extra: r.extra.clone(),
+        in_per_m: r.price.in_per_m,
+        out_per_m: r.price.out_per_m,
+    })
 }
 
 /// A `whisper-only` engine by id (tests, and code that needs the Whisper request itself).
@@ -322,6 +338,17 @@ mod tests {
             "another provider last, so Google's bad hour does not take every engine"
         );
         assert!(chain[..3].iter().all(|l| l.wait >= Duration::from_secs(2)));
+    }
+
+    #[test]
+    fn the_format_step_is_a_groq_chat_call_with_the_format_prompt() {
+        // D-030: one formatter after every engine, on Groq.
+        let f = format().expect("spec/providers.json has a format step");
+        assert_eq!(f.provider.key_env, "GROQ_API_KEY");
+        assert!(f.model.starts_with("openai/gpt-oss-"));
+        assert!(f.prompt.starts_with("You turn a raw dictation transcript"));
+        assert!(f.prompt.contains("1. Charger lagao") && !f.prompt.contains("{word_list}"));
+        assert_eq!(f.extra["reasoning_effort"], "low");
     }
 
     #[test]

@@ -7,6 +7,19 @@
   ],
   "cases": [
     {
+      "id": "format-list-keeps-its-lines",
+      "note": "D-030: a formatted list keeps one item per line; spacing is tidied within each line, empty lines go",
+      "input": "Ammi ne kaha hai ye le aana:\n-  Doodh\n\n- Anday ,\n- 2 kilo aloo  ",
+      "expected": "Ammi ne kaha hai ye le aana:\n- Doodh\n- Anday,\n- 2 kilo aloo"
+    },
+    {
+      "id": "format-ordered-list-with-word-list",
+      "note": "The word list still fixes names inside list items",
+      "input": "Kal ke kaam:\n1. Jaminai ka test chalana\n2. PR merge karna\n3. Ali ko call karna",
+      "expected": "Kal ke kaam:\n1. Gemini ka test chalana\n2. PR merge karna\n3. Ali ko call karna",
+      "words": ["Gemini"]
+    },
+    {
       "id": "m0-lg-01",
       "note": "Urdu 'aur' and 'kyunke' leak into a Roman sentence",
       "input": "Dekho yar, main ne kal rata pura code dobarah check kia اور mujhe lagta hai, maslal authentication middleware mein hai کیunke token expire honne ke baad user ko dobarah login page, paid redirect nahi kiya jara raha toh tum please is ko dhek lo, aur ek proper fix bana do",

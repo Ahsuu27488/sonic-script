@@ -34,6 +34,7 @@ class EngineResult:
     refine_tokens_out: int = 0
     retries: int = 0
     error: str | None = None
+    unformatted: str | None = None  # why an optional format step failed (the engine's own text was kept)
 
 
 class EngineError(Exception):
@@ -53,6 +54,9 @@ class Engine:
         self.word_list = word_list or []
         self.key = os.environ.get(provider.get("key_env", ""), "")
         self.refiner = refiner
+        # The refiner is the format step (D-030) after an engine whose text is already Roman: if it fails,
+        # that text is used unformatted, as in the app.
+        self.optional_refine = False
 
     def transcribe(self, audio: EncodedAudio, sentence_id: str = "") -> EngineResult:
         result = EngineResult()
@@ -60,7 +64,12 @@ class Engine:
             self._run(audio, result, sentence_id)
             if self.refiner and result.text.strip():
                 result.raw_asr = result.text
-                result.text = self.refiner.run(result.text, result, self.word_list)
+                try:
+                    result.text = self.refiner.run(result.text, result, self.word_list)
+                except (EngineError, httpx.HTTPError) as exc:
+                    if not self.optional_refine:
+                        raise
+                    result.unformatted = str(exc)
             result.text = clean_output(result.text)
         except EngineError as exc:
             result.error = str(exc)
@@ -279,7 +288,10 @@ KINDS: dict[str, type[Engine]] = {
 
 
 def build_engines(providers: dict, ids: list[str] | None, limiter: RateLimiter,
-                  word_list: list[str] | None = None) -> tuple[list[Engine], dict[str, httpx.Client]]:
+                  word_list: list[str] | None = None,
+                  format_model: str | None = None) -> tuple[list[Engine], dict[str, httpx.Client]]:
+    """`format_model` runs the spec's `format` step (D-030) with that Groq model after every engine, in place
+    of its own refine step; the engine ids get `+fmt-<size>` (e.g. `gemini-3.5-flash+fmt-120b`)."""
     specs = providers["engines"]
     if ids:
         known = {s["id"] for s in specs}
@@ -299,11 +311,22 @@ def build_engines(providers: dict, ids: list[str] | None, limiter: RateLimiter,
         prov_name = spec.get("provider", "fake")
         provider = providers.get("providers", {}).get(prov_name, {"rpm": 6000})
         refiner = None
-        if spec.get("refine"):
-            r = spec["refine"]
+        r = spec.get("refine")
+        if format_model:
+            r = {**providers["format"], "model": format_model}
+        if r:
             refiner = Refiner(r, providers["providers"][r["provider"]], client_for(r["provider"]), limiter)
-        engines.append(KINDS[spec["kind"]](spec, provider, client_for(prov_name), limiter, word_list, refiner))
+        engine = KINDS[spec["kind"]](spec, provider, client_for(prov_name), limiter, word_list, refiner)
+        if format_model:
+            engine.id += f"+fmt-{size_tag(format_model)}"
+            engine.optional_refine = not spec.get("refine")
+        engines.append(engine)
     return engines, clients
+
+
+def size_tag(model: str) -> str:
+    """openai/gpt-oss-120b -> 120b (the format step's model, in engine ids)."""
+    return model.rsplit("-", 1)[-1]
 
 
 def warm_up(providers: dict, clients_by_provider: dict[str, httpx.Client]) -> None:
@@ -324,8 +347,8 @@ NO_SPEECH = "[no speech]"
 
 
 def clean_output(text: str) -> str:
-    """Light cleanup every platform will do: trim, drop wrapping quotes/code fences, collapse spaces,
-    and turn the prompt's no-speech marker into empty text."""
+    """Light cleanup every platform will do: trim, drop wrapping quotes/code fences, collapse spaces (line
+    breaks stay: formatted lists, D-030; empty lines go), and turn the prompt's no-speech marker into empty text."""
     t = text.strip()
     if t.lower().strip(". ") == NO_SPEECH:
         return ""
@@ -333,7 +356,8 @@ def clean_output(text: str) -> str:
         t = t.strip("`").strip()
     if len(t) >= 2 and t[0] == t[-1] and t[0] in "\"'":
         t = t[1:-1].strip()
-    return " ".join(t.split())
+    lines = (" ".join(line.split()) for line in t.splitlines())
+    return "\n".join(line for line in lines if line)
 
 
 def _retry_after(resp: httpx.Response, attempt: int) -> float:

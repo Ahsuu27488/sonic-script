@@ -26,6 +26,10 @@ pub struct Client {
     engine: Engine,
     speech: Speech,
     refiner: Option<Refiner>,
+    /// The refiner is the formatting step after an engine whose own text is already Roman: when it fails,
+    /// that text is used unformatted (D-030).
+    optional: bool,
+    formats: bool,
 }
 
 impl Client {
@@ -45,7 +49,29 @@ impl Client {
             engine,
             speech,
             refiner,
+            optional: false,
+            formats: false,
         })
+    }
+
+    /// Runs the smart-formatting step (D-030, `spec::format`) after the speech call, in place of the engine's
+    /// own `refine` step (the format prompt also romanizes). After an engine without a refine step it is
+    /// optional: a failed format request leaves the engine's text as it is.
+    pub fn with_format(
+        mut self,
+        format: Refine,
+        key_for: impl Fn(&str) -> String,
+    ) -> Result<Self, ApiError> {
+        let key = key_for(&format.provider.key_env);
+        self.refiner = Some(Refiner::new(format, key)?);
+        self.optional = self.engine.refine().is_none();
+        self.formats = true;
+        Ok(self)
+    }
+
+    /// Whether [`Self::with_format`] was applied.
+    pub fn formats(&self) -> bool {
+        self.formats
     }
 
     pub fn engine(&self) -> &Engine {
@@ -80,7 +106,16 @@ impl Transcribe for Client {
         };
         match &self.refiner {
             Some(r) if !heard.text.trim().is_empty() => {
-                let refined = r.run(&heard.text)?;
+                let refined = match r.run(&heard.text) {
+                    Ok(refined) => refined,
+                    Err(e) if self.optional => {
+                        return Ok(Transcript {
+                            unformatted: Some(e.to_string()),
+                            ..heard
+                        });
+                    }
+                    Err(e) => return Err(e),
+                };
                 Ok(Transcript {
                     asr: Some(heard.text),
                     text: refined.text,
@@ -371,6 +406,85 @@ mod tests {
         let req = requests.recv().unwrap();
         assert!(req.contains("Bearer GROQ_API_KEY-value"));
         assert!(req.contains("\"reasoning_effort\":\"low\"") && req.contains("पीआर मर्ज कर दो"));
+    }
+
+    fn flash_lite_at(gemini_url: String) -> Client {
+        let Some(Engine::Gemini(mut e)) = spec::engine("gemini-3.5-flash-lite") else {
+            panic!("flash-lite engine");
+        };
+        e.provider.base_url = gemini_url;
+        Client::new(Engine::Gemini(e), |var| format!("{var}-value")).unwrap()
+    }
+
+    const GEMINI_REPLY: &str =
+        r#"{"candidates":[{"content":{"parts":[{"text":"doodh anday bread aur do kilo aloo"}]}}]}"#;
+
+    #[test]
+    fn the_format_step_runs_after_an_engine_without_its_own() {
+        let (gemini_url, _) = server(vec![(200, "", GEMINI_REPLY)]);
+        let (groq_url, requests) = server(vec![(
+            200,
+            "",
+            r#"{"choices":[{"message":{"content":"Lana hai:\n- Doodh\n- Anday"}}]}"#,
+        )]);
+        let mut format = spec::format().unwrap();
+        format.provider.base_url = groq_url;
+        let client = flash_lite_at(gemini_url)
+            .with_format(format, |var| format!("{var}-value"))
+            .unwrap();
+        assert!(client.formats());
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        let t = client.transcribe(&audio).unwrap();
+        assert_eq!(t.text, "Lana hai:\n- Doodh\n- Anday");
+        assert_eq!(t.asr.as_deref(), Some("doodh anday bread aur do kilo aloo"));
+        assert_eq!(t.unformatted, None);
+        assert!(
+            requests
+                .recv()
+                .unwrap()
+                .contains("You turn a raw dictation transcript")
+        );
+    }
+
+    #[test]
+    fn a_failed_format_step_keeps_the_engines_own_text() {
+        let (gemini_url, _) = server(vec![(200, "", GEMINI_REPLY)]);
+        let (groq_url, _) = server(vec![(400, "", r#"{"error":{"message":"bad"}}"#)]);
+        let mut format = spec::format().unwrap();
+        format.provider.base_url = groq_url;
+        let client = flash_lite_at(gemini_url)
+            .with_format(format, |var| format!("{var}-value"))
+            .unwrap();
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        let t = client.transcribe(&audio).unwrap();
+        assert_eq!(t.text, "doodh anday bread aur do kilo aloo");
+        assert!(t.unformatted.is_some());
+    }
+
+    #[test]
+    fn the_format_step_replaces_transcribes_cleanup_and_is_required_there() {
+        // Transcribe writes Urdu / Devanagari script: without the step its text cannot be used.
+        let transcribe =
+            r#"{"candidates":[{"content":{"parts":[{"audioTranscription":{"text":"दूध अंडे"}}]}}]}"#;
+        let (gemini_url, _) = server(vec![(200, "", transcribe)]);
+        let (groq_url, requests) = server(vec![(400, "", r#"{"error":{"message":"bad"}}"#)]);
+        let Some(Engine::Gemini(mut e)) = spec::engine("gemini-3.5-transcribe+gptoss20b") else {
+            panic!("transcribe engine");
+        };
+        e.provider.base_url = gemini_url;
+        let mut format = spec::format().unwrap();
+        format.provider.base_url = groq_url;
+        let client = Client::new(Engine::Gemini(e), |var| format!("{var}-value"))
+            .unwrap()
+            .with_format(format, |var| format!("{var}-value"))
+            .unwrap();
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        assert!(client.transcribe(&audio).is_err());
+        let req = requests.recv().unwrap();
+        assert!(
+            req.contains(&spec::format().unwrap().model)
+                && req.contains("You turn a raw dictation")
+        );
     }
 
     struct Fake {

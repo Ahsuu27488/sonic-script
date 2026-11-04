@@ -25,11 +25,13 @@
 - Engine chain (D-029, PR #10, merged 2026-11-03), replacing D-028 and bringing the M2 "preferred + fallback
   model" forward: Gemini 3.5 Transcribe + Roman cleanup → Flash → Flash-Lite → Groq Whisper, models out of free
   requests skipped. Run `m1-chain`: 94.9%, p95 4.3 s.
-- Smart formatting (D-030, not in the plan as written): one formatter for every app (spoken lists → lists,
-  fillers, take-backs, numbers), on by default, Groq `gpt-oss-120b` after every engine. Decided and tested in a
-  prompt (`docs/research/format-test/`), not built.
-- Next (STATUS Next): smart formatting, mic-open delay, chain benchmark with 3 s waits, Flash / Transcribe
-  benchmark after the daily reset, then step 7 (paste), step 6 (key), step 9 (latency log).
+- Smart formatting (D-030, not in the plan as written): built and checked on `feat/m1-format`, PR #12 (D-031,
+  plan `docs/plans/2026-11-03-m1-smart-formatting.md`): one `format` step on Groq `gpt-oss-120b` after every
+  engine, `--no-format` for exact words; Layout 96% in the app on the owner's 13 `fmt` clips, no word loss on
+  the 44 M0 clips.
+- Flash / Transcribe benchmark finished 2026-11-04 (run `m1-engines`; catalog update still to do).
+- Next (STATUS Next): merge PR #12 after the owner's live try, model catalog PR, mic-open delay, chain
+  benchmark with 3 s waits, then step 7 (paste), step 6 (key), step 9 (latency log).
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).

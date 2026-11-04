@@ -7,6 +7,20 @@
     { "engine": "gemini-3.5-flash-lite", "wait_ms": 3000 },
     { "engine": "groq-whisper-hint" }
   ],
+  "format": {
+    "about": "Smart formatting (D-030): a text-only step after whichever engine answers (chain or --engine), so the text looks the same whatever answered: lists, take-backs, fillers, digits. It replaces an engine's own refine step (format-v1.md also romanizes Urdu / Devanagari script); after an engine without one it is optional: if it fails, the engine's own text is used. --no-format skips it (exact words). rpm = what benchmarks allow themselves: Groq's free tier gives these models 8K tokens/min and a format call is ~1,300 tokens.",
+    "provider": "groq",
+    "model": "openai/gpt-oss-120b",
+    "prompt": "format-v1.md",
+    "rpm": 6,
+    "extra": {
+      "reasoning_effort": "low"
+    },
+    "price": {
+      "in_per_m": 0.15,
+      "out_per_m": 0.6
+    }
+  },
   "providers": {
     "gemini": {
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
