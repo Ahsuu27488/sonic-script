@@ -3,6 +3,17 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-catalog (model catalog refreshed)
+
+- PR #12 (smart formatting) merged after CI passed.
+- `spec/models.json` re-generated from the finished `m1-engines` run: Transcribe + cleanup 97.3% on all 44
+  clips (was 97.9% on 22), Flash 97.5% (44 rows, 3 daily-limit errors), Flash-Lite 97.0%, Groq 89.2%, OpenAI
+  94.7% / 93.8%.
+- `spec/providers.json` catalog notes for Transcribe and both OpenAI models: the second step is the 120b format
+  step while formatting is on, the 20b Roman cleanup with `--no-format`.
+- `catalog.py`: the model page lists the chain in its order (default, then fallbacks) before other models;
+  sorting by accuracy alone had put Flash (97.5%) above the default. Test added (39 `eval` tests).
+
 ## 2026-11-04 · feat/m1-format (live list / take-back try)
 
 - Owner's second live try, 5 dictations: list, take-back (5 → 6) and lakh amount ("3,50,000") came out right;

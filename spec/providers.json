@@ -236,7 +236,7 @@
         "limits": {
           "requests_per_minute": 3,
           "requests_per_day": 25,
-          "text": "Gemini free tier: 25 requests/day (Google's own quota error, 2026-11-03), about 3-4/min (429 after 4 in a minute). Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+          "text": "Gemini free tier: 25 requests/day (Google's own quota error, 2026-11-03), about 3-4/min (429 after 4 in a minute). The second step runs on Groq: with smart formatting on (the default, D-031) it is the format step on gpt-oss-120b (free tier: 8K tokens/min, about 6 dictations a minute); with --no-format the Roman cleanup on gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
           "source": "HTTP 429 quota GenerateRequestsPerDayPerProjectPerModel-FreeTier = 25"
         },
         "notes": "The Gemini app's dictation model (preview). Hears Urdu / Hindi best but writes it in its own script, so a second step romanizes it; needs a Gemini and a Groq key. Paid: about $2 / $12 per 1M tokens (third-party reports). Google may use free-tier requests to improve its products, and people may review them (Gemini API terms); the paid tier does not."
@@ -291,7 +291,7 @@
         "label": "OpenAI GPT-4o Transcribe + Roman cleanup",
         "tier": "paid",
         "limits": {
-          "text": "No free tier: about $0.006 per minute of audio. Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+          "text": "No free tier: about $0.006 per minute of audio. The second step runs on Groq: with smart formatting on (the default, D-031) it is the format step on gpt-oss-120b (free tier: 8K tokens/min, about 6 dictations a minute); with --no-format the Roman cleanup on gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
           "source": "OpenAI pricing at launch; check before use"
         },
         "notes": "Writes Urdu / Hindi script, so it needs the Roman cleanup; writes text on silence."
@@ -323,7 +323,7 @@
         "label": "OpenAI GPT-4o mini Transcribe + Roman cleanup",
         "tier": "paid",
         "limits": {
-          "text": "No free tier: about $0.003 per minute of audio. Roman cleanup on Groq gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
+          "text": "No free tier: about $0.003 per minute of audio. The second step runs on Groq: with smart formatting on (the default, D-031) it is the format step on gpt-oss-120b (free tier: 8K tokens/min, about 6 dictations a minute); with --no-format the Roman cleanup on gpt-oss-20b (free tier: 30 requests/min, 1,000/day).",
           "source": "OpenAI pricing at launch; check before use"
         },
         "notes": "Half the price of GPT-4o Transcribe and as accurate here; writes text on silence."

@@ -4,21 +4,21 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `feat/m1-format` (smart formatting built and checked, PR open;
-`main` = PRs #3-#11).
+**Last updated:** 2026-11-04 · **Code at:** `feat/m1-catalog` (model catalog refreshed, PR open; `main` =
+PRs #3-#12, smart formatting merged).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite → Groq Whisper,
 skipping a model whose free requests are used up (run `m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors,
 p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart formatting (D-030, D-031)** is
-built and checked on `feat/m1-format` (on by default, `--no-format` for exact words; Layout 96%, no word loss),
-live tries good (list, take-back, lakh amount right); PR #12 waits for the owner's merge.
+merged (PR #12; on by default, `--no-format` for exact words; Layout 96%, no word loss; live list, take-back
+and lakh amount right).
 
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
    D-031 (D-025 to D-031 are the newest and set the direction), `ARCHITECTURE.md` and the plan
-   `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top). If PR #12 (smart formatting) is
-   not merged yet, Next 1 comes first: `gh pr view 12`; its work is on `feat/m1-format`, and `main` has no
-   formatting until it is merged. Formatting details: `docs/plans/2026-11-03-m1-smart-formatting.md`.
+   `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top). If the catalog PR
+   (`feat/m1-catalog`) is not merged yet, Next 1 comes first. Formatting details:
+   `docs/plans/2026-11-03-m1-smart-formatting.md`.
 2. Do "Next" below in order, one branch and PR per item (`feat/m1-<topic>`), each with its check.
 3. **Work in this checkout, not a git worktree:** drive C: is nearly full (13 GB free on 2026-11-04, 3.4 GB on
    2026-11-03, when a worktree needing ~5.4 GB failed). `desktop/target` alone is 3.2 GB. Ask the owner before
@@ -48,7 +48,8 @@ live tries good (list, take-back, lakh amount right); PR #12 waits for the owner
   - `gemini-3.5-transcribe+gptoss20b` (the Gemini app's model + Roman cleanup on Groq): 97.3%, English kept
     95%, 2.8 s / 3.9 s, all 44 clips (run finished 2026-11-04; 97.9% on the first 22).
   - `gemini-3.5-flash`: 97.5%, English kept 94%, 2.0 s / 7.4 s, 41 of 44 clips (daily limit).
-  - `spec/models.json` still shows the older partial numbers until `catalog` is re-run (Next 2).
+  - `spec/models.json` (catalog re-run 2026-11-04, branch `feat/m1-catalog`) holds these numbers; the model
+    page lists the chain in its order (default, fallback 1-3), then the rest by accuracy.
   - `gemini-3.5-flash-lite`: 97.0%, 1.6 s / 9.1 s; in the app 96.6%, 1.8 s / 6.3 s, 2 of 44 hit the 10 s timeout.
   - OpenAI (paid) `gpt-4o-mini-transcribe` / `gpt-4o-transcribe` + Roman cleanup: 94.7% / 93.8%, ~1.5 s / 2.6 s.
     Not in the chain; catalog only. Both write text on silence. About $0.06 spent in all.
@@ -91,7 +92,7 @@ live tries good (list, take-back, lakh amount right); PR #12 waits for the owner
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `feat/m1-format`):** `eval`: 38 offline tests, ruff clean; `desktop`: 65 core + 8 app
+- **Tests (2026-11-04, `feat/m1-catalog`):** `eval`: 39 offline tests, ruff clean; `desktop`: 65 core + 8 app
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): `graphify query "..."` works (code only, updated 2026-11-04 on `feat/m1-format`).
@@ -99,13 +100,11 @@ live tries good (list, take-back, lakh amount right); PR #12 waits for the owner
 ## In progress
 
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029); smart
-  formatting built and checked (D-031, PR #12). Left: step 7 (paste at the cursor), step 6 (changeable key,
+  formatting merged (D-031, PR #12). Left: step 7 (paste at the cursor), step 6 (changeable key,
   D-018), step 9 (latency log). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
-- PR #12 (smart formatting, branch `feat/m1-format`): open, live list / take-back / lakh try done
-  2026-11-04; waiting for the owner's merge (Next 1).
-- Benchmark `m1-engines`: finished 2026-11-04 (Transcribe all 44 M0 clips, Flash 41; local results only).
-  Left: `catalog` + its own small PR (Next 2).
+- Catalog PR (branch `feat/m1-catalog`): `spec/models.json` from the finished `m1-engines` run, catalog notes
+  updated for formatting, chain order on the model page; waiting for the owner's merge (Next 1).
 
 ## Live state
 
@@ -151,19 +150,16 @@ live tries good (list, take-back, lakh amount right); PR #12 waits for the owner
 13. Smart formatting (D-031): the format step (~0.7 s typical, ~1.3 s slow) counts inside the chain's waits,
     so a later engine is asked a little more often; not measured on a full chain run yet (Next 4). The
     prompt still sometimes keeps the filler "wo na" (fmt-11), does not list "hmm" as a filler (live try),
-    and once wrote "6:00" for "6 baje" (live try), and Whisper's garbled text cannot be formatted. Prompt changes need a re-run of the checks (D-031's runs).
-    `spec/providers.json` `catalog` notes still say "Roman cleanup on Groq gpt-oss-20b" for Transcribe; with
-    formatting on it is the 120b format step (fix with Next 2).
+    and once wrote "6:00" for "6 baje" (live try), and Whisper's garbled text cannot be formatted. Prompt
+    changes need a re-run of the checks (D-031's runs). Engine ids and labels still say "+gptoss20b" /
+    "Roman cleanup" (the `--no-format` path); the catalog notes say the 120b format step replaces it.
 
 ## Next
 
-1. **Owner: merge PR #12 (smart formatting, D-031).** Live tries done (What works); CI green. Then the
-   agent: `git switch main && git pull`. Optional small prompt follow-up (own branch): "hmm" as a filler and
-   "6 baje" kept as "6 baje" (re-run `reformat` on `fmt-say` and `m1-format`, D-031's checks).
-2. **Agent: model catalog** (own small branch / PR after #12 is merged): `catalog` (command under "How to
-   run") writes `spec/models.json` from the finished `m1-engines` run; update the `catalog` notes in
-   `spec/providers.json` for formatting (known gap 13); rebuild the app (it embeds the file); check
-   `sonicscript --models`.
+1. **Owner: merge the catalog PR (`feat/m1-catalog`).** Checked: `sonicscript --models` shows all 44 clips
+   per model, the chain in order, the formatting notes. Then the agent: `git switch main && git pull`.
+2. **Agent, optional small prompt follow-up** (own branch): "hmm" as a filler and "6 baje" kept as "6 baje"
+   (re-run `reformat` on `fmt-say` and `m1-format`, D-031's checks).
 3. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's

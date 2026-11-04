@@ -47,3 +47,18 @@ def test_catalog_groups_free_first_and_keeps_the_best_row_per_clip(tmp_path):
     assert paid["keys"] == ["O_KEY", "Q_KEY"] and paid["limits"]["text"] == "no free tier"
     assert "app_check" not in paid
     assert r["usd_per_hour"] == round(3 * 0.0001 / 12 * 3600, 3)
+
+
+def test_catalog_lists_the_chain_in_its_order_before_more_accurate_models(tmp_path):
+    providers = {
+        "chain": [{"engine": "main"}, {"engine": "backup"}],
+        "providers": {"g": {"key_env": "G_KEY"}},
+        "engines": [{"id": i, "provider": "g", "catalog": {"label": i, "tier": "free"}}
+                    for i in ("best", "backup", "main", "worst")],
+    }
+    _write(tmp_path / "run", [_row("best", "a", acc=0.99), _row("backup", "a", acc=0.98),
+                              _row("main", "a", acc=0.97), _row("worst", "a", acc=0.5)])
+
+    cat = catalog.build(providers, tmp_path, ["run"], total=44)
+
+    assert [m["id"] for m in cat["models"]] == ["main", "backup", "best", "worst"]
