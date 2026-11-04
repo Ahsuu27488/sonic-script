@@ -4,10 +4,8 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `feat/m1-words` (My words, D-034; PR open) on top of
-`feat/m1-sound` (start / stop chimes; PR #19) on top of
-`feat/m1-chain-gemini-first` (Groq only after every Gemini model failed, D-033; PR #18) on top of `feat/m1-history` (PR #17) → `feat/m1-paste` (PR #16) →
-`feat/m1-format-baje` (PR #15); `main` = PRs #3-#14.
+**Last updated:** 2026-11-04 · **Code at:** `main` = PRs #3-#20 (paste, history, Groq last resort, chimes, My words
+merged 2026-11-04 on the owner's word, CI green).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029, D-033): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, and Groq
 Whisper only when every Gemini model failed,
@@ -209,16 +207,16 @@ and lakh amount right).
 
 ## Next
 
-1. **Owner: merge the format-prompt PR** (`feat/m1-format-baje`: "6:00" → "6 baje" in Urdu / Hindi).
+1. **Owner: try the merged app** (close any running SonicScript window first, then `git switch main; git pull;
+   cd desktop; cargo run -q --release -p sonicscript`): the chimes (rising = recording, falling = stopped), My
+   words (`--words-prompt` → your AI assistant → copy its answer → `--words-paste`, then dictate names), and the
+   paste checks still open: Win+V must show no dictated text, a copied image must be back on the clipboard after
+   a dictation, an app run as administrator gets "press Ctrl+V". Agent: read `history.jsonl` against what the
+   owner reports.
 2. **Owner: punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
    into Claude's dictation too); then the agent changes the prompt's punctuation rule and re-runs D-031's checks.
-3. **Owner, then agent: try paste live** (`feat/m1-history`, which has paste too; close any running
-   SonicScript window first, then `cd desktop; cargo run -q --release -p sonicscript`): dictate into Notepad, WhatsApp, a browser, Claude in
-   Windows Terminal (a list keeps its lines), with an image copied before (it must be on the clipboard again
-   after), and into an app run as administrator (text copied, console says Ctrl+V); Win+V must show no
-   dictated text. Agent: then read `history.jsonl` against what the owner says happened, merge #15, #16 and
-   the history PR, then step 6 (changeable key, D-018). M1's open
-   steps come before anything else (owner, 2026-11-04: milestones unchanged, M1 first).
+3. **Agent: M1 step 6 (changeable key, D-018)**, then the mic-open delay (Next 4). M1's open steps come before
+   anything else (owner, 2026-11-04: milestones unchanged, M1 first).
 4. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
