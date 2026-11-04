@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-format (hand-off)
+
+- PR #12 opened. Owner's first live try with formatting: 2 natural dictations right (2.9 s / 3.8 s key-up →
+  text); "hmm" kept, names as heard (no user word list in the app yet); no list dictated live yet.
+- Docs brought up to date for a new session: STATUS (Start here, In progress, Next re-ordered: PR #12, catalog,
+  mic delay, chain run with formatting, paste), known gaps 4 / 9 / 13, the M1 plan's Progress, README, blueprint
+  §4.4 / §4.5, the Wispr research note, ARCHITECTURE (`reformat.py`); D-029 / D-030 headings note what D-031
+  changed.
+
 ## 2026-11-04 · feat/m1-format (checks done, D-031)
 
 - `format-v1.md` final tweaks from the audio checks: a lead-in ending in a full stop still makes a list (an

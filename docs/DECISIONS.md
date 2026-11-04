@@ -257,7 +257,8 @@ use (~500 requests/day), while Flash and Transcribe allow only 20 / 25 a day; bu
 2026-11-03, run `eval/results/m1-fallback` (local).
 
 **D-029 Engine chain: Gemini 3.5 Transcribe (+ Roman cleanup on Groq) → Gemini 3.5 Flash → Gemini 3.5 Flash-Lite
-→ Groq Whisper; a model out of free requests is skipped and the user is told.** (2026-11-03)
+→ Groq Whisper; a model out of free requests is skipped and the user is told.** (2026-11-03) *(the Groq
+`gpt-oss-20b` Roman cleanup after Transcribe is replaced by the D-031 format step while formatting is on)*
 Supersedes D-028. The clip goes to `gemini-3.5-transcribe+gptoss20b`; with no answer after 4 s, or on an error,
 also to `gemini-3.5-flash`; 3 s later `gemini-3.5-flash-lite`; 3 s later `groq-whisper-hint`; the first good
 answer wins, errors move on at once. A 429 that names a daily quota (`...PerDay...`) rests that model for an hour
@@ -280,7 +281,8 @@ it loses. *Where:* `spec/providers.json` `chain`, `desktop/core/src/spec.rs` `ch
 (local).
 
 **D-030 Smart formatting: one formatter for every app, on by default, on Groq `gpt-oss-120b`, after every
-engine.** (2026-11-03) The text is formatted the same way whichever app it goes into (no per-app styles, unlike
+engine.** (2026-11-03) *(its "Where" line superseded by D-031: built as one `format` step, the Gemini audio
+prompt unchanged)* The text is formatted the same way whichever app it goes into (no per-app styles, unlike
 Wispr Flow): spoken lists (three or more items, tasks, rules or steps) become "- " lists, ordered steps "1." lists,
 with the lead-in words as a first line; ordinary speech stays sentences. The same step removes empty fillers
 ("matlab", "woh na", "umm"), applies take-backs ("nahi nahi", "sorry", "actually") and writes numbers as digits
