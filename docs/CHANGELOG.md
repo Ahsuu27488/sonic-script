@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · docs/end-of-session
+
+- Second live try (8 dictations): Transcribe and Flash out of free requests, Flash-Lite timed out 5 of 6, so
+  Groq answered 5 clips after 10-12.6 s, misspelt; the owner wants Groq's answers gone (STATUS Next 1, a
+  decision for the owner). Mic open: 113-133 ms or 462-512 ms, half each; tap and hold start alike.
+- Independent check with OpenAI `gpt-4o-transcribe` (~$0.01): it wrote only the first sentence of every clip
+  longer than ~9 s, so it is no judge for long natural speech; on the short ones it showed Groq's misspellings.
+- STATUS made current for a new session (Next rewritten, known gap 8 with the new numbers).
+
 ## 2026-11-04 · fix/words-no-args
 
 - Fix: `sonicscript` with no arguments (dictation) crashed at start ("range start index 1 out of range") since
