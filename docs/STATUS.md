@@ -11,7 +11,7 @@
 skipping a model whose free requests are used up (run `m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors,
 p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart formatting (D-030, D-031)** is
 built and checked on `feat/m1-format` (on by default, `--no-format` for exact words; Layout 96%, no word loss),
-first live try good; PR #12 waits for a live list / take-back try and the owner's merge.
+live tries good (list, take-back, lakh amount right); PR #12 waits for the owner's merge.
 
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
@@ -20,8 +20,9 @@ first live try good; PR #12 waits for a live list / take-back try and the owner'
    not merged yet, Next 1 comes first: `gh pr view 12`; its work is on `feat/m1-format`, and `main` has no
    formatting until it is merged. Formatting details: `docs/plans/2026-11-03-m1-smart-formatting.md`.
 2. Do "Next" below in order, one branch and PR per item (`feat/m1-<topic>`), each with its check.
-3. **Work in this checkout, not a git worktree:** drive C: is 99% full (3.4 GB free on 2026-11-03; a worktree
-   needs ~5.4 GB and failed). `desktop/target` alone is 3.2 GB. Ask the owner before deleting anything.
+3. **Work in this checkout, not a git worktree:** drive C: is nearly full (13 GB free on 2026-11-04, 3.4 GB on
+   2026-11-03, when a worktree needing ~5.4 GB failed). `desktop/target` alone is 3.2 GB. Ask the owner before
+   deleting anything.
 4. Keys: `GROQ_API_KEY` and `GEMINI_API_KEY` are in the owner's Windows user environment; `OPENAI_API_KEY` only
    in `eval/.env` (paid: benchmark only, spend sparingly). Never print, log or commit a key. CMake is on the
    user PATH.
@@ -79,7 +80,14 @@ first live try good; PR #12 waits for a live list / take-back try and the owner'
     sentences, English kept. Seen: "Hmm" kept (not in the prompt's filler list); a run of to-dos said as
     sentences ("Maine Sonic script ka bhi kuch dekhna hai. ... Relay ... Taskman ki guides ...") stayed
     sentences; "Taskman" for Taskvane and "or" for "aur" (speech step; the app has no user word list yet).
-    No list or take-back dictated live yet.
+  - Owner's second live try (2026-11-04, 5 dictations): a spoken list became the lead-in line + 3 "- " items;
+    a take-back (5 → 6 o'clock) kept only the correction ("Kal 6:00 milte hain yaar, chal."; the prompt asks
+    for "6 baje", so "baje" was dropped); a lakh amount came out "3,50,000 rupaye"; a dollar amount "2,400
+    dollar". Transcribe answered 3 (key-up → text 2.1-2.8 s, format step 0.7-1.0 s), then hit a per-minute
+    429 (Flash answered, 3.6 s), then its daily limit (earlier bench runs had used most of it): Flash and
+    Flash-Lite were slow, Groq Whisper answered after 7.6 s with garbled text (known gaps 1, 5). Both limit
+    notices (per-minute and daily) showed live. A slow answer prints under the next "● Recording" line
+    when the owner has already started the next clip.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
@@ -94,8 +102,8 @@ first live try good; PR #12 waits for a live list / take-back try and the owner'
   formatting built and checked (D-031, PR #12). Left: step 7 (paste at the cursor), step 6 (changeable key,
   D-018), step 9 (latency log). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
-- PR #12 (smart formatting, branch `feat/m1-format`): open; at hand-off CI `checks` and `docs-gate` passed,
-  `rust` was still running. Waiting for the owner's live list / take-back try and merge (Next 1).
+- PR #12 (smart formatting, branch `feat/m1-format`): open, live list / take-back / lakh try done
+  2026-11-04; waiting for the owner's merge (Next 1).
 - Benchmark `m1-engines`: finished 2026-11-04 (Transcribe all 44 M0 clips, Flash 41; local results only).
   Left: `catalog` + its own small PR (Next 2).
 
@@ -111,7 +119,8 @@ first live try good; PR #12 waits for a live list / take-back try and the owner'
    Not benchmarked with 3 s yet; D-017's learned deadline comes later.
 2. Every Gemini model has a slow tail (some requests 10-30 s) and they slow down together; Groq last caps the
    wait. A request that loses keeps running in the background (at most 10 s) and still uses its model's daily
-   quota. Bench cost counts only the answer used. The "free requests used up" notice has not been seen live.
+   quota. Bench cost counts only the answer used. The "free requests used up" notice was first seen live
+   2026-11-04; the owner has not said yet whether it reads well (Next 6).
 3. Smart formatting is limited by Groq's free tokens per minute: each format call is ~1,300 tokens and
    `gpt-oss-120b` allows 8K tokens/min (Groq's `x-ratelimit-limit-tokens` header): about 6 formatted
    dictations a minute; past that the text comes out unformatted (after Transcribe, Flash answers instead).
@@ -141,20 +150,16 @@ first live try good; PR #12 waits for a live list / take-back try and the owner'
 12. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 13. Smart formatting (D-031): the format step (~0.7 s typical, ~1.3 s slow) counts inside the chain's waits,
     so a later engine is asked a little more often; not measured on a full chain run yet (Next 4). The
-    prompt still sometimes keeps the filler "wo na" (fmt-11) and does not list "hmm" as a filler (live try),
-    and Whisper's garbled text cannot be formatted. Prompt changes need a re-run of the checks (D-031's runs).
+    prompt still sometimes keeps the filler "wo na" (fmt-11), does not list "hmm" as a filler (live try),
+    and once wrote "6:00" for "6 baje" (live try), and Whisper's garbled text cannot be formatted. Prompt changes need a re-run of the checks (D-031's runs).
     `spec/providers.json` `catalog` notes still say "Roman cleanup on Groq gpt-oss-20b" for Transcribe; with
     formatting on it is the 120b format step (fix with Next 2).
 
 ## Next
 
-1. **Owner, then agent: finish PR #12 (smart formatting, D-031).** Owner: natural speech was tried live
-   (What works); still to try live: a list, a take-back "... nahi nahi ..." and a lakh amount
-   (`git switch feat/m1-format`, `cd desktop; cargo run -q --release -p sonicscript`; `-- --no-format` for
-   exact words), and say if the text reads right. Agent: read CI on PR #12 (`gh pr checks 12`), fix anything
-   red, record the live result in STATUS; the owner merges; then `git switch main && git pull`. Optional
-   small follow-up on the same branch: "hmm" in the prompt's filler list (re-run `reformat` on `fmt-say` and
-   `m1-format`, D-031's checks).
+1. **Owner: merge PR #12 (smart formatting, D-031).** Live tries done (What works); CI green. Then the
+   agent: `git switch main && git pull`. Optional small prompt follow-up (own branch): "hmm" as a filler and
+   "6 baje" kept as "6 baje" (re-run `reformat` on `fmt-say` and `m1-format`, D-031's checks).
 2. **Agent: model catalog** (own small branch / PR after #12 is merged): `catalog` (command under "How to
    run") writes `spec/models.json` from the finished `m1-engines` run; update the `catalog` notes in
    `spec/providers.json` for formatting (known gap 13); rebuild the app (it embeds the file); check

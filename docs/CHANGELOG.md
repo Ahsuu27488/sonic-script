@@ -3,6 +3,14 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-format (live list / take-back try)
+
+- Owner's second live try, 5 dictations: list, take-back (5 → 6) and lakh amount ("3,50,000") came out right;
+  "6 baje" written "6:00" (prompt follow-up noted). Transcribe hit a per-minute 429, then its daily limit;
+  both limit notices seen live for the first time; Groq Whisper answered the last clip after 7.6 s, garbled.
+- PR #12 CI all green (`checks`, `docs-gate`, `rust`). STATUS: Next 1 is now only the owner's merge; C: has
+  13 GB free.
+
 ## 2026-11-04 · feat/m1-format (hand-off)
 
 - PR #12 opened. Owner's first live try with formatting: 2 natural dictations right (2.9 s / 3.8 s key-up →
