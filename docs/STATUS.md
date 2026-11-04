@@ -139,7 +139,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 15 app (+1 manual clipboard test, +1 manual sound test)
+- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 16 app (+1 manual clipboard test, +1 manual sound test)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
