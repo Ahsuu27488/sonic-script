@@ -3,6 +3,18 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-format-baje
+
+- PR #14 (graphify rule) merged.
+- `format-v1.md`: clock times in Urdu / Hindi are "N baje", also when the transcript has "N:00" (Gemini
+  Transcribe writes "baje" that way: live "Kal 6:00 milte hain", fmt-09). "Hmm" stays: the owner wants it.
+- Checks: runs `fmt-baje-app2` (fmt-09 right; Layout 88%, the same as the old prompt's re-run `fmt-old-app`:
+  fmt-04's recipe steps merge in both), `fmt-baje-m0` (no word loss, first wording), `fmt-baje-m0-final`
+  (stopped at 8 clips by Groq's rate limit, unchanged).
+- Punctuation measured (no change): the format step keeps Gemini's sentence ends and drops about half its
+  commas; waiting for the owner's live examples.
+- STATUS Next: M1's open steps (paste, key, latency log) before the mic delay and the chain benchmark.
+
 ## 2026-11-04 · docs/graphify-rule
 
 - PR #13 (model catalog) merged after CI passed.

@@ -74,14 +74,19 @@ and lakh amount right).
     kept unchanged on the 40 clips that are not spoken lists (Transcribe 97.2 → 97.1%, Flash 97.4 → 97.4%,
     Flash-Lite 96.9 → 96.9%); `ag-03` and `lg-02` (spoken lists) became lists.
   - 20b lost words on fmt-11 ("Kya kal chutti hai?"); 120b kept them.
+  - Clock times (branch `feat/m1-format-baje`): Gemini Transcribe writes "6 baje" as "6:00"; the prompt now
+    turns a whole hour in Urdu / Hindi into "N baje" (fmt-09 → "Theek hai, kal 6 baje milte hain."; the old
+    prompt kept "6:00"). Layout 88% with the old and the new prompt alike (fmt-04's last 2 steps merged in both:
+    model variation; 96% in the first run), word loss none: 96.1 → 96.4% on the M0 clips with the rule's first
+    wording (run `fmt-baje-m0`), 8 clips unchanged with the final wording before Groq's rate limit stopped it.
   - Owner's live try (2026-11-04, branch `feat/m1-format`, tap and hold both used): 2 natural dictations (6 s and
     21 s), Transcribe answered, key-up → text 2.9 s / 3.8 s (format step 0.7 s / 1.9 s); ordinary talk stayed
-    sentences, English kept. Seen: "Hmm" kept (not in the prompt's filler list); a run of to-dos said as
+    sentences, English kept. Seen: "Hmm" kept (the owner wants it kept, 2026-11-04); a run of to-dos said as
     sentences ("Maine Sonic script ka bhi kuch dekhna hai. ... Relay ... Taskman ki guides ...") stayed
     sentences; "Taskman" for Taskvane and "or" for "aur" (speech step; the app has no user word list yet).
   - Owner's second live try (2026-11-04, 5 dictations): a spoken list became the lead-in line + 3 "- " items;
-    a take-back (5 → 6 o'clock) kept only the correction ("Kal 6:00 milte hain yaar, chal."; the prompt asks
-    for "6 baje", so "baje" was dropped); a lakh amount came out "3,50,000 rupaye"; a dollar amount "2,400
+    a take-back (5 → 6 o'clock) kept only the correction ("Kal 6:00 milte hain yaar, chal.": Gemini
+    Transcribe writes "baje" as ":00"; fixed in the prompt afterwards, see Smart formatting); a lakh amount came out "3,50,000 rupaye"; a dollar amount "2,400
     dollar". Transcribe answered 3 (key-up → text 2.1-2.8 s, format step 0.7-1.0 s), then hit a per-minute
     429 (Flash answered, 3.6 s), then its daily limit (earlier bench runs had used most of it): Flash and
     Flash-Lite were slow, Groq Whisper answered after 7.6 s with garbled text (known gaps 1, 5). Both limit
@@ -93,7 +98,8 @@ and lakh amount right).
 - **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 65 core + 8 app
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
-- Code knowledge graph (D-010): `graphify query "..."` works (code only, updated 2026-11-04 on `feat/m1-format`).
+- Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
+  fits (PR #14).
 
 ## In progress
 
@@ -102,7 +108,9 @@ and lakh amount right).
   D-018), step 9 (latency log). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
 - Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
-  and Claude's dictation (Next 1).
+  and Claude's dictation. Measured 2026-11-04 (runs `fmt-120b`, `m1-format-app`): after Transcribe the format
+  step keeps Gemini's sentence ends (10.5 → 9.6 per 100 words on the M0 clips) and drops about half its commas
+  (3.4 → 1.9; owner's clips 8.8 → 1.6), so no prompt change yet: waiting for the owner's live examples (Next 2).
 
 ## Live state
 
@@ -136,7 +144,7 @@ and lakh amount right).
 7. The voice gate is tuned on one male voice (the owner) and one room; loud talking or TV counts as speech.
    Silero VAD only if this fails in daily use.
 8. Opening the mic takes 160-690 ms after the key goes down, and that audio is lost (key test: 406 ms; likely
-   clipped the owner's first word "Bhai yaar"). Not fixed (Next 3).
+   clipped the owner's first word "Bhai yaar"). Not fixed (Next 4).
 9. Urdu-script "میں" is always romanized "mein" (it can be "main" = I) by the local cleanup. With formatting on
    (D-031) the format step romanizes Urdu script first, so this matters only with `--no-format` or when the
    format step fails (then mostly-Urdu output from Groq gets only a rough letter-by-letter draft, `needs_llm`).
@@ -146,26 +154,28 @@ and lakh amount right).
     `winget install Kitware.CMake`. Drive C: is nearly full (see Start here 3).
 12. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 13. Smart formatting (D-031): the format step (~0.7 s typical, ~1.3 s slow) counts inside the chain's waits,
-    so a later engine is asked a little more often; not measured on a full chain run yet (Next 4). The
-    prompt still sometimes keeps the filler "wo na" (fmt-11), does not list "hmm" as a filler (live try),
-    and once wrote "6:00" for "6 baje" (live try), and Whisper's garbled text cannot be formatted. Prompt
+    so a later engine is asked a little more often; not measured on a full chain run yet (Next 5). The
+    prompt still sometimes keeps the filler "wo na" (fmt-11) and sometimes merges the last two steps of the
+    tea recipe (fmt-04: old and new prompt alike), and Whisper's garbled text cannot be formatted. "Hmm" is
+    kept on purpose (owner). Prompt
     changes need a re-run of the checks (D-031's runs). Engine ids and labels still say "+gptoss20b" /
     "Roman cleanup" (the `--no-format` path); the catalog notes say the 120b format step replaces it.
 
 ## Next
 
-1. **Agent: format prompt follow-up** (own branch): punctuation as much as the Gemini app / Claude dictation
-   (owner, 2026-11-04), "hmm" as a filler, "6 baje" kept as "6 baje" (re-run D-031's checks with `reformat`).
-2. **Agent: graphify rule** (CLAUDE.md, PR `docs/graphify-rule`): merge when CI is green.
-3. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
+1. **Owner: merge the format-prompt PR** (`feat/m1-format-baje`: "6:00" → "6 baje" in Urdu / Hindi).
+2. **Owner: punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
+   into Claude's dictation too); then the agent changes the prompt's punctuation rule and re-runs D-031's checks.
+3. **Agent: M1 step 7, paste at the cursor** (the biggest step to daily use; lists must keep their line
+   breaks), then step 6 (changeable key, D-018), then step 9 (latency log). M1's open steps come before
+   anything else (owner, 2026-11-04: milestones unchanged, M1 first).
+4. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
    "recorded" seconds match the time between the keys.
-4. **Agent: benchmark the full chain with the 3 s waits and formatting** (run `m1-chain3`, the app benchmark
+5. **Agent, after M1: benchmark the full chain with the 3 s waits and formatting** (run `m1-chain3`, the app benchmark
    command under "How to run", on the 44 M0 clips: copy them without `fmt-*` to a folder, or the 13 `fmt`
    clips spend Transcribe / Flash quota too), after 1 PM Pakistan time; update known gaps 1 and 13.
-5. **Agent: M1 step 7, paste at the cursor** (the biggest step to daily use; lists must keep their line
-   breaks), then step 6 (changeable key, D-018), then step 9 (latency log).
 6. **Owner:** keep or change the name "SonicScript"; say if the "free requests used up" notice reads well when
    it shows up.
 

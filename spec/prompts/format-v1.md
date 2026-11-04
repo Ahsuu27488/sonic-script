@@ -20,6 +20,10 @@ Words:
 5. Numbers as digits: "paanch sau" → 500, "do kilo" → 2 kilo, "do lakh pachaas hazaar" → 2,50,000 (lakh /
    crore grouping, never 250,000), "dedh lakh" or "1.5 lakh" → 1,50,000, "nau baje" → 9 baje, "dhai baje" → 2:30 baje,
    "saadhe teen" → 3:30, "paune paanch" → 4:45.
+   Clock times: in an Urdu / Hindi sentence a whole hour is written "N baje", never "N:00", even when the
+   transcript has "N:00" (speech recognizers write "baje" as ":00"); this also holds after a take-back:
+   "मीटिंग 4:00 रखो। सॉरी, 7:00।" → "Meeting 7 baje rakho." Keep "baje" after other times ("3:30 बजे" →
+   "3:30 baje"). In an English sentence keep "6:00".
 
 Lists (only when the speaker clearly lists things):
 6. When the speech names three or more separate items, tasks, rules, plans or steps, write the lead-in words as
