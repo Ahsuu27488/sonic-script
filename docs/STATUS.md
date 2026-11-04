@@ -4,8 +4,8 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `feat/m1-chain-gemini-first` (Groq only after every Gemini
-model failed, D-033; PR open) on top of `feat/m1-history` (PR #17) → `feat/m1-paste` (PR #16) →
+**Last updated:** 2026-11-04 · **Code at:** `feat/m1-sound` (start / stop chimes; PR open) on top of
+`feat/m1-chain-gemini-first` (Groq only after every Gemini model failed, D-033; PR #18) on top of `feat/m1-history` (PR #17) → `feat/m1-paste` (PR #16) →
 `feat/m1-format-baje` (PR #15); `main` = PRs #3-#14.
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029, D-033): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, and Groq
@@ -85,6 +85,12 @@ and lakh amount right).
   keeps nothing. Checked: unit test (files and lines) and a real 2 s `--record` (3.5 KB file, 14 kbps,
   plays back at 2.0 s). Live 2026-11-04: 16 dictations kept (392 KB); it showed where "Nain" came from (Groq
   Whisper, Transcribe out of free requests, Flash / Flash-Lite slow) and that a 62 s clip held no speech.
+- **Start / stop chimes (branch `feat/m1-sound`, until M2's on-screen ring):** dictation plays a soft rising
+  chime when recording starts (before the mic opens, ~110 ms), a falling one after the mic closes, one low note
+  on cancel or a mic failure (`cue.rs`: sine notes built in memory, `PlaySoundW` without waiting); `--no-sound`
+  turns them off. Checked: unit test (format, level, no clicks) and a manual test that played all three on the
+  owner's PC. Not yet checked: whether the start chime reaches the recording when the mic opens fast (~125 ms)
+  and speakers (not headphones) are used: look at the first 200 ms of the next history recordings.
 - **Pipeline pieces (M1 steps 1-4):** text cleanup (D-019: script guard, phantom filter, word list), voice gate
   (D-020, D-022: sends all 42 speech clips, drops both silence clips, keeps 500 ms around speech), Ogg/Opus
   16 kbps (D-021: as accurate as WAV at 8 KB per clip), golden check `--bench` scored by `eval rescore`.
@@ -122,7 +128,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 69 core + 12 app (+1 manual clipboard test)
+- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 69 core + 13 app (+1 manual clipboard test, +1 manual sound test)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -210,12 +216,10 @@ and lakh amount right).
    clips spend Transcribe / Flash quota too), after 1 PM Pakistan time; update known gaps 1 and 13.
 6. **Owner:** keep or change the name "SonicScript"; say if the "free requests used up" notice reads well when
    it shows up.
-7. **Owner: the word-list plan** (`docs/plans/2026-11-04-word-list.md`: one plain format, paste box, import
-   from the user's AI assistant with a ready prompt, starter packs, learning as one-click suggestions, no limit
-   on the list but small prompts). Phase A comes with step 6 once approved.
-8. **Agent: a start / stop cue** (owner, live try: "show that my click registered"): a short sound on start
-   and stop until M2's on-screen ring; in the live try a tap during a 7 s wait started a 62 s recording
-   unnoticed.
+7. **Owner: approve the word-list plan** (`docs/plans/2026-11-04-word-list.md`; the six ways to add words
+   were settled with the owner 2026-11-04: type, file, ask your AI assistant with our prompt, dictate to it in
+   collect mode, starter packs, learning as one-click suggestions; no limit on the list, small prompts). Phase A
+   comes with step 6 once approved.
 
 ## How to run and check
 

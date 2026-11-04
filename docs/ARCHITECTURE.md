@@ -57,7 +57,8 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `desktop/core/src/pipeline.rs` | `Transcribe` trait (`id`, `warm`, `transcribe`); `run(samples, &impl Transcribe, &Normalizer) -> Outcome` (text, raw, sent, sizes, `engine`, `passed`, `Stages` timings, error) for recorded clips; `run_streamed(samples, &mut Stream, ..)` for live ones; `Outcome.unformatted` |
 | `desktop/core/src/keys.rs` | `Machine::down / up(Key, time_ms) -> Reply { action: Start / Stop / Cancel, swallow }`, `force_stop()`: the D-015 / D-023 key rules |
 | `desktop/core/src/resample.rs` | `Resampler::new(in_rate).process(&[f32]) / flush()`: any rate → 16 kHz, windowed sinc, streaming (D-024) |
-| `desktop/win/src/main.rs` | `sonicscript.exe [--engine <id>]` (without it: the spec's chain; with it: that engine alone): no arguments = dictation, `--record <s>` (mic check), `--file <wav>...` (prints the text), `--bench <dir> [--out <file>]`; console set to UTF-8; `--no-format` (exact words); `--no-history` |
+| `desktop/win/src/main.rs` | `sonicscript.exe [--engine <id>]` (without it: the spec's chain; with it: that engine alone): no arguments = dictation, `--record <s>` (mic check), `--file <wav>...` (prints the text), `--bench <dir> [--out <file>]`; console set to UTF-8; `--no-format` (exact words); `--no-history`; `--no-sound` |
+| `desktop/win/src/cue.rs` | `play(Cue)` (`Start` / `Stop` / `Cancel`): short soft chimes built in memory as WAV, played with `PlaySoundW` without waiting; `set_enabled` (`--no-sound`) |
 | `desktop/win/src/dictate.rs` | `run()`: the dictation loop (key actions → `Recorder` → `run_streamed` on a worker thread → console, with "Used <engine>: <first> was slow" when a later engine answered and a one-time notice when a model's free requests are used up: when they come back and how to change the main model), 5-minute cap; `record_for(s)` (prints only, never pastes); prints lists line by line and "Not formatted" when the format step failed; pastes the text (`inject`) and says when it was only copied; then saves the recording and its line in the history (`open_history`, D-032) |
 | `desktop/win/src/history.rs` | `History::open()` (`%LOCALAPPDATA%\SonicScript\history`), `save(&Outcome, Clip) -> path`: the whole recording as `audio/<date>/<time>.ogg` + one line in `history.jsonl` (raw / final text, engines, app in front, paste result, timings; also the step 9 latency log), D-032 |
 | `desktop/win/src/hotkey.rs` | `spawn(vk, Sender<Action>)`: `WH_KEYBOARD_LL` hook on its own thread, runs `keys::Machine`, swallows only what it says; injected keys (programs, our own paste) pass untouched; `force_stop()` (cap, mic failure) |
@@ -103,7 +104,7 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 ## Dictation pipeline (desktop/core)
 
 ```
-key down ─► mic (cpal) ─► mono ─► resample 16 kHz ─► encode::Stream (20 ms packets while recording)
+key down ─► start chime (cue) ─► mic (cpal) ─► mono ─► resample 16 kHz ─► encode::Stream (20 ms packets while recording)
 key up / Enter ─► run_streamed:
 samples (16 kHz mono) ─► vad::detect ─► no speech? → nothing sent
                       ─► packets for speech ± 500 ms ─► Ogg ─► Chain (D-029) ─► Normalizer::clean (per line)

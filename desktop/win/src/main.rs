@@ -7,6 +7,8 @@
 mod audio;
 mod bench;
 #[cfg(windows)]
+mod cue;
+#[cfg(windows)]
 mod dictate;
 #[cfg(windows)]
 mod history;
@@ -29,7 +31,7 @@ use sonicscript_core::pipeline::{self, Transcribe};
 use crate::key::Choice;
 
 const USAGE: &str = "\
-usage: sonicscript [--engine <id>] [--no-format] [--no-history] [mode]
+usage: sonicscript [--engine <id>] [--no-format] [--no-history] [--no-sound] [mode]
   sonicscript                                 dictation: tap or hold Right Ctrl, speak; the text is typed at the cursor
   sonicscript --models                        the models you can use: free / paid, limits, test results
   sonicscript --record <seconds>              mic check: record, then print the text (0.5-300 s)
@@ -42,6 +44,7 @@ The text is formatted (lists, take-backs, fillers, numbers as digits) on Groq af
 --no-format gives the exact words.
 Dictation and --record keep each recording (Opus, about 2 KB a second) and its text in
 %LOCALAPPDATA%\\SonicScript\\history (history.jsonl + audio\\); --no-history keeps nothing.
+A short chime plays when dictation starts, stops or is cancelled; --no-sound turns it off.
 Keys come from GROQ_API_KEY / GEMINI_API_KEY (this console or your Windows user environment).";
 
 fn main() -> ExitCode {
@@ -75,6 +78,11 @@ fn main() -> ExitCode {
         }
         None => true,
     };
+    if let Some(i) = args.iter().position(|a| a == "--no-sound") {
+        args.remove(i);
+        #[cfg(windows)]
+        cue::set_enabled(false);
+    }
     let choice = match key::choose(engine_id.as_deref(), format) {
         Ok(e) => e,
         Err(e) => {
