@@ -14,6 +14,7 @@ use sonicscript_core::pipeline::{self, Outcome, Transcribe};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_RCONTROL;
 
 use crate::audio::{Recorder, Recording};
+use crate::cue::{self, Cue};
 use crate::history::{Clip, History};
 use crate::inject::{self, Pasted};
 use crate::key::{Choice, Engines};
@@ -66,6 +67,8 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
         };
         match action {
             Action::Start => {
+                // First, so the short chime is mostly over before the mic opens.
+                cue::play(Cue::Start);
                 let client = client.clone();
                 std::thread::spawn(move || client.warm());
                 let t = Instant::now();
@@ -80,6 +83,7 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
                     }
                     Err(e) => {
                         hotkey::force_stop();
+                        cue::play(Cue::Cancel);
                         eprintln!("  Could not open the microphone: {e}");
                     }
                 }
@@ -87,6 +91,7 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
             Action::Cancel => {
                 if let Some((r, ..)) = recording.take() {
                     drop(r.stop());
+                    cue::play(Cue::Cancel);
                     println!("  Cancelled.");
                 }
             }
@@ -100,6 +105,8 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
                     mic_open_ms,
                     paste: true,
                 };
+                // After the mic is closed, so the chime is not recorded.
+                cue::play(Cue::Stop);
                 let (client, normalizer, history) =
                     (client.clone(), normalizer.clone(), history.clone());
                 std::thread::spawn(move || {

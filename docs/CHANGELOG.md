@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-sound
+
+- Start / stop chimes (owner, live try: "show that my click registered"): new `desktop/win/src/cue.rs`; a rising
+  chime on start (played before the mic opens), a falling one after the mic closes, a low note on cancel or a
+  mic failure; `--no-sound`. Tests: the WAV the chimes are built from; a manual test that plays them.
+- Word-list plan: the final list of six ways to add words (owner, 2026-11-04); the AI-assistant prompt now says
+  plainly that the words are for a dictation / transcription app; the app-in-front hint marked as a separate,
+  optional idea.
+
 ## 2026-11-04 · feat/m1-chain-gemini-first (D-033)
 
 - Owner's live try on `feat/m1-history` (16 dictations, read from the history): paste worked in Windows
