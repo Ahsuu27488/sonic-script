@@ -59,8 +59,9 @@ pub fn summary(list: &WordList) -> String {
 
 /// Runs a `--words*` command; `None` when `args` is not one.
 pub fn command(args: &[String]) -> Option<Result<(), String>> {
-    let rest = &args[1..];
-    Some(match (args.first()?.as_str(), rest) {
+    // No arguments (plain dictation) is not a words command.
+    let (first, rest) = args.split_first()?;
+    Some(match (first.as_str(), rest) {
         ("--words", []) => open(),
         ("--words-prompt", []) => prompt(),
         ("--words-add", files) if !files.is_empty() => add_files(files),
@@ -298,6 +299,14 @@ mod tests {
                 ("McDonald's".to_string(), 1)
             ]
         );
+    }
+
+    #[test]
+    fn other_arguments_and_none_are_not_words_commands() {
+        // No arguments = dictation (it crashed here once: the args were sliced before checking).
+        assert!(command(&[]).is_none());
+        assert!(command(&["--record".into(), "5".into()]).is_none());
+        assert!(command(&["--words-add".into()]).is_none(), "needs a file");
     }
 
     #[test]

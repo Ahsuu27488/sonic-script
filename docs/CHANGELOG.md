@@ -3,6 +3,12 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · fix/words-no-args
+
+- Fix: `sonicscript` with no arguments (dictation) crashed at start ("range start index 1 out of range") since
+  PR #20. Root cause: `mywords::command` sliced the arguments before checking there was one; the real runs
+  before the merge all had arguments. Now `split_first`; test `other_arguments_and_none_are_not_words_commands`.
+
 ## 2026-11-04 · feat/m1-words (D-034)
 
 - My words, phase A of the word-list plan (owner's go-ahead 2026-11-04: "for every user, not just me"): new
