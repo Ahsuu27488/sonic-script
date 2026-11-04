@@ -4,12 +4,14 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `feat/m1-history` (dictation history, D-032; PR open, on top of
-`feat/m1-paste`, PR #16, which is on top of `feat/m1-format-baje`, PR #15); `main` = PRs #3-#14.
+**Last updated:** 2026-11-04 · **Code at:** `feat/m1-chain-gemini-first` (Groq only after every Gemini
+model failed, D-033; PR open) on top of `feat/m1-history` (PR #17) → `feat/m1-paste` (PR #16) →
+`feat/m1-format-baje` (PR #15); `main` = PRs #3-#14.
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
-**engine chain** (D-029): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite → Groq Whisper,
+**engine chain** (D-029, D-033): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, and Groq
+Whisper only when every Gemini model failed,
 skipping a model whose free requests are used up (run `m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors,
-p95 4.3 s). **Paste at the cursor (step 7)** is built on `feat/m1-paste`, tests pass, not tried live yet.
+p95 4.3 s). **Paste at the cursor (step 7)** works live in Windows Terminal, the Claude app and Chrome.
 **Dictation history (D-032)** keeps every recording (Opus, ~2 KB/s) and its text on this PC. **Smart formatting (D-030, D-031)** is
 merged (PR #12; on by default, `--no-format` for exact words; Layout 96%, no word loss; live list, take-back
 and lakh amount right).
@@ -36,7 +38,10 @@ and lakh amount right).
 
 - **Engine chain (D-029, PR #10):** `sonicscript` without `--engine` sends the clip to
   `gemini-3.5-transcribe+gptoss20b`; after 4 s or an error also to `gemini-3.5-flash`; 3 s later
-  `gemini-3.5-flash-lite`; 3 s later `groq-whisper-hint`; first good answer wins. A 429 naming Google's daily
+  `gemini-3.5-flash-lite`; first good answer wins. `groq-whisper-hint` is a last resort (D-033, branch
+  `feat/m1-chain-gemini-first`): asked only once every Gemini model asked has failed or is resting, never
+  because they are slow (before: 3 s after Flash-Lite, which in the live try of 2026-11-04 gave garbled text
+  twice, "Nain, aare terny athrakaam ..."). A 429 naming Google's daily
   quota (`...PerDay...`) rests that model for an hour (other 429s ≥ 60 s): later clips skip it with no request,
   and dictation prints once that its free requests are used up, when they come back and how to change the main
   model (`--engine <id>`). An engine with a missing key is left out with a notice. Run `m1-chain` (44 M0 clips,
@@ -60,7 +65,9 @@ and lakh amount right).
 - **Dictation (M1 step 5, D-015, D-023, D-024):** tap / hold Right Ctrl, Enter stops, Esc cancels; cpal mic,
   own 16 kHz resampler, Opus encoded while recording. Live test by the owner (tap, hold, Realtek mic) and key
   test (Enter / Esc taken only while recording; Right Ctrl + C still copies) passed 2026-11-03.
-- **Paste at the cursor (M1 step 7, branch `feat/m1-paste`, not tried live yet):** `inject::paste` saves the
+- **Paste at the cursor (M1 step 7, branch `feat/m1-paste`; live 2026-11-04: pasted in Windows Terminal,
+  the Claude app and Chrome, ~300 ms each, 12 pastes in the history; the owner has not reported Win+V, the
+  image and the administrator window yet):** `inject::paste` saves the
   clipboard (every memory format: text, HTML, images as DIB, files), sets the text marked so Win+V history and
   cloud clipboard skip it, sends Ctrl+V (Ctrl+Shift+V in Windows Terminal / console windows) and puts the
   clipboard back after 300 ms unless something new was copied. Window running as administrator: text only
@@ -76,7 +83,8 @@ and lakh amount right).
   engine text, final text, formatted or not, app in front (exe, window class), paste result, timings (mic open,
   key-up → text, paste, every stage), tokens, error. Written after the paste (no extra wait); `--no-history`
   keeps nothing. Checked: unit test (files and lines) and a real 2 s `--record` (3.5 KB file, 14 kbps,
-  plays back at 2.0 s). Not tried in a live dictation yet.
+  plays back at 2.0 s). Live 2026-11-04: 16 dictations kept (392 KB); it showed where "Nain" came from (Groq
+  Whisper, Transcribe out of free requests, Flash / Flash-Lite slow) and that a 62 s clip held no speech.
 - **Pipeline pieces (M1 steps 1-4):** text cleanup (D-019: script guard, phantom filter, word list), voice gate
   (D-020, D-022: sends all 42 speech clips, drops both silence clips, keeps 500 ms around speech), Ogg/Opus
   16 kbps (D-021: as accurate as WAV at 8 KB per clip), golden check `--bench` scored by `eval rescore`.
@@ -114,7 +122,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 66 core + 12 app (+1 manual clipboard test)
+- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 69 core + 12 app (+1 manual clipboard test)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -139,10 +147,11 @@ and lakh amount right).
 
 1. Every engine above 95% takes 1.5-3 s typically, which D-025 accepts. With 2 s waits, Groq answered 13 of
    the 18 clips after Transcribe ran out (88%) in `m1-chain`; the owner chose 3 s each for Flash and
-   Flash-Lite, so on a slow Google day Groq now comes at ~6 s (~10 s while Transcribe still has free requests).
-   Not benchmarked with 3 s yet; D-017's learned deadline comes later.
+   Flash-Lite. Since D-033 Groq is asked only when every Gemini model failed: on a slow Google day the wait
+   is whatever the fastest Gemini model takes (worst case ~18 s: Flash-Lite asked at 7 s and timing out at
+   10 s, then Groq). Not benchmarked yet; D-017's learned deadline comes later.
 2. Every Gemini model has a slow tail (some requests 10-30 s) and they slow down together; Groq last caps the
-   wait. A request that loses keeps running in the background (at most 10 s) and still uses its model's daily
+   wait only when they fail (D-033). A request that loses keeps running in the background (at most 10 s) and still uses its model's daily
    quota. Bench cost counts only the answer used. The "free requests used up" notice was first seen live
    2026-11-04; the owner has not said yet whether it reads well (Next 6).
 3. Smart formatting is limited by Groq's free tokens per minute: each format call is ~1,300 tokens and
@@ -196,11 +205,17 @@ and lakh amount right).
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
    "recorded" seconds match the time between the keys.
-5. **Agent, after M1: benchmark the full chain with the 3 s waits and formatting** (run `m1-chain3`, the app benchmark
+5. **Agent, after M1: benchmark the full chain with Groq as last resort and formatting** (run `m1-chain3`, the app benchmark
    command under "How to run", on the 44 M0 clips: copy them without `fmt-*` to a folder, or the 13 `fmt`
    clips spend Transcribe / Flash quota too), after 1 PM Pakistan time; update known gaps 1 and 13.
 6. **Owner:** keep or change the name "SonicScript"; say if the "free requests used up" notice reads well when
    it shows up.
+7. **Owner: the word-list plan** (`docs/plans/2026-11-04-word-list.md`: one plain format, paste box, import
+   from the user's AI assistant with a ready prompt, starter packs, learning as one-click suggestions, no limit
+   on the list but small prompts). Phase A comes with step 6 once approved.
+8. **Agent: a start / stop cue** (owner, live try: "show that my click registered"): a short sound on start
+   and stop until M2's on-screen ring; in the live try a tap during a 7 s wait started a 62 s recording
+   unnoticed.
 
 ## How to run and check
 

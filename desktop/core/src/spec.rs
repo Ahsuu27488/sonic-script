@@ -140,6 +140,8 @@ struct RawLink {
     engine: String,
     #[serde(default)]
     wait_ms: u64,
+    #[serde(default)]
+    last_resort: bool,
 }
 
 #[derive(Deserialize)]
@@ -188,6 +190,8 @@ pub struct Link {
     pub engine: Engine,
     /// How long to wait for this engine before also asking the next one.
     pub wait: Duration,
+    /// Asked only once every engine asked before it has failed, never because they are slow (D-033).
+    pub last_resort: bool,
 }
 
 /// The engines the apps use, in order (`chain` in `spec/providers.json`, D-029).
@@ -198,6 +202,7 @@ pub fn chain() -> Vec<Link> {
         .map(|l| Link {
             engine: engine(&l.engine).expect("every chain engine must be one the app can run"),
             wait: Duration::from_millis(l.wait_ms),
+            last_resort: l.last_resort,
         })
         .collect()
 }
@@ -319,7 +324,7 @@ mod tests {
 
     #[test]
     fn the_chain_is_gemini_first_and_groq_last() {
-        // D-029: the most accurate free engines first, Groq when Google is slow or out of free requests.
+        // D-029, D-033: the most accurate free engines first; Groq only when every Gemini model failed.
         let chain = chain();
         let ids: Vec<&str> = chain.iter().map(|l| l.engine.id()).collect();
         assert_eq!(
@@ -337,7 +342,9 @@ mod tests {
             "GROQ_API_KEY",
             "another provider last, so Google's bad hour does not take every engine"
         );
-        assert!(chain[..3].iter().all(|l| l.wait >= Duration::from_secs(2)));
+        assert!(chain[..2].iter().all(|l| l.wait >= Duration::from_secs(2)));
+        let last_resort: Vec<bool> = chain.iter().map(|l| l.last_resort).collect();
+        assert_eq!(last_resort, [false, false, false, true]);
     }
 
     #[test]

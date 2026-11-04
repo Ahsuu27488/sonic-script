@@ -3,6 +3,20 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-chain-gemini-first (D-033)
+
+- Owner's live try on `feat/m1-history` (16 dictations, read from the history): paste worked in Windows
+  Terminal, the Claude app and Chrome; "Nain, aare terny athrakaam ..." was Groq Whisper's own text (Transcribe
+  out of free requests after the day's benchmarks, Flash / Flash-Lite slower than 3 s); from #7 on the format
+  step hit Groq's token limit (text unformatted); "Claude" heard as "McCloud" by Flash.
+- Chain: `groq-whisper-hint` is a last resort (`"last_resort": true` in `spec/providers.json`): asked only once
+  every Gemini model asked has failed or is resting, never for slowness. `Chain::with_last_resort`,
+  `is_last_resort`; `spec::Link.last_resort`; the startup line says "... then groq-whisper-hint if all of them
+  fail". Tests: 3 new chain tests, the spec chain test.
+- `docs/plans/2026-11-04-word-list.md`: draft plan for the personal word list (owner's ideas: paste box, file,
+  import from the user's AI assistant, dictating words to it; plus starter packs, app-in-front context, learning
+  as suggestions, no limit on the list with small prompts).
+
 ## 2026-11-04 · feat/m1-history (D-032, M1 step 9)
 
 - Dictation history: new `desktop/win/src/history.rs`; dictation and `--record` keep the whole recording

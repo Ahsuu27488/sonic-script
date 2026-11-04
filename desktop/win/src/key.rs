@@ -11,9 +11,10 @@ use sonicscript_core::spec;
 /// What the app runs: engines in order of preference (D-029).
 pub type Engines = Chain<Client>;
 
-/// The engines to run, in order, each with how long to wait for it before also asking the next.
+/// The engines to run, in order, each with how long to wait for it before also asking the next, and whether
+/// it is a last resort (asked only after every engine before it failed, D-033).
 pub struct Choice {
-    pub links: Vec<(spec::Engine, Duration)>,
+    pub links: Vec<(spec::Engine, Duration, bool)>,
     /// The smart-formatting step run after whichever engine answers (D-030); `None` with `--no-format`.
     pub format: Option<spec::Refine>,
 }
@@ -24,7 +25,7 @@ pub fn choose(id: Option<&str>, format: bool) -> Result<Choice, String> {
     let links = match id {
         None => spec::chain()
             .into_iter()
-            .map(|l| (l.engine, l.wait))
+            .map(|l| (l.engine, l.wait, l.last_resort))
             .collect(),
         Some(id) => vec![(
             spec::engine(id).ok_or_else(|| {
@@ -34,6 +35,7 @@ pub fn choose(id: Option<&str>, format: bool) -> Result<Choice, String> {
                 )
             })?,
             Duration::ZERO,
+            false,
         )],
     };
     let format = if format { spec::format() } else { None };
@@ -57,14 +59,14 @@ pub fn engines(choice: Choice) -> Result<Engines, String> {
     });
     let mut links = Vec::new();
     let mut first_error = None;
-    for (engine, wait) in choice.links {
+    for (engine, wait, last_resort) in choice.links {
         let id = engine.id().to_string();
         let client = Client::new(engine, read).and_then(|c| match &format {
             Some(f) => c.with_format(f.clone(), read),
             None => Ok(c),
         });
         match client {
-            Ok(client) => links.push((client, wait)),
+            Ok(client) => links.push((client, wait, last_resort)),
             Err(e) => {
                 if many {
                     eprintln!("  Note: {id} left out ({e}).");
@@ -76,15 +78,17 @@ pub fn engines(choice: Choice) -> Result<Engines, String> {
     if links.is_empty() {
         return Err(first_error.unwrap_or_default());
     }
-    Ok(Chain::new(links))
+    Ok(Chain::with_last_resort(links))
 }
 
-/// "a, then b after 4 s, then c after 2 s more" for the console.
+/// "a, then b after 4 s, then c after 3 s more, then d if all of them fail" for the console.
 pub fn describe(engines: &Engines) -> String {
     let mut out = engines.first().id().to_string();
     let mut waits: Vec<Duration> = Vec::new();
-    for (engine, wait) in engines.links() {
-        if let Some(&prev) = waits.last() {
+    for (i, (engine, wait)) in engines.links().enumerate() {
+        if engines.is_last_resort(i) && i > 0 {
+            out += &format!(", then {} if all of them fail", engine.id());
+        } else if let Some(&prev) = waits.last() {
             let more = if waits.len() > 1 { " more" } else { "" };
             out += &format!(", then {} after {} s{more}", engine.id(), prev.as_secs());
         }

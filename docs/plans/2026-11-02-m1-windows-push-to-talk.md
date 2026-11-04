@@ -36,6 +36,9 @@
 - Step 9 latency log: built 2026-11-04 on `feat/m1-history` as the dictation history (D-032): the owner
   asked for the audio and the text too, so the "no audio and no text" rule below is replaced; the file is
   `%LOCALAPPDATA%\SonicScript\history\history.jsonl`, the recordings sit next to it, `--no-history` turns it off.
+- Live try of paste + history (2026-11-04): pasted in Windows Terminal, the Claude app and Chrome. Groq
+  Whisper became a last resort (D-033, `feat/m1-chain-gemini-first`). Word list: draft plan
+  `docs/plans/2026-11-04-word-list.md` (phase A with step 6).
 - Next (STATUS Next): merge PR #12 after the owner's live try, model catalog PR, mic-open delay, chain
   benchmark with 3 s waits, then step 7 (paste), step 6 (key), step 9 (latency log).
 

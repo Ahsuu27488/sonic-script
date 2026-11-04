@@ -334,3 +334,16 @@ to check later what was said, what was recorded and what came back; compressed s
 drive C:. *Where:* `desktop/win/src/history.rs`, `dictate.rs` (`transcribe`, `open_history`), `main.rs`
 (`--no-history`), `encode.rs` (`Stream::finish` reusable), `inject.rs` (`app_in_front`). Before launch (M2): a
 settings switch, a size or age limit, and whether it starts on or off for other users.
+
+**D-033 Groq Whisper is a last resort: asked only when every Gemini model has failed, never because they are
+slow.** (2026-11-04) Changes D-029's timing for Groq (the Gemini order and waits stay: Transcribe, Flash after
+4 s, Flash-Lite 3 s later). `spec/providers.json` marks `groq-whisper-hint` `"last_resort": true`; the chain
+asks it only once every engine asked before it has failed or is resting (also when every Gemini model is out of
+free requests, or the Gemini key is missing). *Why:* the owner's live try (2026-11-04, dictation history): with
+Transcribe out of free requests and Flash / Flash-Lite slower than 3 s, Groq answered 3 of 16 clips after about
+7 s, 2 of them garbled ("Nain, aare terny athrakaam ..."); the owner prefers waiting for Gemini (97%) to fast
+wrong text from Groq (89%), in line with D-025. Gemini Flash-Lite's ~500 free requests a day per user's key make
+it the free engine; Groq stays for Google outages. Cost: on a slow Google hour the wait is the fastest Gemini
+model's, up to ~18 s in the worst case (Flash-Lite asked at 7 s, timing out at 10 s, then Groq). *Where:*
+`spec/providers.json` `chain`, `desktop/core/src/spec.rs` (`Link.last_resort`), `client.rs`
+(`Chain::with_last_resort`, `is_last_resort`), `desktop/win/src/key.rs` (`Choice.links`, `describe`).
