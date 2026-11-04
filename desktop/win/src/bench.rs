@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
-use sonicscript_core::api::ApiError;
 use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::{self, Outcome, PipelineError, Transcribe};
 use sonicscript_core::spec::{self, Engine, Refine};
@@ -68,12 +67,7 @@ pub fn run(dir: &Path, out: &mut impl Write, client: &Engines) -> Result<Summary
         )
         .map_err(|e| e.to_string())?;
         eprintln!("[{}/{}] {id:<8} {}", i + 1, files.len(), status(&outcome));
-        let fatal = matches!(
-            &outcome.error,
-            Some(PipelineError::Api(
-                ApiError::BadKey(_) | ApiError::MissingKey(_)
-            ))
-        );
+        let fatal = matches!(&outcome.error, Some(PipelineError::Api(e)) if e.is_key_error());
         done.push(outcome);
         if fatal {
             eprintln!("Stopping: this error will repeat. Fix it and run the same command again.");
@@ -295,7 +289,7 @@ pub fn percentile(values: &[f64], p: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sonicscript_core::api::{Passed, Skip};
+    use sonicscript_core::api::{ApiError, Passed, Skip};
     use sonicscript_core::spec;
 
     #[test]

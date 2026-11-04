@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-no-groq-fallback (D-035)
+
+- The owner approved taking Groq Whisper out of the chain (STATUS Next 1 of the end-of-session docs). Chain:
+  Transcribe → Flash → Flash-Lite. When all fail: `ApiError::AllFailed` with each reason; dictation prints
+  "Nothing typed", the reasons and what to do (`failure_notes`). `ApiError::is_key_error` (bench stops on
+  key errors also inside `AllFailed`). `spec/models.json` regenerated (Groq no longer fallback 3).
+- Tests: the chain's all-fail error, the spec chain, the console notes. Real: the startup line without Groq; a
+  run with a wrong Gemini key listed all three refusals.
+
 ## 2026-11-04 · docs/end-of-session
 
 - Second live try (8 dictations): Transcribe and Flash out of free requests, Flash-Lite timed out 5 of 6, so

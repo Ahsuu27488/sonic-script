@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use sonicscript_core::api::{ApiError, Skip};
 use sonicscript_core::keys::Action;
 use sonicscript_core::normalize::Normalizer;
-use sonicscript_core::pipeline::{self, Outcome, Transcribe};
+use sonicscript_core::pipeline::{self, Outcome, PipelineError, Transcribe};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_RCONTROL;
 
 use crate::audio::{Recorder, Recording};
@@ -189,13 +189,9 @@ fn transcribe(job: Job, client: &Engines, normalizer: &Normalizer, history: Opti
     let mut paste_ms = None;
     let seconds = f64::from(out.audio_ms) / 1000.0;
     if let Some(e) = &out.error {
-        // In a chain, an error comes back only when every engine asked failed.
-        let both = if client.links().count() > 1 {
-            " (every engine in the chain failed)"
-        } else {
-            ""
-        };
-        eprintln!("  Error: {e}{both}");
+        for line in failure_notes(e) {
+            eprintln!("  {line}");
+        }
     } else if !out.sent {
         println!("  No speech heard ({seconds:.1} s recorded): nothing sent.");
     } else if out.text.is_empty() {
@@ -275,6 +271,36 @@ fn transcribe(job: Job, client: &Engines, normalizer: &Normalizer, history: Opti
     }
 }
 
+/// What to tell the user when no text came back: nothing was typed, why each model failed, and what to do
+/// (D-035: no weak fallback, a clear message instead). The recording stays in the history.
+fn failure_notes(e: &PipelineError) -> Vec<String> {
+    let PipelineError::Api(ApiError::AllFailed(all)) = e else {
+        return vec![format!("! Nothing typed: {e}")];
+    };
+    let mut lines = vec!["! Nothing typed: no model answered.".to_string()];
+    lines.extend(all.iter().map(|(id, e)| format!("    {id}: {e}")));
+    let daily = |e: &ApiError| matches!(e, ApiError::RateLimited { daily: true, .. });
+    let slow = |e: &ApiError| {
+        matches!(
+            e,
+            ApiError::Timeout
+                | ApiError::Http(500..=599, _)
+                | ApiError::RateLimited { daily: false, .. }
+        )
+    };
+    if all.iter().all(|(_, e)| daily(e)) {
+        lines.push(
+            "  Today's free requests are used up on every model. They come back at midnight Pacific time \
+             (about 1 PM in Pakistan). Until then: sonicscript --engine groq-whisper-hint (fast, less accurate)."
+                .into(),
+        );
+    } else if all.iter().any(|(_, e)| slow(e)) {
+        lines.push("  Google is slow or busy right now: try again in a minute.".into());
+    }
+    lines.push("  Your recording is kept in the history.".into());
+    lines
+}
+
 /// Which engine's text this is when it is not the first one's, and why (D-029).
 fn fallback_note(out: &Outcome, first: &str) -> Option<String> {
     if out.engine == first || out.passed.is_empty() {
@@ -303,4 +329,43 @@ fn limit_notes(out: &Outcome) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all(errors: Vec<ApiError>) -> PipelineError {
+        let ids = ["transcribe", "flash", "flash-lite"];
+        PipelineError::Api(ApiError::AllFailed(
+            ids.iter().map(|s| s.to_string()).zip(errors).collect(),
+        ))
+    }
+
+    fn daily() -> ApiError {
+        ApiError::RateLimited {
+            retry_after_s: None,
+            daily: true,
+        }
+    }
+
+    #[test]
+    fn when_no_model_answers_the_user_is_told_why_and_what_to_do() {
+        let used_up = failure_notes(&all(vec![daily(), daily(), daily()])).join("\n");
+        assert!(
+            used_up.contains("Nothing typed") && used_up.contains("about 1 PM"),
+            "{used_up}"
+        );
+        assert!(used_up.contains("flash-lite: today's free requests are used up"));
+
+        let slow = failure_notes(&all(vec![daily(), daily(), ApiError::Timeout])).join("\n");
+        assert!(
+            slow.contains("Google is slow") && !slow.contains("1 PM"),
+            "{slow}"
+        );
+        assert!(slow.ends_with("Your recording is kept in the history."));
+
+        let one = failure_notes(&PipelineError::Api(ApiError::Timeout)).join("\n");
+        assert_eq!(one, "! Nothing typed: no answer within 10 s");
+    }
 }

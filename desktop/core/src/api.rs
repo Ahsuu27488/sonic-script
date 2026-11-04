@@ -83,6 +83,19 @@ pub enum ApiError {
     Network(String),
     /// 200 but not the JSON we expect.
     BadResponse(String),
+    /// Every engine of a chain failed (D-035): each engine's id and error, in the order they were asked.
+    AllFailed(Vec<(String, ApiError)>),
+}
+
+impl ApiError {
+    /// A missing or refused key: asking again gives the same error.
+    pub fn is_key_error(&self) -> bool {
+        match self {
+            Self::MissingKey(_) | Self::BadKey(_) => true,
+            Self::AllFailed(all) => all.iter().all(|(_, e)| e.is_key_error()),
+            _ => false,
+        }
+    }
 }
 
 impl std::fmt::Display for ApiError {
@@ -103,6 +116,10 @@ impl std::fmt::Display for ApiError {
             Self::Timeout => write!(f, "no answer within {} s", TIMEOUT.as_secs()),
             Self::Network(msg) => write!(f, "network error: {msg}"),
             Self::BadResponse(msg) => write!(f, "unexpected answer: {msg}"),
+            Self::AllFailed(all) => {
+                let each: Vec<String> = all.iter().map(|(id, e)| format!("{id}: {e}")).collect();
+                write!(f, "no model answered ({})", each.join("; "))
+            }
         }
     }
 }

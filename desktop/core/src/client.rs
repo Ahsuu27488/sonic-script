@@ -253,7 +253,8 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
         self.first().warm();
     }
 
-    /// When every engine asked fails, the error of the first one asked is returned.
+    /// When every engine asked fails: that engine's error when only one was asked, else
+    /// [`ApiError::AllFailed`] with each one's (D-035).
     fn transcribe(&self, audio: &Encoded) -> Result<Transcript, ApiError> {
         let id = |link: usize| self.links[link].engine.id().to_string();
         let now = Instant::now();
@@ -340,11 +341,16 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
                 since = Instant::now();
             }
         }
-        Err(errors
+        let mut failed: Vec<(String, ApiError)> = errors
             .into_iter()
-            .flatten()
-            .next()
-            .unwrap_or_else(|| ApiError::Network("the engine threads stopped".into())))
+            .enumerate()
+            .filter_map(|(place, e)| Some((id(order[place]), e?)))
+            .collect();
+        match failed.len() {
+            0 => Err(ApiError::Network("the engine threads stopped".into())),
+            1 => Err(failed.remove(0).1),
+            _ => Err(ApiError::AllFailed(failed)),
+        }
     }
 }
 
@@ -770,22 +776,32 @@ mod tests {
     }
 
     #[test]
-    fn when_every_engine_fails_the_first_error_is_returned() {
+    fn when_every_engine_fails_each_error_is_returned() {
         let first = ApiError::Http(503, "high demand".into());
+        let bad_key = ApiError::BadKey("GROQ_API_KEY".into());
         let (c, _) = chain(vec![
             Fake::new("lite", 0, Err(first.clone())),
-            Fake::new("groq", 0, Err(ApiError::BadKey("GROQ_API_KEY".into()))),
+            Fake::new("groq", 0, Err(bad_key.clone())),
         ]);
-        assert_eq!(run(&c).0.unwrap_err(), first);
+        let all = ApiError::AllFailed(vec![
+            ("lite".into(), first.clone()),
+            ("groq".into(), bad_key.clone()),
+        ]);
+        assert_eq!(run(&c).0.unwrap_err(), all);
         let (c, _) = chain(vec![
             Fake::new("lite", 400, Err(ApiError::Timeout)),
-            Fake::new("groq", 0, Err(ApiError::BadKey("GROQ_API_KEY".into()))),
+            Fake::new("groq", 0, Err(bad_key.clone())),
         ]);
         assert_eq!(
             run(&c).0.unwrap_err(),
-            ApiError::Timeout,
+            ApiError::AllFailed(vec![
+                ("lite".into(), ApiError::Timeout),
+                ("groq".into(), bad_key)
+            ]),
             "also when it fails late"
         );
+        let (c, _) = chain(vec![Fake::new("lite", 0, Err(first.clone()))]);
+        assert_eq!(run(&c).0.unwrap_err(), first, "one engine: its own error");
     }
 
     #[test]
