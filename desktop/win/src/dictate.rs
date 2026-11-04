@@ -1,6 +1,6 @@
 //! Dictation mode, the default when `sonicscript.exe` runs without arguments (M1 plan step 5). The dictation
-//! key opens the mic and warms both engines' connections at once; stopping runs the pipeline on a worker thread and
-//! prints the text. Pasting it at the cursor is step 7.
+//! key opens the mic and warms both engines' connections at once; stopping runs the pipeline on a worker thread,
+//! prints the text and pastes it at the cursor of the window in front (step 7, `inject`).
 
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -13,6 +13,7 @@ use sonicscript_core::pipeline::{self, Outcome, Transcribe};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_RCONTROL;
 
 use crate::audio::Recorder;
+use crate::inject::{self, Pasted};
 use crate::key::{Choice, Engines};
 use crate::{hotkey, key};
 
@@ -31,7 +32,8 @@ pub fn run(choice: Choice) -> Result<(), String> {
     hotkey::spawn(VK_RCONTROL, tx)?;
     println!(
         "SonicScript is listening ({id}).\n  \
-         Tap Right Ctrl, speak, tap it again or press Enter: the text appears here.\n  \
+         Tap Right Ctrl, speak, tap it again or press Enter: the text is typed where your cursor is\n  \
+         (and shown here).\n  \
          Or hold Right Ctrl while you speak. Esc cancels. Close this window or press Ctrl+C to quit."
     );
 
@@ -83,7 +85,7 @@ pub fn run(choice: Choice) -> Result<(), String> {
                 let stopped = Instant::now();
                 let rec = r.stop();
                 let (client, normalizer) = (client.clone(), normalizer.clone());
-                std::thread::spawn(move || transcribe(rec, stopped, &client, &normalizer));
+                std::thread::spawn(move || transcribe(rec, stopped, &client, &normalizer, true));
             }
         }
     }
@@ -104,7 +106,8 @@ pub fn record_for(seconds: f64, choice: Choice) -> Result<(), String> {
     let stopped = Instant::now();
     let rec = r.stop();
     let client = warm.join().map_err(|_| "warm-up thread panicked")?;
-    transcribe(rec, stopped, &client, &normalizer);
+    // A mic check only prints: its window is in front, and text pasted into a console could run as commands.
+    transcribe(rec, stopped, &client, &normalizer, false);
     Ok(())
 }
 
@@ -113,6 +116,7 @@ fn transcribe(
     stopped: Instant,
     client: &Engines,
     normalizer: &Normalizer,
+    paste: bool,
 ) {
     let stream = match rec.stream {
         Ok(s) => s,
@@ -138,6 +142,24 @@ fn transcribe(
         println!("  Nothing to type (the engine only heard its own hint).");
     } else {
         println!("→ {}", out.text.trim_end().replace('\n', "\n  "));
+        let pasted = if paste {
+            let t = Instant::now();
+            match inject::paste(&out.text) {
+                Ok(Pasted::Pasted) => format!(" · pasted in {} ms", t.elapsed().as_millis()),
+                Ok(Pasted::Copied(why)) => {
+                    println!(
+                        "  ! Copied, not pasted ({why}): press Ctrl+V where you want the text."
+                    );
+                    String::new()
+                }
+                Err(e) => {
+                    eprintln!("  ! Not pasted: {e}");
+                    String::new()
+                }
+            }
+        } else {
+            String::new()
+        };
         let note = if out.needs_llm {
             " · mostly Urdu script, rough romanization"
         } else {
@@ -149,7 +171,7 @@ fn transcribe(
             String::new()
         };
         println!(
-            "  {seconds:.1} s recorded, {:.1} s sent · key-up → text {key_up_to_text} ms (speech {:.0} ms{refine}){note}",
+            "  {seconds:.1} s recorded, {:.1} s sent · key-up → text {key_up_to_text} ms (speech {:.0} ms{refine}){pasted}{note}",
             f64::from(out.sent_ms) / 1000.0,
             out.stages.request
         );

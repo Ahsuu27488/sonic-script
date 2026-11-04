@@ -4,11 +4,12 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `main` (PRs #3-#13: smart formatting and the model catalog merged).
+**Last updated:** 2026-11-04 · **Code at:** `feat/m1-paste` (paste at the cursor, M1 step 7; PR open, on top of
+`feat/m1-format-baje`, PR #15); `main` = PRs #3-#14.
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite → Groq Whisper,
 skipping a model whose free requests are used up (run `m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors,
-p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart formatting (D-030, D-031)** is
+p95 4.3 s). **Paste at the cursor (step 7)** is built on `feat/m1-paste`, tests pass, not tried live yet. **Smart formatting (D-030, D-031)** is
 merged (PR #12; on by default, `--no-format` for exact words; Layout 96%, no word loss; live list, take-back
 and lakh amount right).
 
@@ -58,6 +59,15 @@ and lakh amount right).
 - **Dictation (M1 step 5, D-015, D-023, D-024):** tap / hold Right Ctrl, Enter stops, Esc cancels; cpal mic,
   own 16 kHz resampler, Opus encoded while recording. Live test by the owner (tap, hold, Realtek mic) and key
   test (Enter / Esc taken only while recording; Right Ctrl + C still copies) passed 2026-11-03.
+- **Paste at the cursor (M1 step 7, branch `feat/m1-paste`, not tried live yet):** `inject::paste` saves the
+  clipboard (every memory format: text, HTML, images as DIB, files), sets the text marked so Win+V history and
+  cloud clipboard skip it, sends Ctrl+V (Ctrl+Shift+V in Windows Terminal / console windows) and puts the
+  clipboard back after 300 ms unless something new was copied. Window running as administrator: text only
+  copied, the console says to press Ctrl+V. Waits up to 1 s for Shift / Alt / Ctrl / Win to be let go. After
+  every paste SonicScript clears its own console's input (a paste into its own window would otherwise run as
+  commands in PowerShell after it quits); old console windows get line breaks as spaces. `--record` never
+  pastes. The key hook ignores injected keys. Checked: unit tests (keys per window class, line breaks, saved
+  formats) and a manual round-trip on the real clipboard (`cargo test -p sonicscript inject -- --ignored`).
 - **Pipeline pieces (M1 steps 1-4):** text cleanup (D-019: script guard, phantom filter, word list), voice gate
   (D-020, D-022: sends all 42 speech clips, drops both silence clips, keeps 500 ms around speech), Ogg/Opus
   16 kbps (D-021: as accurate as WAV at 8 KB per clip), golden check `--bench` scored by `eval rescore`.
@@ -95,7 +105,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 65 core + 8 app
+- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 65 core + 11 app (+1 manual clipboard test)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -104,7 +114,7 @@ and lakh amount right).
 ## In progress
 
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029); smart
-  formatting merged (D-031, PR #12). Left: step 7 (paste at the cursor), step 6 (changeable key,
+  formatting merged (D-031, PR #12); step 7 (paste) built, waiting for the owner's live try. Left: step 6 (changeable key,
   D-018), step 9 (latency log). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
 - Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
@@ -166,9 +176,12 @@ and lakh amount right).
 1. **Owner: merge the format-prompt PR** (`feat/m1-format-baje`: "6:00" → "6 baje" in Urdu / Hindi).
 2. **Owner: punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
    into Claude's dictation too); then the agent changes the prompt's punctuation rule and re-runs D-031's checks.
-3. **Agent: M1 step 7, paste at the cursor** (the biggest step to daily use; lists must keep their line
-   breaks), then step 6 (changeable key, D-018), then step 9 (latency log). M1's open steps come before
-   anything else (owner, 2026-11-04: milestones unchanged, M1 first).
+3. **Owner, then agent: try paste live** (`feat/m1-paste`; close any running SonicScript window first, then
+   `cd desktop; cargo run -q --release -p sonicscript`): dictate into Notepad, WhatsApp, a browser, Claude in
+   Windows Terminal (a list keeps its lines), with an image copied before (it must be on the clipboard again
+   after), and into an app run as administrator (text copied, console says Ctrl+V); Win+V must show no
+   dictated text. Agent: then merge, then step 6 (changeable key, D-018), then step 9 (latency log). M1's open
+   steps come before anything else (owner, 2026-11-04: milestones unchanged, M1 first).
 4. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's

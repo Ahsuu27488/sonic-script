@@ -1,5 +1,5 @@
 //! SonicScript for Windows (M1 plan: `docs/plans/2026-11-02-m1-windows-push-to-talk.md`). Without arguments
-//! it listens for the dictation key and prints what was said (step 5; pasting is step 7). `--file` and
+//! it listens for the dictation key and types what was said at the cursor (steps 5 and 7). `--file` and
 //! `--bench` run the same pipeline on WAV files (the golden check, step 4).
 
 #[cfg(windows)]
@@ -9,6 +9,8 @@ mod bench;
 mod dictate;
 #[cfg(windows)]
 mod hotkey;
+#[cfg(windows)]
+mod inject;
 mod key;
 mod models;
 mod wav;
@@ -25,7 +27,7 @@ use crate::key::Choice;
 
 const USAGE: &str = "\
 usage: sonicscript [--engine <id>] [--no-format] [mode]
-  sonicscript                                 dictation: tap or hold Right Ctrl, speak, get the text
+  sonicscript                                 dictation: tap or hold Right Ctrl, speak; the text is typed at the cursor
   sonicscript --models                        the models you can use: free / paid, limits, test results
   sonicscript --record <seconds>              mic check: record, then print the text (0.5-300 s)
   sonicscript --file <wav>...                 transcribe 16 kHz mono WAV files, print the text
