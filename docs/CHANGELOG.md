@@ -3,6 +3,13 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · docs/graphify-rule
+
+- PR #13 (model catalog) merged after CI passed.
+- CLAUDE.md graphify rule: `explain <file>::<symbol>` / `path` first for code, `query` with a budget for open
+  questions; spec JSON is not in the graph and Markdown only as headings that `graphify update` does not
+  refresh, so those are read directly. Checked: all 39 code files in the graph (987 nodes), current.
+
 ## 2026-11-04 · feat/m1-catalog (model catalog refreshed)
 
 - PR #12 (smart formatting) merged after CI passed.

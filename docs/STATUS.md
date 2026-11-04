@@ -4,8 +4,7 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `feat/m1-catalog` (model catalog refreshed, PR open; `main` =
-PRs #3-#12, smart formatting merged).
+**Last updated:** 2026-11-04 · **Code at:** `main` (PRs #3-#13: smart formatting and the model catalog merged).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite → Groq Whisper,
 skipping a model whose free requests are used up (run `m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors,
@@ -16,8 +15,7 @@ and lakh amount right).
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
    D-031 (D-025 to D-031 are the newest and set the direction), `ARCHITECTURE.md` and the plan
-   `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top). If the catalog PR
-   (`feat/m1-catalog`) is not merged yet, Next 1 comes first. Formatting details:
+   `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top). Formatting details:
    `docs/plans/2026-11-03-m1-smart-formatting.md`.
 2. Do "Next" below in order, one branch and PR per item (`feat/m1-<topic>`), each with its check.
 3. **Work in this checkout, not a git worktree:** drive C: is nearly full (13 GB free on 2026-11-04, 3.4 GB on
@@ -48,7 +46,7 @@ and lakh amount right).
   - `gemini-3.5-transcribe+gptoss20b` (the Gemini app's model + Roman cleanup on Groq): 97.3%, English kept
     95%, 2.8 s / 3.9 s, all 44 clips (run finished 2026-11-04; 97.9% on the first 22).
   - `gemini-3.5-flash`: 97.5%, English kept 94%, 2.0 s / 7.4 s, 41 of 44 clips (daily limit).
-  - `spec/models.json` (catalog re-run 2026-11-04, branch `feat/m1-catalog`) holds these numbers; the model
+  - `spec/models.json` (catalog re-run 2026-11-04, PR #13) holds these numbers; the model
     page lists the chain in its order (default, fallback 1-3), then the rest by accuracy.
   - `gemini-3.5-flash-lite`: 97.0%, 1.6 s / 9.1 s; in the app 96.6%, 1.8 s / 6.3 s, 2 of 44 hit the 10 s timeout.
   - OpenAI (paid) `gpt-4o-mini-transcribe` / `gpt-4o-transcribe` + Roman cleanup: 94.7% / 93.8%, ~1.5 s / 2.6 s.
@@ -92,7 +90,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `feat/m1-catalog`):** `eval`: 39 offline tests, ruff clean; `desktop`: 65 core + 8 app
+- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 65 core + 8 app
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): `graphify query "..."` works (code only, updated 2026-11-04 on `feat/m1-format`).
@@ -103,8 +101,8 @@ and lakh amount right).
   formatting merged (D-031, PR #12). Left: step 7 (paste at the cursor), step 6 (changeable key,
   D-018), step 9 (latency log). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
-- Catalog PR (branch `feat/m1-catalog`): `spec/models.json` from the finished `m1-engines` run, catalog notes
-  updated for formatting, chain order on the model page; waiting for the owner's merge (Next 1).
+- Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
+  and Claude's dictation (Next 1).
 
 ## Live state
 
@@ -156,10 +154,9 @@ and lakh amount right).
 
 ## Next
 
-1. **Owner: merge the catalog PR (`feat/m1-catalog`).** Checked: `sonicscript --models` shows all 44 clips
-   per model, the chain in order, the formatting notes. Then the agent: `git switch main && git pull`.
-2. **Agent, optional small prompt follow-up** (own branch): "hmm" as a filler and "6 baje" kept as "6 baje"
-   (re-run `reformat` on `fmt-say` and `m1-format`, D-031's checks).
+1. **Agent: format prompt follow-up** (own branch): punctuation as much as the Gemini app / Claude dictation
+   (owner, 2026-11-04), "hmm" as a filler, "6 baje" kept as "6 baje" (re-run D-031's checks with `reformat`).
+2. **Agent: graphify rule** (CLAUDE.md, PR `docs/graphify-rule`): merge when CI is green.
 3. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
