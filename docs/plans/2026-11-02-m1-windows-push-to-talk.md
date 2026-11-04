@@ -39,6 +39,9 @@
 - Live try of paste + history (2026-11-04): pasted in Windows Terminal, the Claude app and Chrome. Groq
   Whisper became a last resort (D-033, `feat/m1-chain-gemini-first`). Word list: draft plan
   `docs/plans/2026-11-04-word-list.md` (phase A with step 6).
+- 2026-11-04 end of day: PRs #15-#22 merged (paste, history = step 9, Groq last resort, chimes, My words phase
+  A, a start-up crash fix). Left in M1: the mic-open delay, step 6 (key), the owner's 3 open paste checks and
+  his decision on Groq (STATUS Next 1-4).
 - Next (STATUS Next): merge PR #12 after the owner's live try, model catalog PR, mic-open delay, chain
   benchmark with 3 s waits, then step 7 (paste), step 6 (key), step 9 (latency log).
 

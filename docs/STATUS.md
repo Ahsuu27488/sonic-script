@@ -4,8 +4,9 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 · **Code at:** `main` = PRs #3-#20 (paste, history, Groq last resort, chimes, My words
-merged 2026-11-04 on the owner's word, CI green).
+**Last updated:** 2026-11-04 (end of a long session; the next one starts fresh) · **Code at:** `main` = PRs
+#3-#22 (paste, history, Groq last resort, chimes, My words, the start-up crash fix; merged 2026-11-04 on the
+owner's word after CI passed).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029, D-033): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, and Groq
 Whisper only when every Gemini model failed,
@@ -17,7 +18,7 @@ and lakh amount right).
 
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
-   D-031 (D-025 to D-031 are the newest and set the direction), `ARCHITECTURE.md` and the plan
+   D-034 (D-025 to D-034 are the newest and set the direction), `ARCHITECTURE.md` and the plan
    `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top). Formatting details:
    `docs/plans/2026-11-03-m1-smart-formatting.md`.
 2. Do "Next" below in order, one branch and PR per item (`feat/m1-<topic>`), each with its check.
@@ -37,8 +38,7 @@ and lakh amount right).
 
 - **Engine chain (D-029, PR #10):** `sonicscript` without `--engine` sends the clip to
   `gemini-3.5-transcribe+gptoss20b`; after 4 s or an error also to `gemini-3.5-flash`; 3 s later
-  `gemini-3.5-flash-lite`; first good answer wins. `groq-whisper-hint` is a last resort (D-033, branch
-  `feat/m1-chain-gemini-first`): asked only once every Gemini model asked has failed or is resting, never
+  `gemini-3.5-flash-lite`; first good answer wins. `groq-whisper-hint` is a last resort (D-033, PR #18): asked only once every Gemini model asked has failed or is resting, never
   because they are slow (before: 3 s after Flash-Lite, which in the live try of 2026-11-04 gave garbled text
   twice, "Nain, aare terny athrakaam ..."). A 429 naming Google's daily
   quota (`...PerDay...`) rests that model for an hour (other 429s ≥ 60 s): later clips skip it with no request,
@@ -56,6 +56,8 @@ and lakh amount right).
     page lists the chain in its order (default, fallback 1-3), then the rest by accuracy.
   - `gemini-3.5-flash-lite`: 97.0%, 1.6 s / 9.1 s; in the app 96.6%, 1.8 s / 6.3 s, 2 of 44 hit the 10 s timeout.
   - OpenAI (paid) `gpt-4o-mini-transcribe` / `gpt-4o-transcribe` + Roman cleanup: 94.7% / 93.8%, ~1.5 s / 2.6 s.
+    Not a usable judge of the owner's natural speech: on 7 live clips (2026-11-04, ~$0.01) `gpt-4o-transcribe`
+    wrote only the first sentence of every clip longer than ~9 s; where it wrote everything it was right.
     Not in the chain; catalog only. Both write text on silence. About $0.06 spent in all.
   - `groq-whisper-hint` (last in the chain): 89.2%; in the app 89.3%, 0.3 s / 0.5 s.
   - `gemini-3.8-flash` and `gemini-3.1-flash-lite`: dropped (timeouts / 503 "high demand" on the free tier).
@@ -64,7 +66,7 @@ and lakh amount right).
 - **Dictation (M1 step 5, D-015, D-023, D-024):** tap / hold Right Ctrl, Enter stops, Esc cancels; cpal mic,
   own 16 kHz resampler, Opus encoded while recording. Live test by the owner (tap, hold, Realtek mic) and key
   test (Enter / Esc taken only while recording; Right Ctrl + C still copies) passed 2026-11-03.
-- **Paste at the cursor (M1 step 7, branch `feat/m1-paste`; live 2026-11-04: pasted in Windows Terminal,
+- **Paste at the cursor (M1 step 7, PR #16; live 2026-11-04: pasted in Windows Terminal,
   the Claude app and Chrome, ~300 ms each, 12 pastes in the history; the owner has not reported Win+V, the
   image and the administrator window yet):** `inject::paste` saves the
   clipboard (every memory format: text, HTML, images as DIB, files), sets the text marked so Win+V history and
@@ -75,7 +77,7 @@ and lakh amount right).
   commands in PowerShell after it quits); old console windows get line breaks as spaces. `--record` never
   pastes. The key hook ignores injected keys. Checked: unit tests (keys per window class, line breaks, saved
   formats) and a manual round-trip on the real clipboard (`cargo test -p sonicscript inject -- --ignored`).
-- **Dictation history (D-032, branch `feat/m1-history`, also plan step 9's latency log):** dictation and
+- **Dictation history (D-032, PR #17, also plan step 9's latency log):** dictation and
   `--record` keep the whole recording (key-down to key-up, Ogg/Opus 16 kbps: ~2 KB a second, ~7 MB per hour
   of speech) in `%LOCALAPPDATA%\SonicScript\history\audio\<date>\<time>.ogg` and one line in
   `history.jsonl`: time, recording, recorded / speech / sent length, engines (main, answered, passed), raw
@@ -84,7 +86,13 @@ and lakh amount right).
   keeps nothing. Checked: unit test (files and lines) and a real 2 s `--record` (3.5 KB file, 14 kbps,
   plays back at 2.0 s). Live 2026-11-04: 16 dictations kept (392 KB); it showed where "Nain" came from (Groq
   Whisper, Transcribe out of free requests, Flash / Flash-Lite slow) and that a 62 s clip held no speech.
-- **My words (D-034, branch `feat/m1-words`, phase A of `docs/plans/2026-11-04-word-list.md`):** the user's
+- **Second live try (2026-11-04, 22:17-23:11, 8 dictations in the history, `main`):** chimes heard, paste
+  into the Claude app worked every time. Transcribe and Flash were out of free requests (the day's benchmarks
+  and tests had used them); Flash-Lite answered 1 of 6 (3.0 s) and timed out (10 s) on the other 5, so Groq
+  Whisper answered 5 clips after 10-12.6 s with misspelt text ("Bhuaii, sach bethau na ... grog" for "Bhai, sach
+  bataun na ... Groq"; OpenAI's model got that one right). The owner: Groq's answers are no use, better none
+  (Next 1). Flash's one answer (14 s clip) was clean, "1 baje" / "4 baje" right.
+- **My words (D-034, PR #20, phase A of `docs/plans/2026-11-04-word-list.md`):** the user's
   list is `%APPDATA%\SonicScript\words.txt` (created with a format guide at the top: `Word` or
   `Word = how it gets misheard`); commands: `--words` (Notepad), `--words-prompt` (copies the prompt for the
   user's own AI assistant, `spec/prompts/words-assistant-v1.md`, with a collect mode), `--words-add <file>`,
@@ -96,7 +104,7 @@ and lakh amount right).
   prompt (D-014). Checked: unit tests (parser, merge, near words, the words in both requests, cleanup), real
   runs of every command on a scratch folder, clip #12 with and without a list on Flash (right both times: the
   live "McCloud" was a one-off). Not checked yet: a before / after where an engine gets a name wrong.
-- **Start / stop chimes (branch `feat/m1-sound`, until M2's on-screen ring):** dictation plays a soft rising
+- **Start / stop chimes (PR #19, until M2's on-screen ring):** dictation plays a soft rising
   chime when recording starts (before the mic opens, ~110 ms), a falling one after the mic closes, one low note
   on cancel or a mic failure (`cue.rs`: sine notes built in memory, `PlaySoundW` without waiting); `--no-sound`
   turns them off. Checked: unit test (format, level, no clicks) and a manual test that played all three on the
@@ -105,7 +113,7 @@ and lakh amount right).
 - **Pipeline pieces (M1 steps 1-4):** text cleanup (D-019: script guard, phantom filter, word list), voice gate
   (D-020, D-022: sends all 42 speech clips, drops both silence clips, keeps 500 ms around speech), Ogg/Opus
   16 kbps (D-021: as accurate as WAV at 8 KB per clip), golden check `--bench` scored by `eval rescore`.
-- **Smart formatting (D-030, branch `feat/m1-format`, plan `docs/plans/2026-11-03-m1-smart-formatting.md`):**
+- **Smart formatting (D-030, PR #12, plan `docs/plans/2026-11-03-m1-smart-formatting.md`):**
   `spec/providers.json` `format` (Groq `gpt-oss-120b` + `spec/prompts/format-v1.md`) runs after whichever
   engine answers, in place of its own refine step; optional after Flash / Flash-Lite / Groq (a failure keeps
   the engine's text and says "Not formatted"), required after Transcribe. `--no-format` = exact words. The
@@ -118,7 +126,7 @@ and lakh amount right).
     kept unchanged on the 40 clips that are not spoken lists (Transcribe 97.2 → 97.1%, Flash 97.4 → 97.4%,
     Flash-Lite 96.9 → 96.9%); `ag-03` and `lg-02` (spoken lists) became lists.
   - 20b lost words on fmt-11 ("Kya kal chutti hai?"); 120b kept them.
-  - Clock times (branch `feat/m1-format-baje`): Gemini Transcribe writes "6 baje" as "6:00"; the prompt now
+  - Clock times (PR #15): Gemini Transcribe writes "6 baje" as "6:00"; the prompt now
     turns a whole hour in Urdu / Hindi into "N baje" (fmt-09 → "Theek hai, kal 6 baje milte hain."; the old
     prompt kept "6:00"). Layout 88% with the old and the new prompt alike (fmt-04's last 2 steps merged in both:
     model variation; 96% in the first run), word loss none: 96.1 → 96.4% on the M0 clips with the rule's first
@@ -148,13 +156,14 @@ and lakh amount right).
 ## In progress
 
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029); smart
-  formatting merged (D-031, PR #12); step 7 (paste) built, waiting for the owner's live try; step 9 (latency log) built as part
-  of the dictation history (D-032). Left: step 6 (changeable key, D-018). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
+  formatting merged (D-031, PR #12); step 7 (paste) works live (3 checks left, Next 2); step 9 (latency log) is part of the dictation
+  history (D-032); start / stop chimes and My words phase A built. Left: the mic-open delay (Next 3) and step 6
+  (changeable key, D-018). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
 - Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
   and Claude's dictation. Measured 2026-11-04 (runs `fmt-120b`, `m1-format-app`): after Transcribe the format
   step keeps Gemini's sentence ends (10.5 → 9.6 per 100 words on the M0 clips) and drops about half its commas
-  (3.4 → 1.9; owner's clips 8.8 → 1.6), so no prompt change yet: waiting for the owner's live examples (Next 2).
+  (3.4 → 1.9; owner's clips 8.8 → 1.6), so no prompt change yet: waiting for the owner's live examples (Next 5).
 
 ## Live state
 
@@ -170,7 +179,7 @@ and lakh amount right).
 2. Every Gemini model has a slow tail (some requests 10-30 s) and they slow down together; Groq last caps the
    wait only when they fail (D-033). A request that loses keeps running in the background (at most 10 s) and still uses its model's daily
    quota. Bench cost counts only the answer used. The "free requests used up" notice was first seen live
-   2026-11-04; the owner has not said yet whether it reads well (Next 6).
+   2026-11-04; the owner has not said yet whether it reads well (Next 8).
 3. Smart formatting is limited by Groq's free tokens per minute: each format call is ~1,300 tokens and
    `gpt-oss-120b` allows 8K tokens/min (Groq's `x-ratelimit-limit-tokens` header): about 6 formatted
    dictations a minute; past that the text comes out unformatted (after Transcribe, Flash answers instead).
@@ -187,8 +196,10 @@ and lakh amount right).
    a phantom (D-019).
 7. The voice gate is tuned on one male voice (the owner) and one room; loud talking or TV counts as speech.
    Silero VAD only if this fails in daily use.
-8. Opening the mic takes 160-690 ms after the key goes down, and that audio is lost (key test: 406 ms; likely
-   clipped the owner's first word "Bhai yaar"). Not fixed (Next 4).
+8. Opening the mic takes 113-512 ms after the key goes down, and that audio is lost: in 24 live dictations
+   (2026-11-04) it was either 113-133 ms (12) or 462-512 ms (12), unrelated to how long the app had been idle.
+   Tap and hold start alike (recording starts on key-down; key-up decides tap or hold, D-023). Not fixed
+   (Next 3).
 9. Urdu-script "میں" is always romanized "mein" (it can be "main" = I) by the local cleanup. With formatting on
    (D-031) the format step romanizes Urdu script first, so this matters only with `--no-format` or when the
    format step fails (then mostly-Urdu output from Groq gets only a rough letter-by-letter draft, `needs_llm`).
@@ -198,7 +209,7 @@ and lakh amount right).
     `winget install Kitware.CMake`. Drive C: is nearly full (see Start here 3).
 12. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 13. Smart formatting (D-031): the format step (~0.7 s typical, ~1.3 s slow) counts inside the chain's waits,
-    so a later engine is asked a little more often; not measured on a full chain run yet (Next 5). The
+    so a later engine is asked a little more often; not measured on a full chain run yet (Next 6). The
     prompt still sometimes keeps the filler "wo na" (fmt-11) and sometimes merges the last two steps of the
     tea recipe (fmt-04: old and new prompt alike), and Whisper's garbled text cannot be formatted. "Hmm" is
     kept on purpose (owner). Prompt
@@ -207,29 +218,30 @@ and lakh amount right).
 
 ## Next
 
-1. **Owner: try the merged app** (close any running SonicScript window first, then `git switch main; git pull;
-   cd desktop; cargo run -q --release -p sonicscript`): the chimes (rising = recording, falling = stopped), My
-   words (`--words-prompt` → your AI assistant → copy its answer → `--words-paste`, then dictate names), and the
-   paste checks still open: Win+V must show no dictated text, a copied image must be back on the clipboard after
-   a dictation, an app run as administrator gets "press Ctrl+V". Agent: read `history.jsonl` against what the
-   owner reports.
-2. **Owner: punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
+1. **Owner: Groq's place (decide; it changes D-033).** In the second live try Groq Whisper answered 5 clips,
+   all misspelt, and the owner said its answers are no use. Options: (a) take Groq out of the chain: when every
+   Gemini model fails, nothing is typed and the console says why (out of free requests until ~1 PM, or Google
+   slow) and how to try again; (b) keep it as the last resort (D-033). D-033 kept Groq for Google outages.
+2. **Owner: the paste checks still open:** Win+V must show no dictated text; a copied image must be back on the
+   clipboard after a dictation; an app run as administrator gets "press Ctrl+V". And try My words
+   (`--words-prompt` → your AI assistant → copy its answer → `--words-paste`, restart, dictate names).
+3. **Agent: mic-open delay (known gap 8)** before step 6, since it cuts the first word: measure which part of
+   `audio::Recorder::start` takes the extra ~350 ms half the time (device lookup, `build_input_stream`,
+   `play`) and move what can be prepared to startup. If only a mic kept open removes it, ask the owner first
+   (Windows shows the mic-in-use icon the whole time). Check: `ms.mic_open` in `history.jsonl`.
+4. **Agent: M1 step 6 (changeable key, D-018)**; with it, My words phase A is complete. M1's open steps come
+   before anything else (owner, 2026-11-04: milestones unchanged, M1 first).
+5. **Owner: punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
    into Claude's dictation too); then the agent changes the prompt's punctuation rule and re-runs D-031's checks.
-3. **Agent: M1 step 6 (changeable key, D-018)**, then the mic-open delay (Next 4). M1's open steps come before
-   anything else (owner, 2026-11-04: milestones unchanged, M1 first).
-4. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
-   lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
-   it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
-   "recorded" seconds match the time between the keys.
-5. **Agent, after M1: benchmark the full chain with Groq as last resort and formatting** (run `m1-chain3`, the app benchmark
-   command under "How to run", on the 44 M0 clips: copy them without `fmt-*` to a folder, or the 13 `fmt`
-   clips spend Transcribe / Flash quota too), after 1 PM Pakistan time; update known gaps 1 and 13.
-6. **Owner:** keep or change the name "SonicScript"; say if the "free requests used up" notice reads well when
-   it shows up.
-7. **Owner: try My words** (`sonicscript --words-prompt`, give it to your AI assistant, copy the answer,
-   `sonicscript --words-paste`; or `--words` / `--words-suggest`), then dictate names. Agent, after Google's
-   reset: a before / after on clips with names the engines got wrong. Starter packs and the settings box come
-   in M2 (phase B).
+6. **Agent, after Google's daily reset (~1 PM Pakistan), without running benchmarks first:** a My words before /
+   after on clips with names the engines got wrong; then, after M1, the full chain benchmark `m1-chain3` (the app
+   benchmark command under "How to run", on the 44 M0 clips without `fmt-*`); update known gaps 1, 2 and 13.
+   Plan quota: Transcribe 25 and Flash 20 a day are used up fast by tests (they were gone by the evening of
+   2026-11-04), which leaves the owner with Flash-Lite and Groq.
+7. **Owner: the chimes** are fine for now (they sound much like Claude's, 2026-11-04). Claude's dictation sounds
+   are not described anywhere public and the agent cannot listen to audio: if they should change, describe them
+   (higher / lower, shorter, softer, one note or two) and the agent tunes `cue.rs`. M2 adds the on-screen ring.
+8. **Owner:** keep or change the name "SonicScript"; say if the "free requests used up" notice reads well.
 
 ## How to run and check
 
