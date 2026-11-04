@@ -30,6 +30,9 @@
   engine, `--no-format` for exact words; Layout 96% in the app on the owner's 13 `fmt` clips, no word loss on
   the 44 M0 clips.
 - Flash / Transcribe benchmark finished 2026-11-04 (run `m1-engines`; catalog update still to do).
+- Step 7 inject: built on `feat/m1-paste` (2026-11-04) as written, plus: our own console's input cleared after
+  each paste, line breaks as spaces in old console windows, `--record` never pastes, injected keys ignored by
+  the hook. Not tried live yet.
 - Next (STATUS Next): merge PR #12 after the owner's live try, model catalog PR, mic-open delay, chain
   benchmark with 3 s waits, then step 7 (paste), step 6 (key), step 9 (latency log).
 

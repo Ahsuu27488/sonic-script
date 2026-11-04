@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-paste (M1 step 7)
+
+- Paste at the cursor: new `desktop/win/src/inject.rs`; dictation pastes the text into the window in front and
+  restores the user's clipboard (plan step 7). Beyond the plan: our own console's input is cleared after every
+  paste and old console windows get spaces for line breaks (pasted text in a console would run as PowerShell
+  commands); `--record` never pastes; the key hook ignores injected keys (our Ctrl+V cannot disturb the
+  tap / hold rules); waits up to 1 s for held modifiers.
+- Tests: 3 unit tests (keys per window class, line breaks, saved formats) + 1 manual real-clipboard test.
+
 ## 2026-11-04 · feat/m1-format-baje
 
 - PR #14 (graphify rule) merged.

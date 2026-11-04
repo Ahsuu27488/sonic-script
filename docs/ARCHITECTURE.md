@@ -9,7 +9,7 @@ The Milestone 0 benchmark is a Python command-line tool run by hand on the owner
 Gemini HTTP APIs directly with the user's keys; there is no SonicScript server. The M1 Windows app is being
 built in Rust in `desktop/`: the platform-free core (`desktop/core`: text cleanup, voice gate, Opus encoding,
 engine clients in a fallback chain, pipeline, key rules, resampler) and the app binary `sonicscript.exe` (`desktop/win`). Without
-arguments it listens for the dictation key, records and prints the text (pasting comes in step 7);
+arguments it listens for the dictation key, records, prints the text and pastes it at the cursor (`inject`);
 `--record`, `--file` and `--bench` run the same pipeline without the key.
 The planned apps are described in `blueprint.md` §3 and §5.
 
@@ -58,8 +58,9 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `desktop/core/src/keys.rs` | `Machine::down / up(Key, time_ms) -> Reply { action: Start / Stop / Cancel, swallow }`, `force_stop()`: the D-015 / D-023 key rules |
 | `desktop/core/src/resample.rs` | `Resampler::new(in_rate).process(&[f32]) / flush()`: any rate → 16 kHz, windowed sinc, streaming (D-024) |
 | `desktop/win/src/main.rs` | `sonicscript.exe [--engine <id>]` (without it: the spec's chain; with it: that engine alone): no arguments = dictation, `--record <s>` (mic check), `--file <wav>...` (prints the text), `--bench <dir> [--out <file>]`; console set to UTF-8; `--no-format` (exact words) |
-| `desktop/win/src/dictate.rs` | `run()`: the dictation loop (key actions → `Recorder` → `run_streamed` on a worker thread → console, with "Used <engine>: <first> was slow" when a later engine answered and a one-time notice when a model's free requests are used up: when they come back and how to change the main model), 5-minute cap; `record_for(s)`; prints lists line by line and "Not formatted" when the format step failed |
-| `desktop/win/src/hotkey.rs` | `spawn(vk, Sender<Action>)`: `WH_KEYBOARD_LL` hook on its own thread, runs `keys::Machine`, swallows only what it says; `force_stop()` (cap, mic failure) |
+| `desktop/win/src/dictate.rs` | `run()`: the dictation loop (key actions → `Recorder` → `run_streamed` on a worker thread → console, with "Used <engine>: <first> was slow" when a later engine answered and a one-time notice when a model's free requests are used up: when they come back and how to change the main model), 5-minute cap; `record_for(s)` (prints only, never pastes); prints lists line by line and "Not formatted" when the format step failed; pastes the text (`inject`) and says when it was only copied |
+| `desktop/win/src/hotkey.rs` | `spawn(vk, Sender<Action>)`: `WH_KEYBOARD_LL` hook on its own thread, runs `keys::Machine`, swallows only what it says; injected keys (programs, our own paste) pass untouched; `force_stop()` (cap, mic failure) |
+| `desktop/win/src/inject.rs` | `paste(text) -> Pasted` (`Pasted` / `Copied(why)`): save the clipboard (memory formats) → set the text (kept out of Win+V history and cloud clipboard) → Ctrl+V, Ctrl+Shift+V in terminals → restore after 300 ms if nothing new was copied; administrator windows get the text copied only; clears our own console's input; one paste at a time |
 | `desktop/win/src/audio.rs` | `Recorder::start() / stop() -> Recording { samples, stream }`: default mic via cpal, mono, resampled and encoded on a worker thread |
 | `desktop/win/src/bench.rs` | `run(dir, out, &Engines) -> Summary`: pipeline on every WAV, paced by the primary's `rpm`, one row per clip in `eval`'s `results.jsonl` shape (`row`; engine `app-<first>~<next>~...` for a chain, plus `answered_by`, `passed`), p50 / p95, answers per engine; with formatting the run is `app-...+fmt` and priced with the format step |
 | `desktop/win/src/models.rs` | `print()`: `--models`, the catalog grouped free / paid with limits, results and the app check |
@@ -105,6 +106,7 @@ key down ─► mic (cpal) ─► mono ─► resample 16 kHz ─► encode::Str
 key up / Enter ─► run_streamed:
 samples (16 kHz mono) ─► vad::detect ─► no speech? → nothing sent
                       ─► packets for speech ± 500 ms ─► Ogg ─► Chain (D-029) ─► Normalizer::clean (per line)
+text ─► console + inject::paste (dictation mode only; clipboard → Ctrl+V → clipboard restored)
 each engine in the Chain: speech call ─► format step (Groq, format-v1.md, D-030; --no-format: the engine's
        own refine, if any)
 Chain: Gemini Transcribe + Groq Roman cleanup ─(4 s or error)─► + Gemini Flash ─(3 s)─► + Gemini Flash-Lite
