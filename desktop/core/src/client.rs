@@ -138,9 +138,10 @@ pub const DAILY_REST: Duration = Duration::from_secs(60 * 60);
 const MIN_REST: Duration = Duration::from_secs(60);
 
 /// Engines in order of preference (D-029). The clip goes to the first; when it fails, or has not answered
-/// within its wait, it also goes to the next one, and so on; the first good answer wins. An engine that hit a
-/// rate limit rests (is skipped at once) for a while. A request that loses keeps running on its own thread
-/// until it ends (at most the 10 s client timeout) and is ignored.
+/// within its wait, it also goes to the next one, and so on; the first good answer wins. A last-resort engine
+/// (D-033: Groq Whisper) is asked only once every engine asked before it has failed, never for slowness. An
+/// engine that hit a rate limit rests (is skipped at once) for a while. A request that loses keeps running on
+/// its own thread until it ends (at most the 10 s client timeout) and is ignored.
 pub struct Chain<T> {
     links: Vec<Link<T>>,
     /// Per link: skipped until then.
@@ -151,6 +152,7 @@ struct Link<T> {
     engine: Arc<T>,
     /// How long to wait for this engine before also asking the next one.
     wait: Duration,
+    last_resort: bool,
 }
 
 /// (place among the engines asked, answer)
@@ -159,13 +161,19 @@ type Reply = (usize, Result<Transcript, ApiError>);
 impl<T: Transcribe + Send + Sync + 'static> Chain<T> {
     /// `links`: (engine, wait) in order; the last engine's wait is not used. Panics when empty.
     pub fn new(links: Vec<(T, Duration)>) -> Self {
+        Self::with_last_resort(links.into_iter().map(|(e, w)| (e, w, false)).collect())
+    }
+
+    /// `links`: (engine, wait, last resort) in order (D-033). Panics when empty.
+    pub fn with_last_resort(links: Vec<(T, Duration, bool)>) -> Self {
         assert!(!links.is_empty(), "a chain needs an engine");
         let resting = Arc::new(Mutex::new(vec![None; links.len()]));
         let links = links
             .into_iter()
-            .map(|(engine, wait)| Link {
+            .map(|(engine, wait, last_resort)| Link {
                 engine: Arc::new(engine),
                 wait,
+                last_resort,
             })
             .collect();
         Self { links, resting }
@@ -178,6 +186,11 @@ impl<T: Transcribe + Send + Sync + 'static> Chain<T> {
     /// The engines in order, each with its wait.
     pub fn links(&self) -> impl Iterator<Item = (&T, Duration)> {
         self.links.iter().map(|l| (&*l.engine, l.wait))
+    }
+
+    /// Whether link `i` is asked only after every engine before it has failed (D-033).
+    pub fn is_last_resort(&self, i: usize) -> bool {
+        self.links.get(i).is_some_and(|l| l.last_resort)
     }
 
     /// Starts link `link` on its own thread; the answer comes back tagged with `place`.
@@ -254,7 +267,10 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
         self.ask(order[0], 0, &audio, sender(&mut tx, order.len() == 1));
         let (mut asked, mut since) = (1, Instant::now());
         loop {
-            let reply = if asked < order.len() {
+            // The next engine is a last resort: it waits for failures, not for time.
+            let next_waits_for_failures =
+                asked < order.len() && self.links[order[asked]].last_resort;
+            let reply = if asked < order.len() && !next_waits_for_failures {
                 let wait = self.links[order[asked - 1]]
                     .wait
                     .saturating_sub(since.elapsed());
@@ -276,8 +292,9 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
                 }
                 Some((place, Err(e))) => {
                     // Only the newest engine failing moves the chain on; an older one may still answer.
+                    // Before a last resort, every engine asked so far must have failed.
                     let newest = place + 1 == asked && asked < order.len();
-                    if newest {
+                    if newest || next_waits_for_failures {
                         passed.push(Passed {
                             engine: id(order[place]),
                             why: Skip::Failed(e.clone()),
@@ -287,7 +304,11 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
                     if errors.iter().all(Option::is_some) {
                         break;
                     }
-                    newest
+                    if next_waits_for_failures {
+                        errors[..asked].iter().all(Option::is_some)
+                    } else {
+                        newest
+                    }
                 }
                 None => {
                     passed.push(Passed {
@@ -616,6 +637,67 @@ mod tests {
             [failed("transcribe", busy), failed("flash", daily())]
         );
         assert!(took < WAIT, "no waiting on failed engines: {took:?}");
+    }
+
+    /// Like [`chain`], with the last fake as a last resort (D-033).
+    fn chain_with_last_resort(fakes: Vec<Fake>) -> (Chain<Fake>, Vec<Arc<AtomicU32>>) {
+        let calls = fakes.iter().map(|f| f.calls.clone()).collect();
+        let last = fakes.len() - 1;
+        let links = fakes
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| (f, WAIT, i == last))
+            .collect();
+        (Chain::with_last_resort(links), calls)
+    }
+
+    #[test]
+    fn slow_engines_never_bring_in_the_last_resort() {
+        let (c, n) = chain_with_last_resort(vec![
+            Fake::new("transcribe", 1_000, Ok("Transcribe text")),
+            Fake::new("flash", 1_000, Ok("Flash text")),
+            Fake::new("groq", 0, Ok("Groq text")),
+        ]);
+        let t = run(&c).0.unwrap();
+        assert_eq!(t.engine, "transcribe");
+        assert_eq!(t.passed, [slow("transcribe")]);
+        assert_eq!(calls(&n), [1, 1, 0], "Groq is never asked");
+    }
+
+    #[test]
+    fn the_last_resort_waits_until_every_engine_before_it_failed() {
+        let busy = ApiError::Http(503, "high demand".into());
+        let (c, n) = chain_with_last_resort(vec![
+            Fake::new("transcribe", 0, Err(daily())),
+            // Fails late: the last resort must not start before this.
+            Fake::new("flash", 2 * WAIT.as_millis() as u64, Err(busy.clone())),
+            Fake::new("groq", 0, Ok("Groq text")),
+        ]);
+        let (r, took) = run(&c);
+        let t = r.unwrap();
+        assert_eq!(t.engine, "groq");
+        assert_eq!(
+            t.passed,
+            [failed("transcribe", daily()), failed("flash", busy)]
+        );
+        assert_eq!(calls(&n), [1, 1, 1]);
+        assert!(took >= 2 * WAIT, "Groq only after Flash failed: {took:?}");
+    }
+
+    #[test]
+    fn an_early_failure_does_not_start_the_last_resort_while_another_engine_runs() {
+        let (c, n) = chain_with_last_resort(vec![
+            Fake::new(
+                "transcribe",
+                2 * WAIT.as_millis() as u64,
+                Ok("Transcribe text"),
+            ),
+            Fake::new("flash", 0, Err(daily())),
+            Fake::new("groq", 0, Ok("Groq text")),
+        ]);
+        let t = run(&c).0.unwrap();
+        assert_eq!(t.engine, "transcribe");
+        assert_eq!(calls(&n), [1, 1, 0]);
     }
 
     #[test]
