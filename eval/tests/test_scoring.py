@@ -89,6 +89,8 @@ def test_take_backs_and_fillers_must_be_gone():
     assert (fs.absent_ok, fs.digits_ok, fs.rate) == (True, True, 1.0)
     fs = format_score("Theek hai, kal 5 baje milte hain, nahi nahi 6 baje.", check)
     assert (fs.absent_ok, fs.checks, fs.passed) == (False, 3, 2)
+    assert format_score("Theek hai, kal 6:00 baje milte hain.", check).rate == 1.0  # 6:00 = 6
+    assert not format_score("Theek hai, kal 5:00 baje milte hain.", check).absent_ok
     fillers = {"list": None, "absent": ["matlab", "woh na"]}
     assert not format_score("Matlab yaar, woh na, kal chhutti hai?", fillers).absent_ok
     assert format_score("Yaar, kal chhutti hai? Woh nahi aaya.", fillers).absent_ok  # "woh nahi" is not "woh na"

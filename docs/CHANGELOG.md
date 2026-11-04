@@ -3,6 +3,18 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-04 · feat/m1-format (checks done, D-031)
+
+- `format-v1.md` final tweaks from the audio checks: a lead-in ending in a full stop still makes a list (an
+  "Office ke rules" example; the owner's rules clip fmt-03 stayed a sentence on both engines before), lakh
+  grouping "never 250,000" and "1.5 lakh" → 1,50,000, "wo na" as a filler spelling.
+- Scoring: "6:00" counts as "6"; fmt-11 also checks "wo na".
+- Results: app `m1-format-app` Layout 96%, 0 errors, p50 2.6 s; `fmt-lite-v3` 96% after Flash-Lite and after
+  Groq Whisper; no word loss on the 40 non-list M0 clips (`fmt-120b`, `fmt-120b-final`). Decision D-031.
+- Next 4's bench ran (Transcribe all 44 M0 clips, Flash 41; it also asked 2 new `fmt` clips before Google's
+  per-day 429); catalog left for its own PR. Groq: ~350K tokens on 120b in a day without a daily 429 (known
+  gap 3 corrected).
+
 ## 2026-11-03 · feat/m1-format (smart formatting, D-030; not merged)
 
 - Plan `docs/plans/2026-11-03-m1-smart-formatting.md`, approved by the owner with the defaults. One change

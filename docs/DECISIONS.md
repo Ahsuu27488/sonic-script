@@ -294,3 +294,27 @@ text style from changing when the chain falls back. *Where:* to build (STATUS Ne
 in the refine prompt and the Gemini audio prompt), `spec/providers.json` (refine model, a refine step on the
 Flash / Flash-Lite / Groq engines), spoken list sentences in `spec/fixtures/sentences.json` and a list score in
 `eval`. Not built yet; the model choice is confirmed by that benchmark first.
+
+**D-031 Smart formatting as built: one `format` step on Groq `gpt-oss-120b` after every engine; the Gemini
+audio prompt stays as it is.** (2026-11-04)
+Builds D-030 (its "Where" line changes). `spec/providers.json` `format` (Groq `openai/gpt-oss-120b`,
+`reasoning_effort` low, `spec/prompts/format-v1.md`) runs after whichever engine answers, chain or `--engine`,
+in place of that engine's own `refine` step (the prompt also romanizes, so Transcribe's 20b romanize step is
+replaced). After an engine without a refine step (Flash, Flash-Lite, Groq Whisper) it is optional: a failed
+format request keeps the engine's text and the console says "Not formatted"; after Transcribe it is required
+(its text is in Urdu / Devanagari script). `--no-format` skips it and gives exactly the old output.
+`transcribe-roman-v1.md` (the Gemini audio prompt) gets no format rules: formatting twice could fight, and
+one step after every engine already makes the text look the same whatever answered. *Why:* the owner's
+go-ahead on the plan (`docs/plans/2026-11-03-m1-smart-formatting.md`) with these defaults, and the check:
+- word loss, 120b on saved transcripts of the 44 M0 clips (runs `fmt-120b`, `fmt-120b-final`): accuracy and
+  English kept unchanged on the 40 clips that are not spoken lists (Transcribe 97.2 → 97.1%, Flash 97.4 →
+  97.4%, Flash-Lite 96.9 → 96.9%, again with the final prompt); the two spoken lists (`ag-03`, `lg-02`) became lists;
+- layout, the owner's 13 `fmt` recordings (run `fmt-lite-v3`): 96% of format checks after Flash-Lite and
+  after Groq Whisper (misses: the filler "wo na" kept once; Whisper's garbled `fmt-13`);
+- 120b over 20b: same layout on Groq Whisper's text (88.5% each, earlier prompt) but 20b paraphrased `fmt-11`
+  ("Kya kal chutti hai?"), losing words; format step p50 ~0.7 s, p95 ~1.3 s.
+Cost: one Groq request of ~1,300 tokens per dictation; the free tier allows 8K tokens/min (about 6
+dictations a minute; STATUS known gap 3); past that the text comes out unformatted. *Where:*
+`spec/providers.json` `format`, `spec/prompts/format-v1.md`, `desktop/core/src/spec.rs` `format()`,
+`client.rs` `Client::with_format`, `normalize.rs` (per line), `desktop/win/src/key.rs` (`Choice.format`),
+`main.rs` (`--no-format`), `eval/sonic_eval/scoring.py` `format_score`, `reformat.py`, sentences `fmt-01`..`13`.

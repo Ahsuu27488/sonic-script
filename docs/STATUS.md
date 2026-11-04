@@ -4,17 +4,18 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-03 · **Code at:** `feat/m1-format` (smart formatting built, not merged; `main` = PRs
-#3-#11).
+**Last updated:** 2026-11-04 · **Code at:** `feat/m1-format` (smart formatting built and checked, PR open;
+`main` = PRs #3-#11).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite → Groq Whisper,
 skipping a model whose free requests are used up (run `m1-chain`: 94.9%, Transcribe's own answers 98.5%, 0 errors,
-p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart formatting (D-030)** is built on
-`feat/m1-format` (on by default, `--no-format` for exact words) but not yet benchmarked: Next 1.
+p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart formatting (D-030, D-031)** is
+built and checked on `feat/m1-format` (on by default, `--no-format` for exact words; Layout 96%, no word loss):
+waiting for the owner's live try and merge.
 
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
-   D-030 (D-025 to D-030 are the newest and set the direction), `ARCHITECTURE.md`, the plan
+   D-031 (D-025 to D-031 are the newest and set the direction), `ARCHITECTURE.md`, the plan
    `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top) and, for Next 1,
    `docs/research/2026-11-03-wispr-flow.md`.
 2. Do "Next" below in order, one branch and PR per item (`feat/m1-<topic>`), each with its check.
@@ -62,13 +63,15 @@ p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart f
   `spec/providers.json` `format` (Groq `gpt-oss-120b` + `spec/prompts/format-v1.md`) runs after whichever
   engine answers, in place of its own refine step; optional after Flash / Flash-Lite / Groq (a failure keeps
   the engine's text and says "Not formatted"), required after Transcribe. `--no-format` = exact words. The
-  cleanup keeps line breaks (lists). Text-only check `fmt-say-120b` (the 13 `fmt` sentences as spoken, typed):
-  12 of 13 fully right (missed: filler "woh na" kept in fmt-11), ~1 s per request; `lg-02` and `ag-03` keep
-  every word. Audio run `m1-format` (the owner's 13 `fmt` recordings, Groq Whisper + format): Layout 88.5%
-  with 120b and with 20b, format step p50 ~1.0 s; the misses come mostly from Whisper's text (fmt-13 garbled,
-  "Maitlaab" not seen as a filler) and one real one (fmt-03 rules stayed a sentence). 20b paraphrased fmt-11
-  ("Kya kal chutti hai?", words lost); 120b kept them. Flash-Lite timed out on all 13 (Google, 22:00 PK).
-  Not yet measured on the 44 M0 clips' saved transcripts (Next 1).
+  cleanup keeps line breaks (lists). Checked 2026-11-04 (D-031), final prompt:
+  - App (`sonicscript --bench` on the owner's 13 `fmt` clips, run `m1-format-app`): Layout 96%, 0 errors,
+    clip → text p50 2.6 s / p95 3.8 s (format step p50 ~0.7 s); Transcribe answered all 13.
+  - Layout after Flash-Lite and after Groq Whisper (run `fmt-lite-v3`): 96% each. Misses: the filler "wo na"
+    kept (fmt-11), Whisper's garbled fmt-13.
+  - Word loss (saved transcripts of the 44 M0 clips, runs `fmt-120b`, `fmt-120b-final`): accuracy and English
+    kept unchanged on the 40 clips that are not spoken lists (Transcribe 97.2 → 97.1%, Flash 97.4 → 97.4%,
+    Flash-Lite 96.9 → 96.9%); `ag-03` and `lg-02` (spoken lists) became lists.
+  - 20b lost words on fmt-11 ("Kya kal chutti hai?"); 120b kept them.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
@@ -81,9 +84,10 @@ p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart f
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029). Left: smart
   formatting (D-030), step 7 (paste at the cursor), step 6 (changeable key, D-018), step 9 (latency log).
   Pop-up mic on text fields, settings page (main model + 2 fallbacks, formatting switch) are M2 (D-016, D-017).
-- Smart formatting (Next 1): plan approved, code done on `feat/m1-format` (not pushed); waiting for the
-  owner's 13 `fmt` recordings and tomorrow's Groq token quota for the checks.
-- Benchmark `m1-engines`: Flash and Transcribe still have 19-22 clips each to run (resume command in Next 4).
+- Smart formatting (Next 1): built and checked on `feat/m1-format` (D-031); PR open, waiting for the owner's
+  live try and merge.
+- Benchmark `m1-engines` (Next 4): run finished 2026-11-04 (Transcribe all 44 M0 clips, Flash 41; local
+  results only). Left: `catalog` + its own small PR.
 
 ## Live state
 
@@ -98,11 +102,12 @@ p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart f
 2. Every Gemini model has a slow tail (some requests 10-30 s) and they slow down together; Groq last caps the
    wait. A request that loses keeps running in the background (at most 10 s) and still uses its model's daily
    quota. Bench cost counts only the answer used. The "free requests used up" notice has not been seen live.
-3. Smart formatting is limited by Groq's free tokens, not requests: each format call is ~1,230 prompt + ~75
-   output tokens, and `gpt-oss-120b` (and 20b) allow 8K tokens/min and 200K/day (console.groq.com/docs/
-   rate-limits, 2026-11-03): about 6 formatted dictations a minute and ~160 a day. Past that the text comes out
-   unformatted (after Transcribe, Flash answers instead). Options if it bites: a shorter prompt, 20b as a
-   second formatter (its own quota), or Groq's paid tier. Benchmarks spend the same quota.
+3. Smart formatting is limited by Groq's free tokens per minute: each format call is ~1,300 tokens and
+   `gpt-oss-120b` allows 8K tokens/min (Groq's `x-ratelimit-limit-tokens` header): about 6 formatted
+   dictations a minute; past that the text comes out unformatted (after Transcribe, Flash answers instead).
+   Groq's table also lists 200K tokens/day, but ~350K were used on 2026-11-04 with no daily 429, so the daily
+   limit is not known. Options if it bites: a shorter prompt, 20b as a second formatter (its own quota), or
+   Groq's paid tier. Benchmarks spend the same quota.
 4. Names fail on Groq Whisper; the word list fixes sound-alikes ("Jaminai" → Gemini, "Codec" → Codex) but not
    words run together ("Algrock" = "aur Groq") or 2-consonant words ("rhyme" for RAM).
 5. Groq Whisper sometimes translates instead of transcribing (`mx-04`, `nm-06`); worse with too little silence
@@ -123,35 +128,19 @@ p95 4.3 s). Text is still printed in the console, not pasted (step 7). **Smart f
 
 ## Next
 
-1. **Smart formatting (D-030): finish the check**, branch `feat/m1-format` (code done; plan
-   `docs/plans/2026-11-03-m1-smart-formatting.md`, section 6).
-   - Done: the owner recorded the 13 `fmt` clips (2026-11-03); audio run `m1-format` on Groq Whisper with
-     120b and 20b (results under What works).
-   - **Agent, text only (Groq quota, no Gemini):** the format step on saved transcripts, 120b first (`--rpm 6`
-     keeps under 8K tokens/min; each run ~85-90K tokens of the 200K/day):
-     `python -m sonic_eval reformat --from m1-engines --run fmt-120b --model openai/gpt-oss-120b --rpm 6
-     --engines gemini-3.5-transcribe+gptoss20b gemini-3.5-flash gemini-3.5-flash-lite`, then
-     `--from m0 --run fmt-120b ... --engines groq-whisper-hint`. Pass: accuracy / English kept within 0.5
-     points of the "Before" lines on the clips that did not become lists (`lg-02`, `ag-03` are spoken lists:
-     their M0 text is a sentence). 20b the same way only if 120b fails.
-   - **Agent, audio, Flash-Lite still to do** (it timed out on every clip; probe first with
-     `python -m sonic_eval probe --engines gemini-3.5-flash-lite`): `python -m sonic_eval bench --run m1-format
-     --engines gemini-3.5-flash-lite --formats opus16 --repeats 1 --only format --format-model
-     openai/gpt-oss-120b` (resumes the failed rows; Flash-Lite only, so Transcribe / Flash quota stays for
-     Next 4). Pass: Layout ≥ 90%.
-   - Then: a decision entry (model, prompt, the token limit in known gap 3), the app golden check on the 13
-     clips (copy `spec/fixtures/audio/fmt-*.wav` to a folder, `sonicscript --bench <folder> --out
-     ../eval/results/m1-format-app/results.jsonl`, `rescore`), the owner's live try, PR (What / Why / How
-     verified / Risk).
+1. **Owner: try smart formatting live, then merge its PR** (branch `feat/m1-format`, D-031):
+   `git switch feat/m1-format`, `cd desktop; cargo run -q --release -p sonicscript`, dictate a list, a
+   take-back ("... nahi nahi ...") and a lakh amount; `--no-format` for exact words. After merge: the agent
+   checks CI and `git switch main && git pull`.
 2. **Agent: mic-open delay (known gap 8):** measure which part of `audio::Recorder::start` is slow (device
    lookup, `build_input_stream`, `play`); move what can be prepared to startup. If only a mic kept open removes
    it, ask the owner first (Windows shows the mic-in-use icon the whole time). Check: the key test's
    "recorded" seconds match the time between the keys.
 3. **Agent: benchmark the chain with the 3 s waits** (run `m1-chain3`, same command as `m1-chain` under "How
    to run"), on a day whose Transcribe / Flash quota is not needed by Next 1 or Next 4; update known gap 1.
-4. **Agent, after 1 PM Pakistan time (Gemini's daily reset):** finish the Flash / Transcribe benchmark
-   (`cd eval; python -m sonic_eval bench --run m1-engines --engines gemini-3.5-transcribe+gptoss20b
-   gemini-3.5-flash --formats opus16 --repeats 1`), then `catalog` (command under "How to run").
+4. **Agent: model catalog from the finished `m1-engines` run** (its bench rows are in, 2026-11-04):
+   `catalog` (command under "How to run"), update the engine numbers under What works, own small PR. If
+   Flash's last 3 clips are wanted: the same bench command with `--only` and the M0 categories, after 1 PM.
 5. **Agent: M1 step 7, paste at the cursor** (the biggest step to daily use), then step 6 (changeable key,
    D-018), then step 9 (latency log).
 6. **Owner:** keep or change the name "SonicScript"; try dictation with natural speech

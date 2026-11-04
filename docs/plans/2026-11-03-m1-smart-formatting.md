@@ -2,7 +2,7 @@
 
 **Status:** approved by the owner 2026-11-03 ("go ahead", with the defaults: these 13 sentences, Gemini audio
 prompt unchanged, either marker for "pehla / dusra / teesra"). Built on branch `feat/m1-format`; the audio
-check (6.2) waits for the owner's recordings.
+check done 2026-11-04 (D-031): Layout 96% in the app, no word loss on the 44 M0 clips; PR open.
 
 ## Goal
 

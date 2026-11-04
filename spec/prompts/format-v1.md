@@ -11,14 +11,14 @@ Words:
    mein, ke, ko, bohat, acha, theek. English words in normal English spelling (laptop, charger, meeting).
    Names, brands and acronyms in their usual spelling and casing (WhatsApp, GitHub, API, Lahore, Ali).
 2. Keep every word the speaker meant, in their order; do not paraphrase, translate, summarise or add anything.
-3. Remove only fillers that carry no meaning: umm, uh, matlab, yaani, woh na, haan to. Keep words that
+3. Remove only fillers that carry no meaning: umm, uh, matlab, yaani, woh na / wo na, haan to. Keep words that
    mean something ("theek hai", "acha laga", "matlab kya hai").
 4. Take-backs: when the speaker corrects themselves ("nahi nahi", "sorry", "I mean", "actually", "ek minute",
    "scratch that"), replace only the corrected part, drop the correction words, and keep the rest:
    "theek hai kal paanch baje milte hain nahi nahi chhe baje" → "Theek hai, kal 6 baje milte hain."
    "file Ali ko bhej do, actually Sara ko" → "File Sara ko bhej do."
 5. Numbers as digits: "paanch sau" → 500, "do kilo" → 2 kilo, "do lakh pachaas hazaar" → 2,50,000 (lakh /
-   crore grouping), "dedh lakh" → 1,50,000, "nau baje" → 9 baje, "dhai baje" → 2:30 baje,
+   crore grouping, never 250,000), "dedh lakh" or "1.5 lakh" → 1,50,000, "nau baje" → 9 baje, "dhai baje" → 2:30 baje,
    "saadhe teen" → 3:30, "paune paanch" → 4:45.
 
 Lists (only when the speaker clearly lists things):
@@ -29,6 +29,7 @@ Lists (only when the speaker clearly lists things):
    (aur, phir, pehle, uske baad, and, then, pehla / dusra / teesra, first / second).
    The list takes the place of those words: never write the sentence and then the list as well. The lead-in
    line is only the words said before the first item; when there are none, start with the first item.
+   It is still a list when the lead-in ends with a full stop ("Ghar ke rules ye hain. Shor nahi karna, ...").
    Joining words (pehle, first) are never the lead-in. A sentence said after the last item stays, as a
    sentence on its own line after the list. Every word the speaker meant must still be there.
 7. Ordinary sentences stay sentences, even with "pehle ... phir" or "aur" in them. Two items stay a sentence.
@@ -52,6 +53,13 @@ Laptop setup karne ka tareeqa:
 1. Charger lagao
 2. Power button dabao
 3. Wifi connect karo
+
+Office ke rules ye hain. Late nahi aana, phone silent rakhna aur lunch desk pe nahi karna.
+→
+Office ke rules ye hain:
+- Late nahi aana
+- Phone silent rakhna
+- Lunch desk pe nahi karna
 
 Pehle tests chalao, phir build karo, uske baad PR banao.
 →

@@ -85,6 +85,7 @@ def format_score(output: str, check: dict) -> FormatScore:
     list_ok = _list_ok(output, check.get("list"), int(check.get("items") or 0))
     absent, digits = check.get("absent") or [], check.get("digits") or []
     numbers = set(NUMBER.findall(output))
+    numbers |= {n[:-3] for n in numbers if n.endswith(":00")}  # "6:00 baje" is the same time as "6 baje"
     absent_ok = not any(n in numbers if n[0].isdigit() else _has_phrase(output, n) for n in absent)
     digits_ok = all(d in numbers for d in digits)
     results = [list_ok] + ([absent_ok] if absent else []) + ([digits_ok] if digits else [])
