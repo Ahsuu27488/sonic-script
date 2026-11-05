@@ -477,3 +477,17 @@ chat the same night. The plain text came out right on his clips, and skipping th
 request (~0.7-1 s and ~1,300 of the 8K tokens a minute) on every dictation. Cost: spoken lists, take-backs
 and fillers come out as said unless `--format` is given. *Where:* `desktop/win/src/main.rs` (`--format`,
 `take_flag`), `key.rs` (comments), `docs/STATUS.md`.
+
+**D-042 A main-model answer that looks cut gets a second opinion; the fuller answer wins.** (2026-11-05)
+When the chain's main model (Gemini Transcribe) answers with under 4 words a second of speech on a clip with
+3+ s of speech (the voice gate's `speech_ms`, now carried in `Encoded`), the chain hears from one fallback too
+(the one already running, else the next one not resting: Flash, or Flash-Lite while Flash rests; a slow one
+brings in the next after its wait as usual) and pastes the answer with more words; when the fallback fails or
+is no fuller, the main answer stands. Only the main model's answers are checked. *Why:* known gap 15: on
+2026-11-05 Transcribe cut 2 of the owner's 15 live clips to a few English keywords ("Cloud focus cursor click
+cursor focus keyboard type normally input field focus."), 2.1 and 2.4 words a second of speech, while all 36
+other history clips with 3+ s of speech ran at 5.1-9 (median 6.5); STATUS Next had planned this check; the
+owner asked for the remaining M1 work to be done (2026-11-05). Cost: one extra request on such clips (rare)
+and the fallback's wait (~2-5 s) on them. *Where:* `desktop/core/src/client.rs` (`looks_cut`, `words`,
+`cut_error`, `held` in `Chain::transcribe`), `encode.rs` (`Encoded.speech_ms`), `pipeline.rs`
+(`run_streamed`).

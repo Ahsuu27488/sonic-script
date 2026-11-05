@@ -3,6 +3,19 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · feat/m1-cut-guard (D-042)
+
+- Fix (known gap 15): Gemini Transcribe sometimes cut a long mixed clip to a few English keywords (live
+  2026-11-05 17:08 and 17:11: 2.4 and 2.1 words a second of speech; every other clip 5.1+). The chain now
+  checks the main model's answer against the speech length (`Encoded.speech_ms`, set by the pipeline from the
+  voice gate): 3+ s of speech and under 4 words a second → the next model is asked too (the one already
+  running, else the next not resting) and the answer with more words is pasted; the main model is listed as
+  passed ("its answer looked cut").
+- Checked: 3 unit tests (the fuller fallback wins and only one fallback is asked; the cut answer stays when the
+  fallback is shorter or fails; normal, short and unknown-length clips ask no one else); both live cut clips
+  through the real pipeline (saved cut answer as the main model, real Flash-Lite as the fallback): both came
+  back whole.
+
 ## 2026-11-05 · feat/m1-format-off (D-041)
 
 - Smart formatting is off by default (the owner's choice after his `--no-format` try, 2026-11-05 19:45-19:50):
