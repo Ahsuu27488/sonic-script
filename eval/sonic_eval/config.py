@@ -54,6 +54,13 @@ def load_prompt(name: str, word_list: list[str] | None = None) -> str:
     return text.replace("{word_list}", words).strip()
 
 
+def wrap_transcript(text: str) -> str:
+    """The user message of a text step (format / refine): the transcript in `<transcript>` tags, marked as
+    speech to rewrite (D-038; the app's `spec::wrap_transcript`)."""
+    template = (PROMPTS / "transcript-wrap-v1.txt").read_text(encoding="utf-8").strip()
+    return template.replace("{transcript}", text.strip())
+
+
 KEY_NAMES = ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY")
 
 

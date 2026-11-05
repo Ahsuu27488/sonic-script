@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from .audio import EncodedAudio
-from .config import load_prompt
+from .config import load_prompt, wrap_transcript
 from .ratelimit import RateLimiter
 
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -209,7 +209,7 @@ class GroqWhisperLLM(GroqWhisper):
             "temperature": 0,
             "messages": [
                 {"role": "system", "content": load_prompt(self.spec["prompt"], self.word_list)},
-                {"role": "user", "content": asr},
+                {"role": "user", "content": wrap_transcript(asr)},
             ],
             **self.spec.get("llm_extra", {}),
         }
@@ -239,6 +239,19 @@ class Refiner:
                               provider, client, limiter)
 
     def run(self, text: str, result: EngineResult, word_list: list[str]) -> str:
+        """The step, checked as in the app (D-038): an answer `checked` refuses is asked for once more, then
+        given up as an error."""
+        prompt = load_prompt(self.spec["prompt"], word_list)
+        first, why = checked(text, self._ask(text, result, prompt), prompt)
+        if why is None:
+            return first
+        result.retries += 1
+        again, why2 = checked(text, self._ask(text, result, prompt), prompt)
+        if why2 is None:
+            return again
+        raise EngineError(f"the format answer looked wrong twice ({why}, then {why2})")
+
+    def _ask(self, text: str, result: EngineResult, prompt: str) -> str:
         s = self._sender
         if not s.key:
             raise EngineError(f"missing {s.provider['key_env']} (add it to eval/.env)")
@@ -247,8 +260,8 @@ class Refiner:
             "model": model,
             "temperature": 0,
             "messages": [
-                {"role": "system", "content": load_prompt(self.spec["prompt"], word_list)},
-                {"role": "user", "content": text},
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": wrap_transcript(text)},
             ],
             **self.spec.get("extra", {}),
         }
@@ -257,13 +270,31 @@ class Refiner:
             json=body, headers={"Authorization": f"Bearer {s.key}"})
         data = s._send("refine", model, result, req)
         usage = data.get("usage", {})
-        result.refine_tokens_in = int(usage.get("prompt_tokens", 0))
-        result.refine_tokens_out = int(usage.get("completion_tokens", 0))
+        result.refine_tokens_in += int(usage.get("prompt_tokens", 0))
+        result.refine_tokens_out += int(usage.get("completion_tokens", 0))
         return str(data["choices"][0]["message"].get("content") or "")
 
     def cost_usd(self, r: EngineResult) -> float:
         p = self.spec.get("price", {})
         return (r.refine_tokens_in * p.get("in_per_m", 0) + r.refine_tokens_out * p.get("out_per_m", 0)) / 1e6
+
+
+def checked(said: str, answer: str, prompt: str) -> tuple[str, str | None]:
+    """The text step's answer and why it must not be used (None when it is fine), as the app's
+    `client::checked` (D-038): never empty for real speech, never its own instructions, never far longer or
+    shorter than the transcript (an answer to a spoken question or order). Copied tags are removed."""
+    out = answer.strip().removeprefix("<transcript>").removesuffix("</transcript>").strip()
+    n_said, n_wrote = len(said.split()), len(out.split())
+    if n_wrote == 0:
+        return out, (None if n_said < 4 else "empty")
+    copied = sum(1 for line in (ln.strip() for ln in prompt.splitlines()) if len(line) >= 30 and line in out)
+    if copied >= 2:  # one copied line is fine: a speaker may say one of the prompt's examples
+        return out, "its own instructions"
+    if n_wrote > 2 * n_said + 10:
+        return out, "far longer than what was said"
+    if n_said >= 15 and n_wrote * 10 < n_said * 3:  # short take-backs may shrink a lot
+        return out, "far shorter than what was said"
+    return out, None
 
 
 class FakeEngine(Engine):
