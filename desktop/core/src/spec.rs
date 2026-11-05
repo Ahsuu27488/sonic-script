@@ -318,6 +318,19 @@ fn fill(prompt: &str) -> (String, Option<usize>) {
     (t.replacen("{word_list}", "", 1).trim().to_string(), at)
 }
 
+const TRANSCRIPT_WRAP: &str = include_str!("../../../spec/prompts/transcript-wrap-v1.txt");
+
+/// The user message of a text step (format / refine): the transcript between `<transcript>` tags, marked as
+/// speech to rewrite (D-038). Sent bare, a spoken order ("pehle jo reply diya, dobara bhej") was obeyed:
+/// the model answered it, wrote nothing, or sent back its own prompt, which was pasted.
+pub fn wrap_transcript(text: &str) -> String {
+    // A Windows checkout may give the file CRLF line ends.
+    TRANSCRIPT_WRAP
+        .trim()
+        .replace("\r\n", "\n")
+        .replace("{transcript}", text.trim())
+}
+
 /// The prompt with the user's words (a [`crate::words::WordList::prompt_line`]) in its `{word_list}` slot.
 pub fn with_words(prompt: &str, at: Option<usize>, line: &str) -> String {
     match at {

@@ -378,7 +378,31 @@ impl Refiner {
             .send();
     }
 
+    /// The step, checked (D-038): an answer that [`checked`] refuses is asked for once more, then given up
+    /// as an error (the engine's own text is kept when the step is optional).
     fn run(&self, text: &str, words: Option<&WordList>) -> Result<Transcript, ApiError> {
+        let first = self.ask(text, words)?;
+        let first_why = match checked(text, &first.text, &self.spec.prompt) {
+            Ok(out) => return Ok(Transcript { text: out, ..first }),
+            Err(why) => why,
+        };
+        let again = self.ask(text, words)?;
+        match checked(text, &again.text, &self.spec.prompt) {
+            Ok(out) => Ok(Transcript {
+                text: out,
+                request_ms: first.request_ms + again.request_ms,
+                retries: first.retries + again.retries + 1,
+                tokens_in: first.tokens_in + again.tokens_in,
+                tokens_out: first.tokens_out + again.tokens_out,
+                ..again
+            }),
+            Err(why) => Err(ApiError::BadResponse(format!(
+                "the format answer looked wrong twice ({first_why}, then {why})"
+            ))),
+        }
+    }
+
+    fn ask(&self, text: &str, words: Option<&WordList>) -> Result<Transcript, ApiError> {
         let s = &self.spec;
         let line = words
             .map(|w| w.prompt_line(Some(text), FORMAT_PROMPT_MAX))
@@ -389,7 +413,7 @@ impl Refiner {
             "temperature": 0,
             "messages": [
                 { "role": "system", "content": prompt },
-                { "role": "user", "content": text },
+                { "role": "user", "content": crate::spec::wrap_transcript(text) },
             ],
         });
         for (k, v) in &s.extra {
@@ -411,6 +435,41 @@ impl Refiner {
             ..Transcript::default()
         })
     }
+}
+
+/// The text step's answer, or why it must not be pasted (D-038). The step rewrites what was said: it may
+/// drop fillers and take-backs and add list marks, but it never writes nothing for real speech, its own
+/// instructions, or a text far longer or shorter than the transcript (an answer to a spoken question or
+/// order). Tags the model copied from the wrapped input are removed. One copied prompt line is fine (a
+/// speaker may say one of its examples); a short take-back may shrink a lot ("Meeting Monday ko rakh lo.
+/// Actually, Tuesday ko." → "Meeting Tuesday ko."), so "far shorter" needs 15+ words said.
+fn checked(input: &str, answer: &str, prompt: &str) -> Result<String, &'static str> {
+    let out = answer
+        .trim()
+        .trim_start_matches("<transcript>")
+        .trim_end_matches("</transcript>")
+        .trim()
+        .to_string();
+    let said = input.split_whitespace().count();
+    let wrote = out.split_whitespace().count();
+    if wrote == 0 {
+        return if said < 4 { Ok(out) } else { Err("empty") };
+    }
+    let copied = prompt
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.chars().count() >= 30 && out.contains(l))
+        .count();
+    if copied >= 2 {
+        return Err("its own instructions");
+    }
+    if wrote > 2 * said + 10 {
+        return Err("far longer than what was said");
+    }
+    if said >= 15 && wrote * 10 < said * 3 {
+        return Err("far shorter than what was said");
+    }
+    Ok(out)
 }
 
 fn count(v: &Value) -> u32 {
@@ -532,6 +591,115 @@ mod tests {
         let t = client.transcribe(&audio).unwrap();
         assert_eq!(t.text, "doodh anday bread aur do kilo aloo");
         assert!(t.unformatted.is_some());
+    }
+
+    /// The 2026-11-05 live failure: the format model sent back its own prompt, which was pasted.
+    const LEAK: &str = r#"{"choices":[{"message":{"content":"You turn a raw dictation transcript into the text the speaker meant to type, in Roman Urdu / Hinglish.\nOutput only the final text, nothing else."}}]}"#;
+
+    #[test]
+    fn the_transcript_goes_in_tags_and_a_leaked_prompt_is_asked_again() {
+        let (gemini_url, _) = server(vec![(200, "", GEMINI_REPLY)]);
+        let (groq_url, requests) = server(vec![
+            (200, "", LEAK),
+            (
+                200,
+                "",
+                r#"{"choices":[{"message":{"content":"<transcript>\nDoodh, anday, bread aur 2 kilo aloo.\n</transcript>"}}]}"#,
+            ),
+        ]);
+        let mut format = spec::format().unwrap();
+        format.provider.base_url = groq_url;
+        let client = flash_lite_at(gemini_url)
+            .with_format(format, |var| format!("{var}-value"))
+            .unwrap();
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        let t = client.transcribe(&audio).unwrap();
+        assert_eq!(t.text, "Doodh, anday, bread aur 2 kilo aloo.");
+        assert_eq!(t.unformatted, None);
+        assert_eq!(t.retries, 1);
+        let req = requests.recv().unwrap();
+        assert!(
+            req.contains("<transcript>\\ndoodh anday bread aur do kilo aloo\\n</transcript>"),
+            "{req}"
+        );
+    }
+
+    #[test]
+    fn a_format_answer_wrong_twice_is_never_pasted() {
+        let (gemini_url, _) = server(vec![(200, "", GEMINI_REPLY)]);
+        let (groq_url, _) = server(vec![(200, "", LEAK), (200, "", LEAK)]);
+        let mut format = spec::format().unwrap();
+        format.provider.base_url = groq_url;
+        let client = flash_lite_at(gemini_url)
+            .with_format(format, |var| format!("{var}-value"))
+            .unwrap();
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        let t = client.transcribe(&audio).unwrap();
+        // Optional after Flash-Lite: its own text is kept and the console says why.
+        assert_eq!(t.text, "doodh anday bread aur do kilo aloo");
+        let why = t.unformatted.unwrap();
+        assert!(why.contains("its own instructions"), "{why}");
+    }
+
+    #[test]
+    fn checked_refuses_answers_that_are_not_the_speech() {
+        let prompt = spec::format().unwrap().prompt;
+        let said = "ना ना रुक जा, तुझे नहीं बोलना था। यह वॉइस किसी और को करनी थी। मुझे अभी तूने पहले जो \
+                    रिप्लाई दिया ना, यह मेरे को दोबारा भेज, पहले जो दिया था।";
+        let leak = format!("{}\n", &prompt[..300]);
+        assert_eq!(checked(said, &leak, &prompt), Err("its own instructions"));
+        assert_eq!(checked(said, "", &prompt), Err("empty"));
+        assert_eq!(
+            checked(
+                said,
+                "Sorry, I don't have a previous reply to resend.",
+                &prompt
+            ),
+            Err("far shorter than what was said")
+        );
+        let long = "Yaar ".repeat(80);
+        assert_eq!(
+            checked("Kya haal hai yaar", &long, &prompt),
+            Err("far longer than what was said")
+        );
+        let right = "Na na ruk ja, tujhe nahi bolna tha. Yeh voice kisi aur ko karni thi. Mujhe abhi tune \
+                     pehle jo reply diya na, yeh mere ko dobara bhej, pehle jo diya tha.";
+        assert_eq!(checked(said, right, &prompt).as_deref(), Ok(right));
+        // A take-back, a list and a filler-only clip are fine.
+        assert!(
+            checked(
+                "theek hai kal paanch baje milte hain nahi nahi chhe baje",
+                "Theek hai, kal 6 baje milte hain.",
+                &prompt
+            )
+            .is_ok()
+        );
+        assert!(
+            checked(
+                "ammi ne kaha hai doodh anday bread aur do kilo aloo",
+                "Ammi ne kaha hai:\n- Doodh\n- Anday\n- Bread\n- 2 kilo aloo",
+                &prompt
+            )
+            .is_ok()
+        );
+        assert_eq!(checked("umm", "", &prompt).as_deref(), Ok(""));
+        // The prompt's own example said aloud (sentence fmt-01), and a short take-back (fmt-10).
+        assert!(
+            checked(
+                "Ammi ne kaha hai market se ye cheezein le aana, doodh, ande, bread aur 2 kilo aloo.",
+                "Ammi ne kaha hai market se ye cheezein le aana:\n- Doodh\n- Ande\n- Bread\n- 2 kilo aloo",
+                &prompt
+            )
+            .is_ok()
+        );
+        assert!(
+            checked(
+                "Meeting Monday ko rakh lo. Actually, it's Tuesday ko.",
+                "Meeting Tuesday ko.",
+                &prompt
+            )
+            .is_ok()
+        );
     }
 
     #[test]

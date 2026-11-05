@@ -3,6 +3,30 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · fix/m1-format-injection (D-038)
+
+- Fix: a dictation pasted the format step's whole prompt into Chrome (live, 17:38). Root cause: the transcript
+  went to `gpt-oss-120b` as a bare user message, and the owner had said "...mujhe abhi tune pehle jo reply
+  diya na, yeh mere ko dobara bhej..."; the model took it as an order to itself. Sent bare again: right 1 time
+  in 8 (3 answers "Sorry, I don't have a previous reply to resend.", 4 empty).
+- Every text step (format / refine, app and `eval`) now sends the transcript wrapped by
+  `spec/prompts/transcript-wrap-v1.txt` (in `<transcript>` tags, marked as speech to rewrite): 8 of 8 right on
+  that text, and the app's real path (`--file` on the recording, Transcribe + format) twice.
+- The answer is checked before it is used (`client::checked`, `engines.checked`): empty for 4+ words said,
+  2+ lines of its own prompt, over 2x + 10 the words, or under 30% of 15+ words → asked once more, then a
+  format failure (Flash / Flash-Lite keep their own text and the console says "Not formatted"; after
+  Transcribe the chain moves on). Nothing like the leak can be pasted any more.
+- D-031's checks re-run with the wrapper (Groq only): M0 word loss none (Flash-Lite transcripts, run
+  `fmt-wrap-m0`: 95.93 → 95.99% on the same 42 speech clips, only `nm-05` changed: "9:00 baje" → "9 baje");
+  layout (run `fmt-wrap-layout2`) 92% after Flash-Lite and 88% after Groq Whisper, all of the drop from
+  `fmt-04` (the recipe's steps: last two merged, or "- " for "1."; this clip varied before too); `fmt-11`'s
+  filler "wo na" now removed; `fmt-10` gave "Meeting Tuesday ko." (was "Meeting Tuesday ko rakh lo."). A first
+  version of the check refused `fmt-01` (the prompt's own example, said aloud) and `fmt-10` (run
+  `fmt-wrap-layout`), so one copied prompt line and short take-backs are allowed now.
+- Also found (no code change): with our Whisper hint `gpt-4o-transcribe` wrote the hint instead of the speech
+  on 8 of the owner's 15 live clips; Gemini Transcribe cut 2 of them to a few English keywords (STATUS known
+  gap 15). Comparison in `eval/results/live-openai-2026-11-05/` (local, ~$0.04).
+
 ## 2026-11-05 · docs/session-2026-11-05
 
 - STATUS for a new session: PRs #24-#26 merged, all M1 code steps built, Next rewritten (owner's live tries,

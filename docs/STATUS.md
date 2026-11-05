@@ -60,9 +60,12 @@ and lakh amount right).
     page lists the chain in its order (default, fallback 1-3), then the rest by accuracy.
   - `gemini-3.5-flash-lite`: 97.0%, 1.6 s / 9.1 s; in the app 96.6%, 1.8 s / 6.3 s, 2 of 44 hit the 10 s timeout.
   - OpenAI (paid) `gpt-4o-mini-transcribe` / `gpt-4o-transcribe` + Roman cleanup: 94.7% / 93.8%, ~1.5 s / 2.6 s.
-    Not a usable judge of the owner's natural speech: on 7 live clips (2026-11-04, ~$0.01) `gpt-4o-transcribe`
-    wrote only the first sentence of every clip longer than ~9 s; where it wrote everything it was right.
-    Not in the chain; catalog only. Both write text on silence. About $0.06 spent in all.
+    With our Whisper hint as its prompt, `gpt-4o-transcribe` often writes the hint itself instead of the
+    speech: 8 of the owner's 15 live clips of 2026-11-05 came back as "Yaar, PR merge kar do aur deployment
+    check kar lo..." (the hint's first sentence; the 2026-11-04 "only the first sentence" finding was this
+    echo). `gpt-4o-mini-transcribe` never did: on those 15 clips it lost no sentence, misheard a few words
+    ("speed at GTR", "pro" for "bro"), and kept the 2 clips Transcribe cut (Known gap 15). Not in the chain;
+    catalog only. Both write text on silence. About $0.10 spent in all.
   - `groq-whisper-hint` (out of the chain since D-035; `--engine` only): 89.2%; in the app 89.3%, 0.3 s / 0.5 s.
   - `gemini-3.8-flash` and `gemini-3.1-flash-lite`: dropped (timeouts / 503 "high demand" on the free tier).
   - `sonicscript --models` prints the catalog (`spec/models.json`): free / paid, limits, results, the default
@@ -81,6 +84,12 @@ and lakh amount right).
   commands in PowerShell after it quits); old console windows get line breaks as spaces. `--record` never
   pastes. The key hook ignores injected keys. Checked: unit tests (keys per window class, line breaks, saved
   formats) and a manual round-trip on the real clipboard (`cargo test -p sonicscript inject -- --ignored`).
+- **Text step guard (D-038, branch `fix/m1-format-injection`):** the format / refine step gets the
+  transcript in `<transcript>` tags and its answer is checked (empty, its own prompt, far longer / shorter)
+  before it is pasted: asked once more, then "Not formatted" (after Transcribe: the next engine). Fixes a live
+  paste of the whole format prompt (2026-11-05 17:38: a spoken "dobara bhej" was obeyed). Checked: unit tests,
+  that text 8 of 8 right wrapped (1 of 8 bare), the app's real path twice, D-031's checks re-run (no word
+  loss; layout 92% / 88%, the drop all on the recipe clip `fmt-04`, which varied before).
 - **Dictation history (D-032, PR #17, also plan step 9's latency log):** dictation and
   `--record` keep the whole recording (key-down to key-up, Ogg/Opus 16 kbps: ~2 KB a second, ~7 MB per hour
   of speech) in `%LOCALAPPDATA%\SonicScript\history\audio\<date>\<time>.ogg` and one line in
@@ -163,7 +172,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-05, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-05, `fix/m1-format-injection`):** `eval`: 42 offline tests, ruff clean; `desktop`: 78 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -236,6 +245,11 @@ and lakh amount right).
 14. Changeable key (D-037): real key presses not tried yet (the hook ignores keys sent by programs, so no
     agent can test them; Next 1). `--set-key` with no name catches every key until one is chosen (Esc keeps
     the old key).
+15. Gemini Transcribe sometimes cuts a long mixed Hindi / English clip to a few English keywords: 2 of the
+    owner's 15 live clips on 2026-11-05 (#2 21 s: "Cloud focus cursor click cursor focus keyboard type
+    normally input field focus."; #9 18 s), both 2.1-2.4 words per second of speech where every other clip had
+    6-9. A words-per-second check that also asks Flash would catch both; not built yet (comparison with
+    OpenAI in `eval/results/live-openai-2026-11-05/`, local).
 
 ## Next
 
@@ -294,6 +308,6 @@ and lakh amount right).
 - Catalog: `cd eval && python -m sonic_eval catalog --runs m1-engines m0 --app-runs m1-cli-groq-whisper-hint
   m1-cli-gemini-3.5-flash-lite m1-cli-openai-4o-mini-transcribe_gptoss20b m1-cli-openai-4o-transcribe_gptoss20b`
   writes `spec/models.json` (rebuild the app afterwards: it embeds the file).
-- Tests: `cd eval && python -m ruff check . && python -m pytest -q` (38 tests) and
+- Tests: `cd eval && python -m ruff check . && python -m pytest -q` (42 tests) and
   `cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`.
 - Code map: `graphify query "<question>"`; after code changes `graphify update .` (see CLAUDE.md).
