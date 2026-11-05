@@ -3,6 +3,14 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · docs/session-2026-11-05b
+
+- STATUS for a new session after PR #28: the third live try (18 dictations, mic 14-16 ms, Transcribe answered
+  all, key-up → text 2.1-3.6 s; 2 clips cut, 1 prompt paste), the OpenAI second opinion and where its script
+  lives, Next rewritten in the order agreed with the owner (test without the formatter, key, My words, the
+  Transcribe guard, 3 days of daily use, chain benchmark, M2 plan, optional one-step formatting), the
+  one-step formatting answer (which engines can take format rules in their prompt). M1 plan progress updated.
+
 ## 2026-11-05 · fix/m1-format-injection (D-038)
 
 - Fix: a dictation pasted the format step's whole prompt into Chrome (live, 17:38). Root cause: the transcript
