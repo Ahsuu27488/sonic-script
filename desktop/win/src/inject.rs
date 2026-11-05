@@ -229,7 +229,7 @@ fn wait_for_modifiers() -> bool {
 }
 
 /// Presses `keys` in order and releases them in reverse, as one input batch.
-fn send(keys: &[u16]) -> bool {
+pub(crate) fn send(keys: &[u16]) -> bool {
     let event = |vk: u16, flags: u32| INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {

@@ -392,3 +392,17 @@ always-on mic is needed. Cost: one idle WASAPI stream and its thread while Sonic
 now plays while the mic is already open, so with speakers it may be faintly in the recording. *Where:*
 `desktop/win/src/audio.rs` (`Ready`, `prepare`, `Recorder::begin`, `FIRST_AUDIO`), `dictate.rs`,
 `desktop/win/examples/mic_open.rs`.
+
+**D-037 How the chosen dictation key reaches the app: Ctrl / Shift pass on, Alt / Win pass on masked, every
+other key and the mouse side buttons are kept from the app.** (2026-11-05)
+Builds D-018 (the allowed and refused keys are as the M1 plan's step 6 lists them, plus F13-F24 and Left
+Ctrl / Shift with a warning). D-015's "the dictation key always reaches the app" holds only for Ctrl and
+Shift, which do nothing alone. Alt and Win reach the app so their shortcuts keep working, and the hook sends
+an unassigned key (0xE8) while they are down, so a lone tap does not open the menu bar or the Start menu.
+F-keys, Insert, Caps Lock, Pause, Scroll Lock and the mouse side buttons are swallowed (down and up). *Why:*
+passed on, they would do their own job on every dictation: Insert switches to overwrite, Caps Lock flips
+capitals, F-keys run app commands (F5 reloads), the side buttons go Back / Forward in browsers. The
+alternative, passing everything on, would make most of the allowed keys unusable. The setting is a small
+`config.toml` read line by line (`hotkey = "..."`), no TOML library: one value until the M2 settings page.
+*Where:* `desktop/win/src/setkey.rs` (`PassOn`, `allowed`, `by_name`, `by_trigger`, `load`, `save`,
+`command`), `hotkey.rs` (`spawn`, `handle`, `capture`), `dictate.rs`, `main.rs`.

@@ -11,14 +11,13 @@ use sonicscript_core::api::{ApiError, Skip};
 use sonicscript_core::keys::Action;
 use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::{self, Outcome, PipelineError, Transcribe};
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_RCONTROL;
 
 use crate::audio::{Ready, Recorder, Recording};
 use crate::cue::{self, Cue};
 use crate::history::{Clip, History};
 use crate::inject::{self, Pasted};
 use crate::key::{Choice, Engines};
-use crate::{hotkey, key};
+use crate::{hotkey, key, setkey};
 
 /// Safety cap on one recording (M1 plan step 5): a forgotten toggle does not keep the mic open.
 const MAX_RECORDING: Duration = Duration::from_secs(5 * 60);
@@ -48,13 +47,19 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
     // Sets up the mic stream now, so the key-down only starts it (D-036).
     let ready = Ready::new();
     let (tx, rx) = mpsc::channel();
-    // The key is a setting from step 6 on (D-018); Right Ctrl is the default (D-015).
-    hotkey::spawn(VK_RCONTROL, tx)?;
+    // The user's key (D-018, `sonicscript --set-key`); Right Ctrl by default (D-015).
+    let (dictation_key, notice) = setkey::load();
+    if let Some(notice) = notice {
+        eprintln!("  ! {notice}");
+    }
+    hotkey::spawn(dictation_key, tx)?;
+    let k = dictation_key.label;
     println!(
         "SonicScript is listening ({id}).\n  \
-         Tap Right Ctrl, speak, tap it again or press Enter: the text is typed where your cursor is\n  \
+         Tap {k}, speak, tap it again or press Enter: the text is typed where your cursor is\n  \
          (and shown here).\n  \
-         Or hold Right Ctrl while you speak. Esc cancels. Close this window or press Ctrl+C to quit."
+         Or hold {k} while you speak. Esc cancels. Close this window or press Ctrl+C to quit.\n  \
+         Another key: sonicscript --set-key"
     );
 
     let mut recording: Option<(Recorder, Instant, u128)> = None;
