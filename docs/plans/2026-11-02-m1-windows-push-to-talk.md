@@ -50,6 +50,9 @@
   Found: Gemini Transcribe sometimes cuts a long mixed clip (STATUS known gap 15).
 - Left (STATUS Next 1-6): the owner's tries (no formatter, the key, My words), a guard for cut Transcribe
   answers, the full chain benchmark `m1-chain3`, then "done when": 3 days of daily use.
+- 2026-11-05 night: PRs #30-#33 (D-039 script answers made Roman, D-040 faster chain when the main model is
+  out, D-041 formatting off by default, D-042 guard for cut answers). **M1 declared done by the owner
+  (D-043)**, without the 3 days of daily use; the open checks moved to STATUS Next.
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).

@@ -491,3 +491,13 @@ owner asked for the remaining M1 work to be done (2026-11-05). Cost: one extra r
 and the fallback's wait (~2-5 s) on them. *Where:* `desktop/core/src/client.rs` (`looks_cut`, `words`,
 `cut_error`, `held` in `Chain::transcribe`), `encode.rs` (`Encoded.speech_ms`), `pipeline.rs`
 (`run_streamed`).
+
+**D-043 M1 is done.** (2026-11-05)
+The owner declared M1 (the Windows push-to-talk app, `docs/plans/2026-11-02-m1-windows-push-to-talk.md`)
+done on 2026-11-05, without the plan's "done when" (3 days of using it instead of typing). Every plan step is
+built and has been used live (key, mic, chain, paste, history, the changeable key), plus the work the plan did
+not name (D-029 to D-042). The checks still open (real presses of the changeable key, My words, the three
+paste checks, punctuation examples, the chain benchmark `m1-chain3` after Google's reset) stay in STATUS Next
+and run alongside M2; a problem they find is fixed as usual. *Why:* the owner's words: "Mark M1 done now",
+after being asked whether to keep the 3-day check; he has dictated with it daily since 2026-11-03. *Where:*
+`docs/STATUS.md`, the M1 plan's Progress.
