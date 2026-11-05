@@ -4,7 +4,7 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-05 night (branch `fix/m1-script-answer`, D-039: a script answer is made Roman or not pasted) · **Code at:** `main` = PRs
+**Last updated:** 2026-11-05 night (PR #30 merged: D-039; branch `fix/m1-chain-speed`, D-040: faster chain when the main model is out) · **Code at:** `main` = PRs
 #3-#28 (#24 Gemini-only chain, #25 mic ready on key-down, #26 changeable key, #28 format-step guard D-038;
 merged 2026-11-05 on the owner's word after CI passed).
 **All M1 code steps are built.** What is left in M1: Next 1-5 below (owner's tries, the Transcribe guard) and the
@@ -85,7 +85,13 @@ checked, after a live paste of the whole format prompt.
   commands in PowerShell after it quits); old console windows get line breaks as spaces. `--record` never
   pastes. The key hook ignores injected keys. Checked: unit tests (keys per window class, line breaks, saved
   formats) and a manual round-trip on the real clipboard (`cargo test -p sonicscript inject -- --ignored`).
-- **Script answers (D-039, branch `fix/m1-script-answer`):** an answer mostly in Urdu / Devanagari from
+- **Chain speed when the main model is out (D-040, branch `fix/m1-chain-speed`):** a model out of free
+  requests rests until Google's reset (midnight in Los Angeles + 5 min), remembered across restarts in
+  `%LOCALAPPDATA%\SonicScript\resting.json`; while the main model rests or has failed, Flash and Flash-Lite
+  are asked together. Gemini's running single time stamps ("0:02 ... 0:08 ...") are removed too. Checked:
+  unit tests and the real chain on a 3.8 s clip: 1.8 s with Transcribe resting (6.0 s when it was asked).
+  Evening of 2026-11-05 before it: 2.3-11 s after Transcribe ran out at 18:13 (2.1-3.7 s before).
+- **Script answers (D-039, PR #30):** an answer mostly in Urdu / Devanagari from
   Flash / Flash-Lite / Groq that no format step made Roman goes through the spec's `romanize` step (Groq 20b)
   or counts as failed (the chain moves on); Gemini's subtitle time-line ("0:00 - 0:05 ...") is removed. Fixes
   the live 19:48 paste of "baree traansakript 0:00 - 0:05mein". Checked: unit tests and the saved 19:48 answer
@@ -191,7 +197,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-05, `main` after PR #28):** `eval`: 42 offline tests, ruff clean; `desktop`: 84 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-05, `main` after PR #28):** `eval`: 42 offline tests, ruff clean; `desktop`: 89 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup

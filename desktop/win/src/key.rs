@@ -108,7 +108,19 @@ pub fn engines(choice: Choice) -> Result<Engines, String> {
     if links.is_empty() {
         return Err(first_error.unwrap_or_default());
     }
-    Ok(Chain::with_last_resort(links))
+    let chain = Chain::with_last_resort(links);
+    Ok(match rest_file() {
+        Some(path) => chain.with_rest_file(path),
+        None => chain,
+    })
+}
+
+/// `%LOCALAPPDATA%\SonicScript\resting.json`: models out of free requests stay skipped after a restart
+/// (D-040).
+fn rest_file() -> Option<std::path::PathBuf> {
+    let dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("SonicScript");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("resting.json"))
 }
 
 /// "a, then b after 4 s, then c after 3 s more, then d if all of them fail" for the console.
