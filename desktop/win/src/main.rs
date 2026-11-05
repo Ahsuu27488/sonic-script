@@ -20,6 +20,7 @@ mod key;
 mod models;
 #[cfg(windows)]
 mod mywords;
+mod setkey;
 mod wav;
 
 use std::fs::File;
@@ -33,13 +34,14 @@ use crate::key::Choice;
 
 const USAGE: &str = "\
 usage: sonicscript [--engine <id>] [--no-format] [--no-history] [--no-sound] [mode]
-  sonicscript                                 dictation: tap or hold Right Ctrl, speak; the text is typed at the cursor
+  sonicscript                                 dictation: tap or hold the dictation key (Right Ctrl), speak; the text is typed at the cursor
+  sonicscript --set-key [<name> | list]       choose the dictation key: press it, or give its name (F9, RightAlt, Mouse4, ...)
   sonicscript --models                        the models you can use: free / paid, limits, test results
   sonicscript --record <seconds>              mic check: record, then print the text (0.5-300 s)
   sonicscript --file <wav>...                 transcribe 16 kHz mono WAV files, print the text
   sonicscript --bench <dir> [--out <file>]    run every WAV in <dir>, write eval rows (JSON lines)
-Without --engine the spec's engine chain runs (D-029): Gemini 3.5 Transcribe, then Gemini 3.5 Flash,
-Flash-Lite and Groq Whisper, each asked when the one before is slow, fails or is out of free requests;
+Without --engine the spec's engine chain runs (D-029, D-035): Gemini 3.5 Transcribe, then Gemini 3.5 Flash
+and Flash-Lite, each asked when the one before is slow, fails or is out of free requests;
 --engine <id> runs that engine from spec/providers.json alone.
 The text is formatted (lists, take-backs, fillers, numbers as digits) on Groq after whichever engine answers;
 --no-format gives the exact words.
@@ -89,6 +91,15 @@ fn main() -> ExitCode {
         args.remove(i);
         #[cfg(windows)]
         cue::set_enabled(false);
+    }
+    if let Some(result) = setkey::command(&args) {
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        };
     }
     #[cfg(windows)]
     if let Some(result) = mywords::command(&args) {

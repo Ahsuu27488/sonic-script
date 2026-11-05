@@ -6,7 +6,8 @@
 
 **Last updated:** 2026-11-05 · **Code at:** `main` = PRs #3-#24 (paste, history, chimes, My words, a start-up
 crash fix, the Gemini-only chain; #24 merged 2026-11-05 on the owner's word after CI passed); branch
-`feat/m1-mic-open` (D-036, the mic-open delay) in review.
+`feat/m1-mic-open` (D-036, the mic-open delay, PR #25) and `feat/m1-key` (step 6, D-037, built on it) in
+review.
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029, D-035): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, Gemini
 only (when all three fail nothing is typed and the console says why),
@@ -112,6 +113,12 @@ and lakh amount right).
   2 ms (was 113-512 ms) with a full second of audio; `examples/mic_open.rs` measured the cause (stream build
   ~130 ms, device wake after ~20 s idle ~330 ms) and 0 ms with a prepared stream after 2 minutes idle. Not yet
   checked: the owner's live dictations (`ms.mic_open` in `history.jsonl` should be ~15 ms).
+- **Changeable dictation key (M1 step 6, D-018, D-037, branch `feat/m1-key`):** `sonicscript --set-key`
+  (press the key or a mouse side button), `--set-key <name>`, `--set-key list`; saved as `hotkey = "..."` in
+  `%APPDATA%\SonicScript\config.toml`. Ctrl / Shift pass on to the app, Alt / Win pass on with a masking key
+  (no menu on a lone tap), F-keys, Insert, Caps Lock, Pause, Scroll Lock and side buttons are kept from the
+  app. Checked: unit tests and real runs on a scratch config (refusals, warnings, saving, dictation starting
+  with F9 and Mouse4, a bad value falling back to Right Ctrl). Not yet checked: real presses (the owner).
 - **Start / stop chimes (PR #19, until M2's on-screen ring):** dictation plays a soft rising
   chime when recording starts (before the mic opens, ~110 ms), a falling one after the mic closes, one low note
   on cancel or a mic failure (`cue.rs`: sine notes built in memory, `PlaySoundW` without waiting); `--no-sound`
@@ -155,7 +162,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-05, `feat/m1-mic-open`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 17 app (+1 manual clipboard test, +1 manual sound test, +1 manual mic test)
+- **Tests (2026-11-05, `feat/m1-mic-open`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 17 app (+1 manual clipboard test, +1 manual sound test, +1 manual mic test) on `feat/m1-mic-open`; `feat/m1-key`: 22 app tests
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -165,8 +172,9 @@ and lakh amount right).
 
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029); smart
   formatting merged (D-031, PR #12); step 7 (paste) works live (3 checks left, Next 1); step 9 (latency log) is part of the dictation
-  history (D-032); start / stop chimes and My words phase A built; mic-open delay fixed (D-036, in review).
-  Left: step 6 (changeable key, D-018, Next 3). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
+  history (D-032); start / stop chimes and My words phase A built; mic-open delay fixed (D-036, in review);
+  step 6 (changeable key, D-037) built, in review. Left in M1: the owner's live checks (Next 1, 3) and the
+  plan's check list (3 days of daily use). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
 - Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
   and Claude's dictation. Measured 2026-11-04 (runs `fmt-120b`, `m1-format-app`): after Transcribe the format
@@ -232,8 +240,10 @@ and lakh amount right).
    (`--words-prompt` → your AI assistant → copy its answer → `--words-paste`, restart, dictate names).
 2. **Agent: mic-open delay: done (D-036, branch `feat/m1-mic-open`).** Owner: in the next live dictations the
    console should say "mic ready in ~15 ms"; the first word should no longer be cut.
-3. **Agent: M1 step 6 (changeable key, D-018)**; with it, My words phase A is complete. M1's open steps come
-   before anything else (owner, 2026-11-04: milestones unchanged, M1 first).
+3. **Owner: try the key (step 6, branch `feat/m1-key`):** `sonicscript --set-key`, press F9: tap and hold both
+   work on F9, F9 no longer reaches the app, Right Ctrl is back to normal; `--set-key` to a mouse side button
+   (no Back in Chrome) and to Right Alt (no menu bar on a lone tap, Alt shortcuts still work); Space is
+   refused. Then `--set-key RightCtrl` to go back. With it, My words phase A is complete.
 4. **Owner (later, at a milestone): punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
    into Claude's dictation too); then the agent changes the prompt's punctuation rule and re-runs D-031's checks.
 5. **Agent, after Google's daily reset (~1 PM Pakistan), without running benchmarks first:** a My words before /

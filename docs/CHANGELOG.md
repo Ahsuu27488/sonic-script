@@ -3,6 +3,26 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · feat/m1-key (M1 step 6, D-018, D-037)
+
+- The dictation key is a setting: `%APPDATA%\SonicScript\config.toml` (`hotkey = "RightCtrl"`), set with
+  `sonicscript --set-key` (press the key or mouse side button; Esc keeps the old one), `--set-key <name>`
+  (F9, RightAlt, "right control", XButton1, ...) or `--set-key list`. Allowed: Ctrl / Shift / Alt on either
+  side, Right Win, F1-F24, Pause, Scroll Lock, Caps Lock, Insert, mouse side buttons. Refused with a reason:
+  keys that type, edit or move the cursor, Enter, Esc, Left Win, Num Lock, media keys, "Ctrl" without a side.
+  Warnings for Left Ctrl / Left Alt / Shift (shortcuts and capitals start and cancel a recording), Caps Lock
+  and the side buttons (they lose their own job). A bad value in the file: Right Ctrl and a notice.
+- How each key reaches the app (D-037): Ctrl / Shift pass on as before; Alt / Win pass on with a masking
+  keystroke (unassigned key 0xE8) so a lone tap opens no menu; all others are kept from the app.
+- `hotkey.rs`: a mouse hook only when a side button is the key; `capture()` for `--set-key`;
+  `inject::send` shared for the mask key. The console names the chosen key. Usage text: Groq is no longer
+  listed in the chain (D-035).
+- Tests: `setkey` (names, spellings, refusals by name and by key code, pass-on per key, config read / write
+  keeping other lines). Real runs on a scratch `APPDATA`: `--set-key list`, `Space` refused, "right control"
+  and `Mouse4` saved, dictation starting with `Mouse4` (mouse hook installed) and `F9`, a bad value falling
+  back to Right Ctrl. Not checked: real key presses (the hook ignores keys sent by programs, so only the owner
+  can test them).
+
 ## 2026-11-05 · feat/m1-mic-open (D-036)
 
 - Mic-open delay (known gap 8) measured with the new `desktop/win/examples/mic_open.rs`: building the stream
