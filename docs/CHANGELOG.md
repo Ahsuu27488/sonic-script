@@ -3,6 +3,12 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · docs/m1-done (D-043)
+
+- M1 declared done by the owner, without the plan's 3 days of daily use; his open checks (the key, My words,
+  paste checks, punctuation) and the agent's chain benchmark after Google's reset stay in STATUS Next, now
+  alongside M2. The M2 plan is Next 1.
+
 ## 2026-11-05 · feat/m1-cut-guard (D-042)
 
 - Fix (known gap 15): Gemini Transcribe sometimes cut a long mixed clip to a few English keywords (live

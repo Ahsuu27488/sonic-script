@@ -4,11 +4,11 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-05 night (PRs #30, #31 merged: D-039, D-040; D-041 formatting off by default, PR #32; branch `feat/m1-cut-guard`, D-042: a cut-looking Transcribe answer gets a second opinion) · **Code at:** `main` = PRs
+**Last updated:** 2026-11-05 night (M1 declared done, D-043; PRs #30, #31 merged; #32 D-041 formatting off by default, #33 D-042 cut-answer guard and this branch `docs/m1-done` wait for CI) · **Code at:** `main` = PRs
 #3-#28 (#24 Gemini-only chain, #25 mic ready on key-down, #26 changeable key, #28 format-step guard D-038;
 merged 2026-11-05 on the owner's word after CI passed).
-**All M1 code steps are built.** What is left in M1: Next 1-5 below (owner's tries, the Transcribe guard) and the
-plan's "done when" (3 days of daily use).
+**M1 is done (D-043, the owner's call on 2026-11-05):** every step is built and used live; the owner's own checks
+(Next) continue alongside M2. Next big step: the M2 plan (Next 1).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029, D-035): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, Gemini
 only (when all three fail nothing is typed and the console says why),
@@ -215,16 +215,16 @@ checked, after a live paste of the whole format prompt.
 
 ## In progress
 
-- M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029); smart
-  formatting merged (D-031, PR #12; guarded since D-038, PR #28); step 7 (paste) works live (3 checks left,
-  Next 9); step 9 (latency log) is part of the dictation history (D-032); start / stop chimes and My words
-  phase A built; mic-open delay fixed and checked live (D-036, PR #25); step 6 (changeable key, D-037, PR #26:
-  real presses not tried yet). Left in M1: Next 1-5, then the plan's "done when" (3 days of daily use). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
+- M1 done (D-043, 2026-11-05): all plan steps built and used live, plus the engine chain (D-029, D-035,
+  D-040), formatting (D-031, off by default since D-041), the history (D-032), My words phase A (D-034), the
+  ready mic (D-036), the changeable key (D-037), the text-step guard (D-038), script answers (D-039) and the
+  cut-answer guard (D-042). Not done as the plan wrote it: the 3 days of daily use and the owner's checks
+  (Next 2-4, 7), now alongside M2. Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
 - Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
   and Claude's dictation. Measured 2026-11-04 (runs `fmt-120b`, `m1-format-app`): after Transcribe the format
   step keeps Gemini's sentence ends (10.5 → 9.6 per 100 words on the M0 clips) and drops about half its commas
-  (3.4 → 1.9; owner's clips 8.8 → 1.6), so no prompt change yet: waiting for the owner's live examples (Next 9).
+  (3.4 → 1.9; owner's clips 8.8 → 1.6), so no prompt change yet: waiting for the owner's live examples (Next 7).
 
 ## Live state
 
@@ -240,7 +240,7 @@ checked, after a live paste of the whole format prompt.
 2. Every Gemini model has a slow tail (some requests 10-30 s) and they slow down together; nothing caps the
    wait but the 10 s timeout (D-035). A request that loses keeps running in the background (at most 10 s) and still uses its model's daily
    quota. Bench cost counts only the answer used. The "free requests used up" notice was first seen live
-   2026-11-04; the owner has not said yet whether it reads well (Next 9).
+   2026-11-04; the owner has not said yet whether it reads well (Next 7).
 3. Smart formatting is limited by Groq's free tokens per minute: each format call is ~1,300 tokens and
    `gpt-oss-120b` allows 8K tokens/min (Groq's `x-ratelimit-limit-tokens` header): about 6 formatted
    dictations a minute; past that the text comes out unformatted (after Transcribe, Flash answers instead).
@@ -269,7 +269,7 @@ checked, after a live paste of the whole format prompt.
     says so. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
 11. Building `desktop/` needs CMake on PATH (for libopus); on another PC: the VS Build Tools CMake folder or
     `winget install Kitware.CMake`. Drive C: is nearly full (see Start here 3).
-12. Final name decided after M2 (Next 9); "SonicScript" until then (license is MIT, D-012). `main` is guarded by the pre-push hook only.
+12. Final name decided after M2 (Next 7); "SonicScript" until then (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 13. Smart formatting (D-031): the format step (~0.7 s typical, ~1.3 s slow) counts inside the chain's waits,
     so a later engine is asked a little more often; not measured on a full chain run yet (Next 6). The
     prompt still sometimes keeps the filler "wo na" (fmt-11) and sometimes merges the last two steps of the
@@ -287,25 +287,25 @@ checked, after a live paste of the whole format prompt.
 
 ## Next
 
-The order agreed with the owner on 2026-11-05 (evening). One branch and PR per item.
+M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR per item.
 
-1. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
+1. **Agent: the M2 plan** (`docs/plans/<date>-m2-windows-polish.md`, blueprint §8 M2: tray, settings page with
+   the model catalog / keys in Credential Manager / main model + 2 fallbacks / formatting switch / key picker /
+   word list, the HUD Voice Ring, the pop-up mic on text fields (D-016), learned-deadline fallback (D-017), a
+   release a friend can install). Write it, then ask the owner's go-ahead; build nothing of M2 before that go-ahead.
+2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.
-2. **Owner: fill My words** (`--words-prompt` → Claude → copy its answer → `--words-paste`, restart): Claude
+3. **Owner: fill My words** (`--words-prompt` → Claude → copy its answer → `--words-paste`, restart): Claude
    (heard "cloud", "clod", "claud"), Taskvane, Relay, Groq, Gemini, "Bro", the people he talks to (live 17:35
    "Kenzie Joice / Kenjhar Joys": ask him who it is).
-3. **Owner + agent: 3 days of daily use** (M1's "done when"). At the end of each day the agent reads
+4. **Owner + agent: daily use review** (was M1's "done when", waived by D-043). At the end of each day the agent reads
    `history.jsonl`, compares with a second opinion (the script above; ~$0.01 per minute of audio) and lists
    and fixes the mistakes.
-4. **Agent, after Google's daily reset (~1 PM Pakistan):** a My words before / after on names the engines got
+5. **Agent, after Google's daily reset (~1 PM Pakistan):** a My words before / after on names the engines got
    wrong; the full chain benchmark `m1-chain3` (the app benchmark command under "How to run", on the 44 M0
    clips without `fmt-*`); update known gaps 1, 2 and 13. Transcribe 25 and Flash 20 a day go fast: never
    run two benchmarks that need the same day's quota, and leave the owner some.
-5. **Agent: the M2 plan** (`docs/plans/<date>-m2-windows-polish.md`, blueprint §8 M2: tray, settings page with
-   the model catalog / keys in Credential Manager / main model + 2 fallbacks / formatting switch / key picker /
-   word list, the HUD Voice Ring, the pop-up mic on text fields (D-016), learned-deadline fallback (D-017), a
-   release a friend can install). Write it, then ask the owner's go-ahead; build nothing of M2 before M1 is done.
 6. **Optional: one-step formatting** (owner's question 2026-11-05: can the transcript come back formatted?).
    Whisper cannot (its prompt is only context; a longer one made it translate, D-014; `gpt-4o-transcribe`
    even returned the hint). Gemini Transcribe takes no prompt at all and writes Urdu / Devanagari script, so
