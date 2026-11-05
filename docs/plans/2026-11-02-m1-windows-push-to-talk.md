@@ -42,8 +42,11 @@
 - 2026-11-04 end of day: PRs #15-#22 merged (paste, history = step 9, Groq last resort, chimes, My words phase
   A, a start-up crash fix). Left in M1: the mic-open delay, step 6 (key), the owner's 3 open paste checks and
   his decision on Groq (STATUS Next 1-4).
-- Next (STATUS Next): merge PR #12 after the owner's live try, model catalog PR, mic-open delay, chain
-  benchmark with 3 s waits, then step 7 (paste), step 6 (key), step 9 (latency log).
+- 2026-11-05: PR #24 (Gemini-only chain, D-035), PR #25 (mic ready on key-down: a prepared stream starts in
+  ~2 ms instead of 113-512 ms, D-036) and PR #26 (step 6, the changeable key: `--set-key`, `config.toml`,
+  mouse side buttons, D-037; keys that do something alone are kept from the app) merged. All steps built.
+- Left (STATUS Next): the owner's live tries of the key and mic, the paste checks, the full chain benchmark
+  `m1-chain3`, then "done when": 3 days of daily use.
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).

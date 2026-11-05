@@ -3,6 +3,12 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · docs/session-2026-11-05
+
+- STATUS for a new session: PRs #24-#26 merged, all M1 code steps built, Next rewritten (owner's live tries,
+  chain benchmark, the M2 plan, the name). The name "Utter" was checked and is taken by an AI dictation app
+  for Mac and iPhone (utter.to); its main domains are registered. M1 plan progress updated.
+
 ## 2026-11-05 · feat/m1-key (M1 step 6, D-018, D-037)
 
 - The dictation key is a setting: `%APPDATA%\SonicScript\config.toml` (`hotkey = "RightCtrl"`), set with

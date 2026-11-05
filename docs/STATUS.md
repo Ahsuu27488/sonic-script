@@ -4,10 +4,11 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-05 · **Code at:** `main` = PRs #3-#24 (paste, history, chimes, My words, a start-up
-crash fix, the Gemini-only chain; #24 merged 2026-11-05 on the owner's word after CI passed); branch
-`feat/m1-mic-open` (D-036, the mic-open delay, PR #25) and `feat/m1-key` (step 6, D-037, built on it) in
-review.
+**Last updated:** 2026-11-05 (end of session; the next one starts fresh) · **Code at:** `main` = PRs #3-#26
+(#24 Gemini-only chain, #25 mic ready on key-down, #26 changeable key; merged 2026-11-05 on the owner's word
+after CI passed).
+**All M1 code steps are built.** What is left in M1 is checking: the owner's live tries (Next 1, 2) and the
+plan's "done when" (3 days of daily use).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029, D-035): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, Gemini
 only (when all three fail nothing is typed and the console says why),
@@ -19,12 +20,12 @@ and lakh amount right).
 
 **Start here (new session):**
 1. `git switch main && git pull`; run `sh .shipshape/context.sh`; read this file, then `DECISIONS.md` D-011 to
-   D-035 (D-025 to D-035 are the newest and set the direction), `ARCHITECTURE.md` and the plan
+   D-037 (D-025 to D-037 are the newest and set the direction), `ARCHITECTURE.md` and the plan
    `docs/plans/2026-11-02-m1-windows-push-to-talk.md` (Progress at the top). Formatting details:
    `docs/plans/2026-11-03-m1-smart-formatting.md`.
 2. Do "Next" below in order, one branch and PR per item (`feat/m1-<topic>`), each with its check.
 3. **Work in this checkout, not a git worktree:** drive C: is nearly full (13 GB free on 2026-11-04, 3.4 GB on
-   2026-11-03, when a worktree needing ~5.4 GB failed). `desktop/target` alone is 3.2 GB. Ask the owner before
+   2026-11-03, when a worktree needing ~5.4 GB failed; 13 GB on 2026-11-05). `desktop/target` alone is 3.2 GB. Ask the owner before
    deleting anything.
 4. Keys: `GROQ_API_KEY` and `GEMINI_API_KEY` are in the owner's Windows user environment; `OPENAI_API_KEY` only
    in `eval/.env` (paid: benchmark only, spend sparingly). Never print, log or commit a key. CMake is on the
@@ -107,13 +108,13 @@ and lakh amount right).
   prompt (D-014). Checked: unit tests (parser, merge, near words, the words in both requests, cleanup), real
   runs of every command on a scratch folder, clip #12 with and without a list on Flash (right both times: the
   live "McCloud" was a one-off). Not checked yet: a before / after where an engine gets a name wrong.
-- **Mic ready on key-down (D-036, branch `feat/m1-mic-open`):** dictation keeps one mic stream set up but not
+- **Mic ready on key-down (D-036, PR #25):** dictation keeps one mic stream set up but not
   started (no mic icon while idle) and only starts it on key-down; the console says "mic ready in N ms".
   Checked: a manual test (`cargo test -p sonicscript ready_mic -- --ignored`): after 25 s idle it started in
   2 ms (was 113-512 ms) with a full second of audio; `examples/mic_open.rs` measured the cause (stream build
   ~130 ms, device wake after ~20 s idle ~330 ms) and 0 ms with a prepared stream after 2 minutes idle. Not yet
   checked: the owner's live dictations (`ms.mic_open` in `history.jsonl` should be ~15 ms).
-- **Changeable dictation key (M1 step 6, D-018, D-037, branch `feat/m1-key`):** `sonicscript --set-key`
+- **Changeable dictation key (M1 step 6, D-018, D-037, PR #26):** `sonicscript --set-key`
   (press the key or a mouse side button), `--set-key <name>`, `--set-key list`; saved as `hotkey = "..."` in
   `%APPDATA%\SonicScript\config.toml`. Ctrl / Shift pass on to the app, Alt / Win pass on with a masking key
   (no menu on a lone tap), F-keys, Insert, Caps Lock, Pause, Scroll Lock and side buttons are kept from the
@@ -162,7 +163,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-05, `feat/m1-mic-open`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 17 app (+1 manual clipboard test, +1 manual sound test, +1 manual mic test) on `feat/m1-mic-open`; `feat/m1-key`: 22 app tests
+- **Tests (2026-11-05, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -172,9 +173,9 @@ and lakh amount right).
 
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029); smart
   formatting merged (D-031, PR #12); step 7 (paste) works live (3 checks left, Next 1); step 9 (latency log) is part of the dictation
-  history (D-032); start / stop chimes and My words phase A built; mic-open delay fixed (D-036, in review);
-  step 6 (changeable key, D-037) built, in review. Left in M1: the owner's live checks (Next 1, 3) and the
-  plan's check list (3 days of daily use). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
+  history (D-032); start / stop chimes and My words phase A built; mic-open delay fixed (D-036, PR #25);
+  step 6 (changeable key, D-037, PR #26). Left in M1: the owner's live checks (Next 1, 2) and the plan's
+  check list (3 days of daily use). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
 - Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
   and Claude's dictation. Measured 2026-11-04 (runs `fmt-120b`, `m1-format-app`): after Transcribe the format
@@ -224,7 +225,7 @@ and lakh amount right).
     says so. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
 11. Building `desktop/` needs CMake on PATH (for libopus); on another PC: the VS Build Tools CMake folder or
     `winget install Kitware.CMake`. Drive C: is nearly full (see Start here 3).
-12. Final name not decided (license is MIT, D-012). `main` is guarded by the pre-push hook only.
+12. Final name decided after M2 (Next 7); "SonicScript" until then (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 13. Smart formatting (D-031): the format step (~0.7 s typical, ~1.3 s slow) counts inside the chain's waits,
     so a later engine is asked a little more often; not measured on a full chain run yet (Next 5). The
     prompt still sometimes keeps the filler "wo na" (fmt-11) and sometimes merges the last two steps of the
@@ -232,29 +233,41 @@ and lakh amount right).
     kept on purpose (owner). Prompt
     changes need a re-run of the checks (D-031's runs). Engine ids and labels still say "+gptoss20b" /
     "Roman cleanup" (the `--no-format` path); the catalog notes say the 120b format step replaces it.
+14. Changeable key (D-037): real key presses not tried yet (the hook ignores keys sent by programs, so no
+    agent can test them; Next 1). `--set-key` with no name catches every key until one is chosen (Esc keeps
+    the old key).
 
 ## Next
 
-1. **Owner (later, after more progress; owner 2026-11-05): the paste checks still open:** Win+V must show no dictated text; a copied image must be back on the
-   clipboard after a dictation; an app run as administrator gets "press Ctrl+V". And try My words
-   (`--words-prompt` → your AI assistant → copy its answer → `--words-paste`, restart, dictate names).
-2. **Agent: mic-open delay: done (D-036, branch `feat/m1-mic-open`).** Owner: in the next live dictations the
-   console should say "mic ready in ~15 ms"; the first word should no longer be cut.
-3. **Owner: try the key (step 6, branch `feat/m1-key`):** `sonicscript --set-key`, press F9: tap and hold both
-   work on F9, F9 no longer reaches the app, Right Ctrl is back to normal; `--set-key` to a mouse side button
-   (no Back in Chrome) and to Right Alt (no menu bar on a lone tap, Alt shortcuts still work); Space is
-   refused. Then `--set-key RightCtrl` to go back. With it, My words phase A is complete.
-4. **Owner (later, at a milestone): punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
-   into Claude's dictation too); then the agent changes the prompt's punctuation rule and re-runs D-031's checks.
-5. **Agent, after Google's daily reset (~1 PM Pakistan), without running benchmarks first:** a My words before /
-   after on clips with names the engines got wrong; then, after M1, the full chain benchmark `m1-chain3` (the app
+1. **Owner: try the new mic and key (PRs #25, #26)** with `cd desktop && cargo run -q --release -p sonicscript`:
+   the console should say "mic ready in ~15 ms" and the first word should no longer be cut. Then
+   `sonicscript --set-key`, press F9: tap and hold both work on F9, F9 no longer reaches the app, Right Ctrl is
+   back to normal; `--set-key` to a mouse side button (no Back in Chrome) and to Right Alt (no menu bar on a
+   lone tap, Alt shortcuts still work); Space is refused. `--set-key RightCtrl` goes back.
+2. **Owner (later, after more progress; owner 2026-11-05): the paste checks:** Win+V must show no dictated
+   text; a copied image must be back on the clipboard after a dictation; an app run as administrator gets
+   "press Ctrl+V". And try My words (`--words-prompt` → your AI assistant → copy its answer → `--words-paste`,
+   restart, dictate names).
+3. **Agent, after Google's daily reset (~1 PM Pakistan), without running benchmarks first:** a My words before /
+   after on clips with names the engines got wrong; then the full chain benchmark `m1-chain3` (the app
    benchmark command under "How to run", on the 44 M0 clips without `fmt-*`); update known gaps 1, 2 and 13.
    Plan quota: Transcribe 25 and Flash 20 a day are used up fast by tests (they were gone by the evening of
    2026-11-04), which leaves the owner with Flash-Lite only.
-6. **Owner: the chimes** are fine for now (they sound much like Claude's, 2026-11-04). Claude's dictation sounds
-   are not described anywhere public and the agent cannot listen to audio: if they should change, describe them
-   (higher / lower, shorter, softer, one note or two) and the agent tunes `cue.rs`. M2 adds the on-screen ring.
-7. **Owner:** keep or change the name "SonicScript"; say if the "free requests used up" notice reads well.
+4. **Agent: the M2 plan** (`docs/plans/<date>-m2-windows-polish.md`, blueprint §8 M2: tray, settings page
+   with the model catalog / keys in Credential Manager / main model + 2 fallbacks / formatting switch / key
+   picker / word list, the HUD Voice Ring, the pop-up mic on text fields (D-016), learned-deadline fallback
+   (D-017), a release a friend can install). Write it, then ask the owner's go-ahead before building (M1 first:
+   build nothing of M2 before the owner's live checks of Next 1 pass).
+5. **Owner (later, at a milestone): punctuation examples:** paste 2-3 outputs that felt over-punctuated (best:
+   the same words said into Claude's dictation too); then the agent changes the prompt's punctuation rule and
+   re-runs D-031's checks.
+6. **Owner: the chimes** are fine for now (they sound much like Claude's, 2026-11-04). The agent cannot listen
+   to audio: if they should change, describe them (higher / lower, shorter, softer, one note or two) and the
+   agent tunes `cue.rs`. M2 adds the on-screen ring.
+7. **Name: stays "SonicScript" until after M2** (owner, 2026-11-05: decide after M2, English and
+   human-sounding, nothing AI-ish). "Utter" is taken (an AI dictation app for Mac / iPhone, utter.to). Ideas
+   to check then: Mynah, Blurt, Ramble, Natter, Spill, Hum (a web search for a same-kind app, GitHub,
+   domains, App Store, Play Store). Owner: say if the "free requests used up" notice reads well.
 
 ## How to run and check
 
