@@ -14,6 +14,7 @@ use crate::api::{self, ApiError, Passed, Skip, Transcript};
 use crate::encode::Encoded;
 use crate::gemini::Gemini;
 use crate::groq::Groq;
+use crate::normalize::needs_romanizing;
 use crate::pipeline::Transcribe;
 use crate::spec::{Engine, Refine};
 use crate::words::{AUDIO_PROMPT_MAX, FORMAT_PROMPT_MAX, WordList};
@@ -31,6 +32,8 @@ pub struct Client {
     /// that text is used unformatted (D-030).
     optional: bool,
     formats: bool,
+    /// D-039: makes an answer in Urdu / Devanagari script Roman when no refine or format step did.
+    romanizer: Option<Refiner>,
     /// The user's words (D-034): in the Gemini prompt and the format / refine step.
     words: Option<Arc<WordList>>,
 }
@@ -54,6 +57,7 @@ impl Client {
             refiner,
             optional: false,
             formats: false,
+            romanizer: None,
             words: None,
         })
     }
@@ -82,6 +86,47 @@ impl Client {
         self.optional = self.engine.refine().is_none();
         self.formats = true;
         Ok(self)
+    }
+
+    /// The Roman step (D-039, `spec::romanize`) for an answer that comes back mostly in Urdu / Devanagari
+    /// script while no step of the engine's own made it Roman: no refine and no format step
+    /// (`--no-format`), or the optional format step failed. Without it such an answer is an error, so a
+    /// chain asks its next engine: the local letter table's rough draft is not pasted.
+    pub fn with_romanize(
+        mut self,
+        romanize: Refine,
+        key_for: impl Fn(&str) -> String,
+    ) -> Result<Self, ApiError> {
+        if self.engine.refine().is_none() {
+            let key = key_for(&romanize.provider.key_env);
+            self.romanizer = Some(Refiner::new(romanize, key)?);
+        }
+        Ok(self)
+    }
+
+    /// The engine's own answer in Urdu / Devanagari script, made Roman by the D-039 step, or an error.
+    fn romanized(
+        &self,
+        heard: Transcript,
+        unformatted: Option<String>,
+    ) -> Result<Transcript, ApiError> {
+        let Some(r) = &self.romanizer else {
+            return Err(ApiError::BadResponse(format!(
+                "the answer came in Urdu / Devanagari script and no Roman step ran{}",
+                unformatted.map(|u| format!(" ({u})")).unwrap_or_default()
+            )));
+        };
+        let refined = r.run(&heard.text, self.words.as_deref())?;
+        Ok(Transcript {
+            asr: Some(heard.text),
+            text: refined.text,
+            refine_ms: refined.request_ms,
+            retries: heard.retries + refined.retries,
+            refine_tokens_in: refined.tokens_in,
+            refine_tokens_out: refined.tokens_out,
+            unformatted,
+            ..heard
+        })
     }
 
     /// Whether [`Self::with_format`] was applied.
@@ -123,6 +168,9 @@ impl Transcribe for Client {
             Some(r) if !heard.text.trim().is_empty() => {
                 let refined = match r.run(&heard.text, self.words.as_deref()) {
                     Ok(refined) => refined,
+                    Err(e) if self.optional && needs_romanizing(&heard.text) => {
+                        return self.romanized(heard, Some(e.to_string()));
+                    }
                     Err(e) if self.optional => {
                         return Ok(Transcript {
                             unformatted: Some(e.to_string()),
@@ -141,6 +189,7 @@ impl Transcribe for Client {
                     ..heard
                 })
             }
+            None if needs_romanizing(&heard.text) => self.romanized(heard, None),
             _ => Ok(heard),
         }
     }
@@ -591,6 +640,86 @@ mod tests {
         let t = client.transcribe(&audio).unwrap();
         assert_eq!(t.text, "doodh anday bread aur do kilo aloo");
         assert!(t.unformatted.is_some());
+    }
+
+    const DEVANAGARI_REPLY: &str =
+        r#"{"candidates":[{"content":{"parts":[{"text":"मैं अभी अपना मोबाइल चला रहा हूं"}]}}]}"#;
+    const ROMAN_REPLY: &str = r#"{"choices":[{"message":{"content":"Main abhi apna mobile chala raha hoon"}}],"usage":{"prompt_tokens":200,"completion_tokens":12}}"#;
+
+    fn romanize_at(url: String) -> Refine {
+        let mut r = spec::romanize().unwrap();
+        r.provider.base_url = url;
+        r
+    }
+
+    #[test]
+    fn a_script_answer_without_a_format_step_is_romanized() {
+        // Live 2026-11-05 19:48 (--no-format): Flash answered in Devanagari, pasted as a letter-by-letter draft.
+        let (gemini_url, _) = server(vec![(200, "", DEVANAGARI_REPLY)]);
+        let (groq_url, requests) = server(vec![(200, "", ROMAN_REPLY)]);
+        let client = flash_lite_at(gemini_url)
+            .with_romanize(romanize_at(groq_url), |var| format!("{var}-value"))
+            .unwrap();
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        let t = client.transcribe(&audio).unwrap();
+        assert_eq!(t.text, "Main abhi apna mobile chala raha hoon");
+        assert_eq!(t.asr.as_deref(), Some("मैं अभी अपना मोबाइल चला रहा हूं"));
+        assert_eq!(t.refine_tokens_in, 200);
+        let req = requests.recv().unwrap();
+        assert!(req.contains("openai/gpt-oss-20b") && req.contains("<transcript>"));
+    }
+
+    #[test]
+    fn a_roman_answer_makes_no_romanize_request() {
+        let (gemini_url, _) = server(vec![(200, "", GEMINI_REPLY)]);
+        let (groq_url, requests) = server(vec![]);
+        let client = flash_lite_at(gemini_url)
+            .with_romanize(romanize_at(groq_url), |var| format!("{var}-value"))
+            .unwrap();
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        let t = client.transcribe(&audio).unwrap();
+        assert_eq!(t.text, "doodh anday bread aur do kilo aloo");
+        assert!(t.asr.is_none());
+        assert!(requests.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_script_answer_with_no_roman_step_is_an_error_not_a_draft() {
+        let (gemini_url, _) = server(vec![(200, "", DEVANAGARI_REPLY)]);
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        let e = flash_lite_at(gemini_url).transcribe(&audio).unwrap_err();
+        assert!(e.to_string().contains("Devanagari"), "{e}");
+    }
+
+    #[test]
+    fn a_failed_format_step_on_a_script_answer_falls_back_to_romanize() {
+        let (gemini_url, _) = server(vec![(200, "", DEVANAGARI_REPLY)]);
+        let (format_url, _) = server(vec![(400, "", r#"{"error":{"message":"bad"}}"#)]);
+        let (groq_url, _) = server(vec![(200, "", ROMAN_REPLY)]);
+        let mut format = spec::format().unwrap();
+        format.provider.base_url = format_url;
+        let key = |var: &str| format!("{var}-value");
+        let client = flash_lite_at(gemini_url)
+            .with_format(format, key)
+            .unwrap()
+            .with_romanize(romanize_at(groq_url), key)
+            .unwrap();
+        let audio = crate::encode::opus(&vec![0.1; 16_000]).unwrap();
+        let t = client.transcribe(&audio).unwrap();
+        assert_eq!(t.text, "Main abhi apna mobile chala raha hoon");
+        assert!(t.unformatted.is_some());
+    }
+
+    #[test]
+    fn an_engine_with_its_own_refine_gets_no_romanize_step() {
+        let Some(e) = spec::engine("gemini-3.5-transcribe+gptoss20b") else {
+            panic!("transcribe engine");
+        };
+        let client = Client::new(e, |var| format!("{var}-value"))
+            .unwrap()
+            .with_romanize(spec::romanize().unwrap(), |var| format!("{var}-value"))
+            .unwrap();
+        assert!(client.romanizer.is_none());
     }
 
     /// The 2026-11-05 live failure: the format model sent back its own prompt, which was pasted.

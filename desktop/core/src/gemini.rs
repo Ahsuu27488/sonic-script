@@ -130,7 +130,73 @@ fn clean(text: &str) -> String {
             t = t[1..t.len() - 1].trim();
         }
     }
-    t.split_whitespace().collect::<Vec<_>>().join(" ")
+    strip_timeline(t)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Removes subtitle-style time ranges ("0:00 - 0:05", "0:05 - 0:10", ...) that Gemini sometimes puts into
+/// a long clip's transcript (live 2026-11-05 19:48, D-039). Only a running timeline counts: two or more
+/// ranges, the first from 0:00, each starting where the one before ended; a time the speaker said
+/// ("3:00 - 4:00") stays.
+fn strip_timeline(text: &str) -> String {
+    let mut ranges = Vec::new(); // (start byte, end byte, from s, to s)
+    let mut i = 0;
+    while i < text.len() {
+        let word_start = !text[..i].ends_with(|c: char| c.is_ascii_digit() || c == ':');
+        if let Some((from, to, len)) = time_range(&text[i..]).filter(|_| word_start) {
+            ranges.push((i, i + len, from, to));
+            i += len;
+            continue;
+        }
+        i += text[i..].chars().next().map_or(1, char::len_utf8);
+    }
+    let timeline =
+        ranges.len() >= 2 && ranges[0].2 == 0 && ranges.windows(2).all(|w| w[1].2 == w[0].3);
+    if !timeline {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (start, end, ..) in ranges {
+        out.push_str(&text[last..start]);
+        out.push(' ');
+        last = end;
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// "M:SS - M:SS" at the start of `s` (any spaces around a hyphen or an en dash): (from s, to s, bytes).
+fn time_range(s: &str) -> Option<(u32, u32, usize)> {
+    let (from, a) = clock(s)?;
+    let rest = s[a..].trim_start();
+    let dash = ['-', '\u{2013}']
+        .into_iter()
+        .find(|&d| rest.starts_with(d))?;
+    let rest = rest[dash.len_utf8()..].trim_start();
+    let (to, b) = clock(rest)?;
+    Some((from, to, s.len() - rest.len() + b))
+}
+
+/// "M:SS" or "MM:SS" at the start of `s`, not followed by another digit: (seconds, bytes).
+fn clock(s: &str) -> Option<(u32, usize)> {
+    let b = s.as_bytes();
+    let m = b.iter().take_while(|c| c.is_ascii_digit()).count();
+    if !(1..=2).contains(&m) || b.get(m) != Some(&b':') {
+        return None;
+    }
+    let sec = &b[m + 1..];
+    if sec.len() < 2
+        || !sec[..2].iter().all(u8::is_ascii_digit)
+        || sec.get(2).is_some_and(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    let minutes: u32 = s[..m].parse().ok()?;
+    let seconds: u32 = s[m + 1..m + 3].parse().ok()?;
+    Some((minutes * 60 + seconds, m + 3))
 }
 
 #[cfg(test)]
@@ -188,6 +254,25 @@ mod tests {
         let req = requests.recv().unwrap();
         let body: Value = serde_json::from_str(&req[req.find("\r\n\r\n").unwrap() + 4..]).unwrap();
         assert_eq!(body["contents"][0]["parts"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_running_timeline_is_removed_but_a_spoken_time_stays() {
+        // Live 2026-11-05 19:48 (Flash, 57 s clip), shortened.
+        let raw = "बड़ी ट्रांसक्रिप्ट 0:00 - 0:05में इसने थोड़ी गलतियां की हैं। और मैं 0:05 - 0:10अभी अपना \
+                   मोबाइल चला रहा हूं 0:10 \u{2013} 0:15 तो";
+        assert_eq!(
+            clean(raw),
+            "बड़ी ट्रांसक्रिप्ट में इसने थोड़ी गलतियां की हैं। और मैं अभी अपना मोबाइल चला रहा हूं तो"
+        );
+        for kept in [
+            "Meeting 3:00 - 4:00 tak hai.",
+            "Pehla 0:00 - 0:05 tha.",
+            "0:00 - 0:05 aur phir 0:20 - 0:25 dekho.",
+            "Score 10:00-12:301 tha.",
+        ] {
+            assert_eq!(clean(kept), kept);
+        }
     }
 
     #[test]

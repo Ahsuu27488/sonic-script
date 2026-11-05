@@ -20,6 +20,19 @@
       "out_per_m": 0.6
     }
   },
+  "romanize": {
+    "about": "D-039: the Roman step for an answer that came back mostly in Urdu / Devanagari script from an engine with no refine step of its own (Gemini Flash / Flash-Lite, Groq Whisper), when no format step runs (--no-format) or the optional format step failed. Without it such an answer is not pasted: the chain moves on. The same model and prompt as Transcribe's refine.",
+    "provider": "groq",
+    "model": "openai/gpt-oss-20b",
+    "prompt": "romanize-v1.md",
+    "extra": {
+      "reasoning_effort": "low"
+    },
+    "price": {
+      "in_per_m": 0.075,
+      "out_per_m": 0.3
+    }
+  },
   "providers": {
     "gemini": {
       "base_url": "https://generativelanguage.googleapis.com/v1beta",

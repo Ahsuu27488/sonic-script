@@ -193,14 +193,7 @@ impl Normalizer {
                 None => text.push(c),
             }
         }
-        let (mut latin, mut other) = (0usize, 0usize);
-        for c in text.chars().filter(|c| c.is_alphabetic()) {
-            match script(c) {
-                Script::Other => latin += 1,
-                Script::Arabic | Script::Devanagari => other += 1,
-            }
-        }
-        let mut needs_llm = other as f64 > self.needs_llm_ratio * (latin + other) as f64;
+        let mut needs_llm = mostly_script(&text, self.needs_llm_ratio);
         let (text, unknown) = self.romanize(&text);
         needs_llm |= unknown;
         if self.is_phantom(&text) {
@@ -436,6 +429,30 @@ impl Normalizer {
             _ => None,
         })
     }
+}
+
+/// Whether more than `ratio` of the letters are Urdu or Devanagari script.
+fn mostly_script(text: &str, ratio: f64) -> bool {
+    let (mut latin, mut other) = (0usize, 0usize);
+    for c in text.chars().filter(|c| c.is_alphabetic()) {
+        match script(c) {
+            Script::Other => latin += 1,
+            Script::Arabic | Script::Devanagari => other += 1,
+        }
+    }
+    other as f64 > ratio * (latin + other) as f64
+}
+
+/// Whether an engine's answer is so much Urdu / Devanagari script (more than the rules'
+/// `needs_llm_ratio` of its letters) that only an LLM step can make it Roman (D-039); the local letter
+/// table gives a rough draft that must not be pasted.
+pub fn needs_romanizing(text: &str) -> bool {
+    static RATIO: std::sync::LazyLock<f64> = std::sync::LazyLock::new(|| {
+        serde_json::from_str::<Rules>(RULES)
+            .expect("spec/normalizer/rules.json must be valid")
+            .needs_llm_ratio
+    });
+    mostly_script(text, *RATIO)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

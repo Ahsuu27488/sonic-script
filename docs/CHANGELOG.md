@@ -3,6 +3,24 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · fix/m1-script-answer (D-039)
+
+- Fix: a 57 s dictation with `--no-format` (live, 19:48) pasted "纳 jaane galtee kar gayaa kuch. baree
+  traansakript 0:00 - 0:05mein ...". Root cause: Gemini Flash answered in Devanagari with a subtitle-style
+  timeline ("0:00 - 0:05", every 5 s) and a Chinese character for "Na"; with no format step and no refine
+  step on Flash, only the local letter table made it Latin (`needs_llm` was set but nothing acted on it).
+  Seen by comparing the owner's last 10 dictations with OpenAI `gpt-4o-mini-transcribe` (~$0.012; the other
+  9 were as good as or better than OpenAI's).
+- `gemini.rs` `clean` removes a running timeline (2+ ranges, from 0:00, each starting where the last ended);
+  a spoken "3:00 - 4:00" stays.
+- New spec step `romanize` (Groq `gpt-oss-20b`, `romanize-v1.md`, as Transcribe's refine): run after an engine
+  with no refine of its own when its answer is mostly Urdu / Devanagari script (`normalize::needs_romanizing`,
+  the rules' 30%) and no format step made it Roman (`--no-format`, or the optional format step failed). Without
+  the step (no Groq key) or when it fails, the answer is an error and the chain asks the next engine.
+- Checked: 6 new unit tests; the saved 19:48 answer through the real Groq step (884 ms): timeline gone, "纳" →
+  "na", all Roman (sentences start lower-case, as `romanize-v1.md` writes); `--file` on the recording with
+  Flash (`--no-format`): this time Flash answered in Roman by itself.
+
 ## 2026-11-05 · docs/session-2026-11-05b
 
 - STATUS for a new session after PR #28: the third live try (18 dictations, mic 14-16 ms, Transcribe answered

@@ -135,6 +135,7 @@ impl Engine {
 struct File {
     chain: Vec<RawLink>,
     format: Option<RawRefine>,
+    romanize: Option<RawRefine>,
     providers: std::collections::HashMap<String, Provider>,
     engines: Vec<RawEngine>,
 }
@@ -270,6 +271,13 @@ pub fn engine(id: &str) -> Option<Engine> {
 pub fn format() -> Option<Refine> {
     let file = parse();
     refine(&file, file.format.as_ref()?)
+}
+
+/// The Roman step for an answer in Urdu / Devanagari script from an engine with no refine step of its own
+/// (D-039, `romanize` in the spec).
+pub fn romanize() -> Option<Refine> {
+    let file = parse();
+    refine(&file, file.romanize.as_ref()?)
 }
 
 fn refine(file: &File, r: &RawRefine) -> Option<Refine> {
