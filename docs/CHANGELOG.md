@@ -3,6 +3,15 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · feat/m1-format-off (D-041)
+
+- Smart formatting is off by default (the owner's choice after his `--no-format` try, 2026-11-05 19:45-19:50):
+  dictation, `--record`, `--file` and `--bench` give the exact words; `--format` turns formatting on;
+  `--no-format` is still accepted (both together is an error). Transcribe still gets its Roman step, and
+  script answers the D-039 step.
+- Checked: unit tests, clippy; a real clip without the flag (no format step, 1.4 s) and with `--format`
+  (format step 0.88 s).
+
 ## 2026-11-05 · fix/m1-chain-speed (D-040)
 
 - Fix: dictation took 5-11 s all evening once Transcribe's free requests ran out (18:13). Root causes: the

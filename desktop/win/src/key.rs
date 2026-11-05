@@ -18,14 +18,14 @@ pub type Engines = Chain<Client>;
 /// it is a last resort (asked only after every engine before it failed, D-033).
 pub struct Choice {
     pub links: Vec<(spec::Engine, Duration, bool)>,
-    /// The smart-formatting step run after whichever engine answers (D-030); `None` with `--no-format`.
+    /// The smart-formatting step run after whichever engine answers (D-030); `None` without `--format` (D-041).
     pub format: Option<spec::Refine>,
     /// The user's words (D-034), for dictation and `--file`; `None` for `--bench` (comparable runs).
     pub words: Option<Arc<WordList>>,
 }
 
 /// `--engine <id>` runs that engine alone (to measure or try one); without it, the spec's chain.
-/// `format: false` (`--no-format`) gives the exact words.
+/// `format: false` (the default since D-041; `--format` turns it on) gives the exact words.
 pub fn choose(id: Option<&str>, format: bool) -> Result<Choice, String> {
     let links = match id {
         None => spec::chain()
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn formatting_is_on_unless_no_format_is_given() {
-        // D-030: on by default, for the chain and for one engine alike; --no-format gives the exact words.
+        // D-030: for the chain and for one engine alike; off by default since D-041 (main.rs --format).
         assert!(choose(None, true).unwrap().format.is_some());
         assert!(
             choose(Some("groq-whisper-hint"), true)

@@ -92,7 +92,7 @@ impl Client {
 
     /// The Roman step (D-039, `spec::romanize`) for an answer that comes back mostly in Urdu / Devanagari
     /// script while no step of the engine's own made it Roman: no refine and no format step
-    /// (`--no-format`), or the optional format step failed. Without it such an answer is an error, so a
+    /// (the default since D-041), or the optional format step failed. Without it such an answer is an error, so a
     /// chain asks its next engine: the local letter table's rough draft is not pasted.
     pub fn with_romanize(
         mut self,
