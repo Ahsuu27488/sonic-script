@@ -132,7 +132,10 @@ pub fn run_streamed(
     let encoded = stream.finish(detection.keep);
     out.stages.encode = elapsed(t);
     let encoded = match encoded {
-        Ok(e) => e,
+        Ok(e) => Encoded {
+            speech_ms: Some(detection.speech_ms),
+            ..e
+        },
         Err(e) => {
             out.error = Some(PipelineError::Encode(e));
             out.total_ms = elapsed(started);

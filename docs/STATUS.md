@@ -4,7 +4,7 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-05 night (PRs #30, #31 merged: D-039, D-040; branch `feat/m1-format-off`, D-041: formatting off by default) · **Code at:** `main` = PRs
+**Last updated:** 2026-11-05 night (PRs #30, #31 merged: D-039, D-040; D-041 formatting off by default, PR #32; branch `feat/m1-cut-guard`, D-042: a cut-looking Transcribe answer gets a second opinion) · **Code at:** `main` = PRs
 #3-#28 (#24 Gemini-only chain, #25 mic ready on key-down, #26 changeable key, #28 format-step guard D-038;
 merged 2026-11-05 on the owner's word after CI passed).
 **All M1 code steps are built.** What is left in M1: Next 1-5 below (owner's tries, the Transcribe guard) and the
@@ -85,7 +85,13 @@ checked, after a live paste of the whole format prompt.
   commands in PowerShell after it quits); old console windows get line breaks as spaces. `--record` never
   pastes. The key hook ignores injected keys. Checked: unit tests (keys per window class, line breaks, saved
   formats) and a manual round-trip on the real clipboard (`cargo test -p sonicscript inject -- --ignored`).
-- **Formatting off by default (D-041, branch `feat/m1-format-off`):** the owner's choice after his `--no-format`
+- **Cut-answer guard (D-042, branch `feat/m1-cut-guard`):** when the main model's answer has under 4 words a
+  second of speech (3+ s of speech; `Encoded.speech_ms` from the voice gate), the next model is asked too and
+  the fuller answer is pasted. Checked: unit tests; both live cut clips of 2026-11-05 (17:08, 17:11) through
+  the real pipeline with the saved cut answer as the main model and the real Flash-Lite as the fallback: both
+  came back whole; all 36 other history clips with 3+ s of speech run at 5.1+ words a second (no extra
+  request).
+- **Formatting off by default (D-041, PR #32):** the owner's choice after his `--no-format`
   try: dictation, `--record`, `--file` and `--bench` give the exact words (Transcribe still gets its Roman
   step); `--format` turns smart formatting on; `--no-format` is still accepted. Checked: a real clip without
   the flag (no format step, 1.4 s) and with it (format step 0.9 s).
@@ -201,7 +207,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-05, `main` after PR #28):** `eval`: 42 offline tests, ruff clean; `desktop`: 89 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-05, `main` after PR #28):** `eval`: 42 offline tests, ruff clean; `desktop`: 92 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -274,11 +280,10 @@ checked, after a live paste of the whole format prompt.
 14. Changeable key (D-037): real key presses not tried yet (the hook ignores keys sent by programs, so no
     agent can test them; Next 2). `--set-key` with no name catches every key until one is chosen (Esc keeps
     the old key).
-15. Gemini Transcribe sometimes cuts a long mixed Hindi / English clip to a few English keywords: 2 of the
-    owner's 15 live clips on 2026-11-05 (#2 21 s: "Cloud focus cursor click cursor focus keyboard type
-    normally input field focus."; #9 18 s), both 2.1-2.4 words per second of speech where every other clip had
-    6-9. A words-per-second check that also asks Flash would catch both; not built yet (comparison with
-    OpenAI in `eval/results/live-openai-2026-11-05/`, local).
+15. Gemini Transcribe sometimes cuts a long mixed Hindi / English clip to a few English keywords (2 of the
+    owner's 15 live clips on 2026-11-05). Since D-042 such an answer (under 4 words a second of speech) gets a
+    second opinion from the next model and the fuller one is pasted; not yet seen live with the real
+    Transcribe (it was out of free requests when the guard was built).
 
 ## Next
 
@@ -290,23 +295,18 @@ The order agreed with the owner on 2026-11-05 (evening). One branch and PR per i
 2. **Owner: fill My words** (`--words-prompt` → Claude → copy its answer → `--words-paste`, restart): Claude
    (heard "cloud", "clod", "claud"), Taskvane, Relay, Groq, Gemini, "Bro", the people he talks to (live 17:35
    "Kenzie Joice / Kenjhar Joys": ask him who it is).
-3. **Agent: guard against Transcribe cutting a clip (Known gap 15).** Idea: words per second of speech
-   (`speech_ms` from the voice gate) below ~4 on 3+ s of speech means a cut answer (normal clips 6-9, the
-   2 cut ones 2.1-2.4) → also ask Flash (or Flash-Lite when Flash is resting) and keep the fuller answer.
-   Needs a decision entry. Check on the two live recordings (`history/audio/2026-11-05/17-08-14-351.ogg`,
-   `17-11-25-167.ogg`, decode with ffmpeg and run `--file`) and that normal clips make no extra request.
-4. **Owner + agent: 3 days of daily use** (M1's "done when"). At the end of each day the agent reads
+3. **Owner + agent: 3 days of daily use** (M1's "done when"). At the end of each day the agent reads
    `history.jsonl`, compares with a second opinion (the script above; ~$0.01 per minute of audio) and lists
    and fixes the mistakes.
-5. **Agent, after Google's daily reset (~1 PM Pakistan):** a My words before / after on names the engines got
+4. **Agent, after Google's daily reset (~1 PM Pakistan):** a My words before / after on names the engines got
    wrong; the full chain benchmark `m1-chain3` (the app benchmark command under "How to run", on the 44 M0
    clips without `fmt-*`); update known gaps 1, 2 and 13. Transcribe 25 and Flash 20 a day go fast: never
    run two benchmarks that need the same day's quota, and leave the owner some.
-6. **Agent: the M2 plan** (`docs/plans/<date>-m2-windows-polish.md`, blueprint §8 M2: tray, settings page with
+5. **Agent: the M2 plan** (`docs/plans/<date>-m2-windows-polish.md`, blueprint §8 M2: tray, settings page with
    the model catalog / keys in Credential Manager / main model + 2 fallbacks / formatting switch / key picker /
    word list, the HUD Voice Ring, the pop-up mic on text fields (D-016), learned-deadline fallback (D-017), a
    release a friend can install). Write it, then ask the owner's go-ahead; build nothing of M2 before M1 is done.
-7. **Optional: one-step formatting** (owner's question 2026-11-05: can the transcript come back formatted?).
+6. **Optional: one-step formatting** (owner's question 2026-11-05: can the transcript come back formatted?).
    Whisper cannot (its prompt is only context; a longer one made it translate, D-014; `gpt-4o-transcribe`
    even returned the hint). Gemini Transcribe takes no prompt at all and writes Urdu / Devanagari script, so
    it always needs the second step. Gemini Flash / Flash-Lite do take a prompt (`transcribe-roman-v1.md`):
@@ -315,7 +315,7 @@ The order agreed with the owner on 2026-11-05 (evening). One branch and PR per i
    Flash-Lite only, new prompt `transcribe-format-v1.md`, an engine outside the chain, compared with runs
    `fmt-wrap-m0` / `fmt-wrap-layout2`). Cost: the text would look different depending on which engine
    answered, the reason D-031 has one format step after every engine.
-8. **Owner, later:** the paste checks (Win+V shows no dictated text; a copied image is back after a
+7. **Owner, later:** the paste checks (Win+V shows no dictated text; a copied image is back after a
    dictation; an administrator window gets "press Ctrl+V"); punctuation examples (2-3 over-punctuated outputs,
    best with the same words said into Claude's dictation; then the agent tunes the prompt and re-runs D-031's
    checks); the chimes are fine (describe changes and the agent tunes `cue.rs`); the name stays "SonicScript"

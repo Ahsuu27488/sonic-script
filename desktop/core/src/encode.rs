@@ -31,6 +31,9 @@ pub struct Encoded {
     pub ext: &'static str,
     /// Length of the audio that went in.
     pub audio_ms: u32,
+    /// How much of it the voice gate heard as speech, when known (set by the pipeline): the chain uses it to
+    /// spot a cut answer (D-042).
+    pub speech_ms: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -167,6 +170,7 @@ impl Stream {
             mime: MIME,
             ext: EXT,
             audio_ms: (kept * 1000 / RATE) as u32,
+            speech_ms: None,
         })
     }
 }

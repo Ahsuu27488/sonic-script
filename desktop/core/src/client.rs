@@ -395,6 +395,27 @@ fn rest_for(e: &ApiError) -> Option<Duration> {
     }
 }
 
+/// Whether the main engine's answer looks cut (D-042): 3+ s of speech and under 4 words a second of it. The
+/// owner's normal clips run 5-9 words a second; Transcribe's two cut answers of 2026-11-05 had 2.1 and 2.4.
+fn looks_cut(text: &str, speech_ms: Option<u32>) -> bool {
+    match speech_ms {
+        Some(ms) if ms >= 3_000 => (words(text) as u64) * 1_000 < 4 * u64::from(ms),
+        _ => false,
+    }
+}
+
+fn words(text: &str) -> usize {
+    text.split_whitespace().count()
+}
+
+fn cut_error(text: &str, speech_ms: Option<u32>) -> ApiError {
+    ApiError::BadResponse(format!(
+        "its answer looked cut: {} words for {:.1} s of speech",
+        words(text),
+        f64::from(speech_ms.unwrap_or(0)) / 1_000.0
+    ))
+}
+
 /// Our sender goes to the last engine asked, so `recv` ends once every thread is done.
 fn sender(tx: &mut Option<mpsc::Sender<Reply>>, last: bool) -> mpsc::Sender<Reply> {
     if last { tx.take() } else { tx.clone() }.expect("each engine is asked once")
@@ -444,6 +465,10 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
         // Per place: already in `passed` (slow), so a later failure is not listed twice.
         let mut listed = vec![false; order.len()];
         let mut asked = 0;
+        // Per place: its reply came (answer or error).
+        let mut replied = vec![false; order.len()];
+        // D-042: the main engine's answer while a fallback is asked because it looked cut.
+        let mut held: Option<(usize, Transcript)> = None;
         // D-040: while the main engine is out (resting or failed), the fallbacks are asked together, not one
         // wait after another; a last resort still waits for failures.
         let together = |asked: usize| asked < order.len() && !self.links[order[asked]].last_resort;
@@ -478,13 +503,54 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
             };
             let next = match reply {
                 Some((place, Ok(t))) => {
-                    return Ok(Transcript {
-                        engine: id(order[place]),
-                        passed,
-                        ..t
-                    });
+                    replied[place] = true;
+                    if let Some((main_place, main)) = held.take() {
+                        // D-042: the fuller of the cut-looking main answer and the fallback's wins.
+                        if words(&t.text) <= words(&main.text) {
+                            return Ok(Transcript {
+                                engine: id(order[main_place]),
+                                passed,
+                                ..main
+                            });
+                        }
+                        passed.push(Passed {
+                            engine: id(order[main_place]),
+                            why: Skip::Failed(cut_error(&main.text, audio.speech_ms)),
+                        });
+                        return Ok(Transcript {
+                            engine: id(order[place]),
+                            passed,
+                            ..t
+                        });
+                    }
+                    if order[place] != 0 || !looks_cut(&t.text, audio.speech_ms) {
+                        return Ok(Transcript {
+                            engine: id(order[place]),
+                            passed,
+                            ..t
+                        });
+                    }
+                    // D-042: the main engine's answer looks cut. Hear from one fallback (the one already
+                    // running, else the next one; a slow one brings in the next after its wait as usual) and
+                    // keep the fuller answer. With none left to hear from, the main answer stands.
+                    if !(0..asked).any(|p| !replied[p]) && together(asked) {
+                        let last = asked + 1 == order.len();
+                        self.ask(order[asked], asked, &audio, sender(&mut tx, last));
+                        asked += 1;
+                    }
+                    if !(0..asked).any(|p| !replied[p]) {
+                        return Ok(Transcript {
+                            engine: id(order[place]),
+                            passed,
+                            ..t
+                        });
+                    }
+                    held = Some((place, t));
+                    since = Instant::now();
+                    false
                 }
                 Some((place, Err(e))) => {
+                    replied[place] = true;
                     // Only the newest engine failing moves the chain on; an older one may still answer.
                     // Before a last resort, every engine asked so far must have failed.
                     let newest = place + 1 == asked && asked < order.len();
@@ -530,6 +596,14 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
                 asked += 1;
                 since = Instant::now();
             }
+        }
+        if let Some((main_place, main)) = held {
+            // Every fallback failed: the main engine's answer is still the best there is.
+            return Ok(Transcript {
+                engine: id(order[main_place]),
+                passed,
+                ..main
+            });
         }
         let mut failed: Vec<(String, ApiError)> = errors
             .into_iter()
@@ -1358,6 +1432,74 @@ mod tests {
         assert_eq!(civil(days(2028, 2, 29)), (2028, 2, 29));
         let rest = daily_rest(UNIX_EPOCH + Duration::from_secs(at(2026, 11, 5, 15, 0)));
         assert_eq!(rest, Duration::from_secs(17 * 3_600 + 5 * 60));
+    }
+
+    fn run_with_speech(
+        c: &Chain<Fake>,
+        speech_ms: u32,
+    ) -> (Result<Transcript, ApiError>, Duration) {
+        let audio = Encoded {
+            speech_ms: Some(speech_ms),
+            ..crate::encode::opus(&vec![0.1; 1_600]).unwrap()
+        };
+        let t = Instant::now();
+        (c.transcribe(&audio), t.elapsed())
+    }
+
+    const CUT: &str =
+        "Cloud focus cursor click cursor focus keyboard type normally input field focus.";
+    const FULL: &str = "Yaar ek baat bata, jab main Claude mein cursor click karta hoon to focus chala jata hai aur                         keyboard se type normally nahi hota, input field focus hi nahi leta.";
+
+    #[test]
+    fn a_cut_looking_main_answer_loses_to_a_fuller_fallback() {
+        // Live 2026-11-05 17:08: 12 words for 10 s of speech.
+        let (c, n) = chain(vec![
+            Fake::new("transcribe", 0, Ok(CUT)),
+            Fake::new("flash", 50, Ok(FULL)),
+            Fake::new("lite", 0, Ok("short")),
+        ]);
+        let t = run_with_speech(&c, 10_000).0.unwrap();
+        assert_eq!((t.engine.as_str(), t.text.as_str()), ("flash", FULL));
+        assert!(
+            matches!(&t.passed[..], [Passed { engine, why: Skip::Failed(ApiError::BadResponse(m)) }]
+                if engine == "transcribe" && m.contains("looked cut")),
+            "{:?}",
+            t.passed
+        );
+        assert_eq!(calls(&n), [1, 1, 0], "only the next engine is asked");
+    }
+
+    #[test]
+    fn a_cut_looking_answer_stays_when_the_fallback_is_no_fuller_or_fails() {
+        let (c, _) = chain(vec![
+            Fake::new("transcribe", 0, Ok(CUT)),
+            Fake::new("flash", 0, Ok("Cloud focus.")),
+        ]);
+        let t = run_with_speech(&c, 10_000).0.unwrap();
+        assert_eq!((t.engine.as_str(), t.passed.len()), ("transcribe", 0));
+        let (c, _) = chain(vec![
+            Fake::new("transcribe", 0, Ok(CUT)),
+            Fake::new("flash", 0, Err(ApiError::Timeout)),
+        ]);
+        let t = run_with_speech(&c, 10_000).0.unwrap();
+        assert_eq!(t.engine, "transcribe");
+    }
+
+    #[test]
+    fn a_normal_answer_asks_no_one_else() {
+        let (c, n) = chain(vec![
+            Fake::new("transcribe", 0, Ok(FULL)),
+            Fake::new("flash", 0, Ok(FULL)),
+        ]);
+        // 26 words for 4 s of speech; a short clip (2 s) never counts as cut; nor does an unknown length.
+        assert_eq!(run_with_speech(&c, 4_000).0.unwrap().engine, "transcribe");
+        let (c2, n2) = chain(vec![
+            Fake::new("transcribe", 0, Ok("Haan.")),
+            Fake::new("flash", 0, Ok(FULL)),
+        ]);
+        assert_eq!(run_with_speech(&c2, 2_000).0.unwrap().engine, "transcribe");
+        assert_eq!(run(&c2).0.unwrap().engine, "transcribe");
+        assert_eq!((calls(&n), calls(&n2)), (vec![1, 0], vec![2, 0]));
     }
 
     #[test]
