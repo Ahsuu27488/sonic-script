@@ -225,7 +225,7 @@ and lakh amount right).
     says so. Prices for `gpt-oss-120b` and Gemini 3.x audio are from 2026-10-26; recheck before launch.
 11. Building `desktop/` needs CMake on PATH (for libopus); on another PC: the VS Build Tools CMake folder or
     `winget install Kitware.CMake`. Drive C: is nearly full (see Start here 3).
-12. Final name not decided (license is MIT, D-012); see Next 7. `main` is guarded by the pre-push hook only.
+12. Final name decided after M2 (Next 7); "SonicScript" until then (license is MIT, D-012). `main` is guarded by the pre-push hook only.
 13. Smart formatting (D-031): the format step (~0.7 s typical, ~1.3 s slow) counts inside the chain's waits,
     so a later engine is asked a little more often; not measured on a full chain run yet (Next 5). The
     prompt still sometimes keeps the filler "wo na" (fmt-11) and sometimes merges the last two steps of the
@@ -264,12 +264,10 @@ and lakh amount right).
 6. **Owner: the chimes** are fine for now (they sound much like Claude's, 2026-11-04). The agent cannot listen
    to audio: if they should change, describe them (higher / lower, shorter, softer, one note or two) and the
    agent tunes `cue.rs`. M2 adds the on-screen ring.
-7. **Owner: the name.** English names only (owner, 2026-11-05). "Utter" was the owner's pick but is taken:
-   "Utter" is already an AI dictation app for Mac and iPhone (utter.to, App Store, Product Hunt; global
-   shortcut, bring-your-own key, text at the cursor: the same category), and utter.app / .com / .ai / .dev
-   are registered. The owner rejected AI-sounding names (Saylo, Voxly, Codeswitch, ...: "they feel vibe-coded"); wanted: a real, human-sounding word. Ideas from 2026-11-05 to check: Mynah, Blurt, Ramble, Natter, Spill, Hum.
-   Before choosing, the agent checks each one: a web search for an app of the same kind, GitHub, `.app` /
-   `.com` domains, App Store and Play Store. Also say if the "free requests used up" notice reads well.
+7. **Name: stays "SonicScript" until after M2** (owner, 2026-11-05: decide after M2, English and
+   human-sounding, nothing AI-ish). "Utter" is taken (an AI dictation app for Mac / iPhone, utter.to). Ideas
+   to check then: Mynah, Blurt, Ramble, Natter, Spill, Hum (a web search for a same-kind app, GitHub,
+   domains, App Store, Play Store). Owner: say if the "free requests used up" notice reads well.
 
 ## How to run and check
 
