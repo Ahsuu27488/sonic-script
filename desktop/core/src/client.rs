@@ -3,9 +3,11 @@
 //! provider (an OpenAI-style chat call, as `eval` `Refiner`). [`Chain`] puts engines in order of preference,
 //! each asked when the one before is slow, fails or is resting after a rate limit (D-029).
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use reqwest::blocking::Client as Http;
 use serde_json::{Value, json};
@@ -195,21 +197,76 @@ impl Transcribe for Client {
     }
 }
 
-/// How long an engine is skipped after its free requests for the day ran out. Google resets them at
-/// midnight Pacific (about 1 PM in Pakistan); asking again every hour costs one quick 429 at most.
-pub const DAILY_REST: Duration = Duration::from_secs(60 * 60);
+/// How long an engine is skipped after its free requests for the day ran out: until Google resets them at
+/// midnight Pacific (about 1 PM in Pakistan), plus a few minutes (D-040). Asking again sooner is not a quick
+/// 429: live 2026-11-05 Google took 4-6 s to refuse, and the next engine waited that long.
+pub fn daily_rest(now: SystemTime) -> Duration {
+    let t = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    Duration::from_secs(next_pacific_midnight(t) - t + 5 * 60)
+}
+
+/// The next midnight in Los Angeles after `t` (Unix seconds): 08:00 UTC, or 07:00 UTC while US daylight
+/// saving time is on (second Sunday of March to first Sunday of November).
+fn next_pacific_midnight(t: u64) -> u64 {
+    let day = t / 86_400;
+    (day..day + 3)
+        .flat_map(|d| [7, 8].map(|h| d * 86_400 + h * 3_600))
+        .find(|&c| c > t && (c / 3_600) % 24 == if pacific_dst(c) { 7 } else { 8 })
+        .expect("a midnight within 3 days")
+}
+
+/// Whether US daylight saving time is on at `t` (Unix seconds) in Los Angeles.
+fn pacific_dst(t: u64) -> bool {
+    let year = civil(t as i64 / 86_400).0;
+    // Day numbers (days since 1970-01-01, a Thursday) of the n-th Sunday on or after a date.
+    let sunday = |m: u32, nth: i64| {
+        let first = days(year, m, 1);
+        first + (7 - (first + 4).rem_euclid(7)) % 7 + 7 * (nth - 1)
+    };
+    let start = sunday(3, 2) * 86_400 + 10 * 3_600; // 2 AM PST
+    let end = sunday(11, 1) * 86_400 + 9 * 3_600; // 2 AM PDT
+    (start..end).contains(&(t as i64))
+}
+
+/// Days since 1970-01-01 of a date (H. Hinnant's `days_from_civil`).
+fn days(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let m = m as i64;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d as i64 - 1;
+    era * 146_097 + (yoe * 365 + yoe / 4 - yoe / 100 + doy) - 719_468
+}
+
+/// (year, month, day) of a day number (H. Hinnant's `civil_from_days`).
+fn civil(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (yoe + era * 400 + i64::from(m <= 2), m, d)
+}
 /// The shortest pause after any other 429 (a per-minute limit).
 const MIN_REST: Duration = Duration::from_secs(60);
 
 /// Engines in order of preference (D-029). The clip goes to the first; when it fails, or has not answered
 /// within its wait, it also goes to the next one, and so on; the first good answer wins. A last-resort engine
-/// (D-033: Groq Whisper) is asked only once every engine asked before it has failed, never for slowness. An
-/// engine that hit a rate limit rests (is skipped at once) for a while. A request that loses keeps running on
+/// (D-033: Groq Whisper) is asked only once every engine asked before it has failed, never for slowness. While
+/// the first (main) engine is out, resting or failed, the others are asked together (D-040). An engine that
+/// hit a rate limit rests (is skipped at once) for a while: until Google's reset for a daily quota, kept in a
+/// file between runs with [`Chain::with_rest_file`]. A request that loses keeps running on
 /// its own thread until it ends (at most the 10 s client timeout) and is ignored.
 pub struct Chain<T> {
     links: Vec<Link<T>>,
     /// Per link: skipped until then.
-    resting: Arc<Mutex<Vec<Option<Instant>>>>,
+    resting: Arc<Mutex<Vec<Option<SystemTime>>>>,
+    /// Where the rests are kept between runs (D-040): a model out of free requests stays skipped after a
+    /// restart. `None`: in memory only.
+    rest_file: Option<Arc<PathBuf>>,
 }
 
 struct Link<T> {
@@ -240,7 +297,31 @@ impl<T: Transcribe + Send + Sync + 'static> Chain<T> {
                 last_resort,
             })
             .collect();
-        Self { links, resting }
+        Self {
+            links,
+            resting,
+            rest_file: None,
+        }
+    }
+
+    /// Keeps the rests in `path` (JSON: engine id → Unix seconds) and loads the ones still running (D-040).
+    /// A missing or broken file is no rest at all.
+    pub fn with_rest_file(mut self, path: PathBuf) -> Self {
+        let saved: HashMap<String, u64> = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        let now = SystemTime::now();
+        if let Ok(mut r) = self.resting.lock() {
+            for (i, link) in self.links.iter().enumerate() {
+                if let Some(&until) = saved.get(link.engine.id()) {
+                    let until = UNIX_EPOCH + Duration::from_secs(until);
+                    r[i] = (until > now).then_some(until);
+                }
+            }
+        }
+        self.rest_file = Some(Arc::new(path));
+        self
     }
 
     pub fn first(&self) -> &T {
@@ -261,11 +342,21 @@ impl<T: Transcribe + Send + Sync + 'static> Chain<T> {
     fn ask(&self, link: usize, place: usize, audio: &Arc<Encoded>, tx: mpsc::Sender<Reply>) {
         let engine = self.links[link].engine.clone();
         let (audio, resting) = (audio.clone(), self.resting.clone());
+        let file = self.rest_file.clone();
+        let ids: Vec<String> = self
+            .links
+            .iter()
+            .map(|l| l.engine.id().to_string())
+            .collect();
         std::thread::spawn(move || {
             let result = engine.transcribe(&audio);
             let until = result.as_ref().err().and_then(rest_for);
             if let Ok(mut r) = resting.lock() {
-                r[link] = until.map(|d| Instant::now() + d);
+                let changed = r[link].is_some() || until.is_some();
+                r[link] = until.map(|d| SystemTime::now() + d);
+                if let (true, Some(file)) = (changed, &file) {
+                    save_rests(file, &ids, &r);
+                }
             }
             // The receiver is gone when another engine already won: nothing to do then.
             let _ = tx.send((place, result));
@@ -273,9 +364,30 @@ impl<T: Transcribe + Send + Sync + 'static> Chain<T> {
     }
 }
 
+/// Writes the rests still running; a failed write only means they are forgotten on the next start.
+fn save_rests(file: &Path, ids: &[String], rests: &[Option<SystemTime>]) {
+    let now = SystemTime::now();
+    let secs = |t: SystemTime| t.duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs());
+    // Other runs (`--engine`, another chain) keep their engines' rests in the same file.
+    let mut map: HashMap<String, u64> = std::fs::read_to_string(file)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    let now_s = secs(now).unwrap_or(0);
+    map.retain(|id, until| *until > now_s && !ids.contains(id));
+    for (id, until) in ids.iter().zip(rests) {
+        if let Some(until) = until.filter(|u| *u > now).and_then(secs) {
+            map.insert(id.clone(), until);
+        }
+    }
+    if let Ok(text) = serde_json::to_string(&map) {
+        let _ = std::fs::write(file, text);
+    }
+}
+
 fn rest_for(e: &ApiError) -> Option<Duration> {
     match e {
-        ApiError::RateLimited { daily: true, .. } => Some(DAILY_REST),
+        ApiError::RateLimited { daily: true, .. } => Some(daily_rest(SystemTime::now())),
         ApiError::RateLimited { retry_after_s, .. } => {
             Some(Duration::from_secs(retry_after_s.unwrap_or(0)).max(MIN_REST))
         }
@@ -306,7 +418,7 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
     /// [`ApiError::AllFailed`] with each one's (D-035).
     fn transcribe(&self, audio: &Encoded) -> Result<Transcript, ApiError> {
         let id = |link: usize| self.links[link].engine.id().to_string();
-        let now = Instant::now();
+        let now = SystemTime::now();
         let resting: Vec<bool> = match self.resting.lock() {
             Ok(r) => r.iter().map(|u| u.is_some_and(|u| u > now)).collect(),
             Err(_) => vec![false; self.links.len()],
@@ -329,8 +441,25 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
         let (tx, rx) = mpsc::channel();
         let mut tx = Some(tx);
         let mut errors: Vec<Option<ApiError>> = vec![None; order.len()];
-        self.ask(order[0], 0, &audio, sender(&mut tx, order.len() == 1));
-        let (mut asked, mut since) = (1, Instant::now());
+        // Per place: already in `passed` (slow), so a later failure is not listed twice.
+        let mut listed = vec![false; order.len()];
+        let mut asked = 0;
+        // D-040: while the main engine is out (resting or failed), the fallbacks are asked together, not one
+        // wait after another; a last resort still waits for failures.
+        let together = |asked: usize| asked < order.len() && !self.links[order[asked]].last_resort;
+        loop {
+            self.ask(
+                order[asked],
+                asked,
+                &audio,
+                sender(&mut tx, asked + 1 == order.len()),
+            );
+            asked += 1;
+            if order[0] == 0 || !together(asked) {
+                break;
+            }
+        }
+        let mut since = Instant::now();
         loop {
             // The next engine is a last resort: it waits for failures, not for time.
             let next_waits_for_failures =
@@ -359,17 +488,28 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
                     // Only the newest engine failing moves the chain on; an older one may still answer.
                     // Before a last resort, every engine asked so far must have failed.
                     let newest = place + 1 == asked && asked < order.len();
-                    if newest || next_waits_for_failures {
+                    let main_failed = order[place] == 0 && together(asked);
+                    if !listed[place] && (newest || next_waits_for_failures || asked > place + 1) {
                         passed.push(Passed {
                             engine: id(order[place]),
                             why: Skip::Failed(e.clone()),
                         });
+                        listed[place] = true;
                     }
                     errors[place] = Some(e);
                     if errors.iter().all(Option::is_some) {
                         break;
                     }
-                    if next_waits_for_failures {
+                    if main_failed {
+                        // D-040: the main engine failed; every fallback is asked now.
+                        while together(asked) {
+                            let last = asked + 1 == order.len();
+                            self.ask(order[asked], asked, &audio, sender(&mut tx, last));
+                            asked += 1;
+                        }
+                        since = Instant::now();
+                        false
+                    } else if next_waits_for_failures {
                         errors[..asked].iter().all(Option::is_some)
                     } else {
                         newest
@@ -380,6 +520,7 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
                         engine: id(order[asked - 1]),
                         why: Skip::Slow,
                     });
+                    listed[asked - 1] = true;
                     true
                 }
             };
@@ -1119,6 +1260,104 @@ mod tests {
         assert_eq!(t.passed, [resting]);
         assert_eq!(calls(&n), [1, 2], "not asked again while it rests");
         assert!(took < WAIT);
+    }
+
+    #[test]
+    fn the_fallbacks_are_asked_together_when_the_main_engine_fails() {
+        let busy = ApiError::Http(503, "high demand".into());
+        let (c, n) = chain(vec![
+            Fake::new("transcribe", 0, Err(busy.clone())),
+            Fake::new("flash", 1_000, Ok("Flash text")),
+            Fake::new("lite", 50, Ok("Lite text")),
+        ]);
+        let (r, took) = run(&c);
+        let t = r.unwrap();
+        assert_eq!(t.engine, "lite");
+        assert_eq!(t.passed, [failed("transcribe", busy)]);
+        assert_eq!(calls(&n), [1, 1, 1]);
+        assert!(took < WAIT, "Lite does not wait for Flash: {took:?}");
+    }
+
+    #[test]
+    fn the_fallbacks_are_asked_together_while_the_main_engine_rests() {
+        let (c, n) = chain(vec![
+            Fake::new("transcribe", 0, Err(daily())),
+            Fake::new("flash", 1_000, Ok("Flash text")),
+            Fake::new("lite", 50, Ok("Lite text")),
+        ]);
+        run(&c).0.unwrap();
+        let (r, took) = run(&c);
+        let t = r.unwrap();
+        assert_eq!(t.engine, "lite");
+        let resting = Passed {
+            engine: "transcribe".into(),
+            why: Skip::Resting,
+        };
+        assert_eq!(t.passed, [resting]);
+        assert_eq!(calls(&n), [1, 2, 2]);
+        assert!(took < WAIT, "{took:?}");
+    }
+
+    #[test]
+    fn a_used_up_engine_stays_skipped_after_a_restart() {
+        let file =
+            std::env::temp_dir().join(format!("sonicscript-rest-{}.json", std::process::id()));
+        let _ = std::fs::remove_file(&file);
+        let fakes = || {
+            vec![
+                Fake::new("transcribe", 0, Err(daily())),
+                Fake::new("flash", 0, Ok("Flash text")),
+            ]
+        };
+        let (c, _) = chain(fakes());
+        run(&c.with_rest_file(file.clone())).0.unwrap();
+        let saved = std::fs::read_to_string(&file).unwrap();
+        assert!(saved.contains("\"transcribe\""), "{saved}");
+        // A run of another engine alone adds its rest and keeps that one.
+        let (lone, _) = chain(vec![Fake::new("lite", 0, Err(daily()))]);
+        run(&lone.with_rest_file(file.clone())).0.unwrap_err();
+        let saved = std::fs::read_to_string(&file).unwrap();
+        assert!(
+            saved.contains("\"transcribe\"") && saved.contains("\"lite\""),
+            "{saved}"
+        );
+        let (c, n) = chain(fakes());
+        let t = run(&c.with_rest_file(file.clone())).0.unwrap();
+        assert_eq!(t.engine, "flash");
+        assert_eq!(calls(&n), [0, 1], "the new chain knows the rest");
+        let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
+    fn a_daily_rest_lasts_until_midnight_in_los_angeles() {
+        let at = |y, m, d, h: i64, min: i64| (days(y, m, d) * 86_400 + h * 3_600 + min * 60) as u64;
+        // 20:00 in Pakistan, winter time in California: 1 PM in Pakistan the next day.
+        assert_eq!(
+            next_pacific_midnight(at(2026, 11, 5, 15, 0)),
+            at(2026, 11, 6, 8, 0)
+        );
+        // Summer time: 07:00 UTC.
+        assert_eq!(
+            next_pacific_midnight(at(2026, 7, 1, 10, 0)),
+            at(2026, 7, 2, 7, 0)
+        );
+        // The night summer time ends (Sunday 1 November 2026): midnight PDT has passed.
+        assert_eq!(
+            next_pacific_midnight(at(2026, 11, 1, 7, 30)),
+            at(2026, 11, 2, 8, 0)
+        );
+        // The night it starts (Sunday 8 March 2026).
+        assert_eq!(
+            next_pacific_midnight(at(2026, 3, 8, 7, 30)),
+            at(2026, 3, 8, 8, 0)
+        );
+        assert_eq!(
+            next_pacific_midnight(at(2026, 3, 8, 9, 0)),
+            at(2026, 3, 9, 7, 0)
+        );
+        assert_eq!(civil(days(2028, 2, 29)), (2028, 2, 29));
+        let rest = daily_rest(UNIX_EPOCH + Duration::from_secs(at(2026, 11, 5, 15, 0)));
+        assert_eq!(rest, Duration::from_secs(17 * 3_600 + 5 * 60));
     }
 
     #[test]

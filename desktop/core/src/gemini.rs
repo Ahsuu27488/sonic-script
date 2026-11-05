@@ -130,7 +130,7 @@ fn clean(text: &str) -> String {
             t = t[1..t.len() - 1].trim();
         }
     }
-    strip_timeline(t)
+    strip_stamps(&strip_timeline(t))
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -160,6 +160,44 @@ fn strip_timeline(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut last = 0;
     for (start, end, ..) in ranges {
+        out.push_str(&text[last..start]);
+        out.push(' ');
+        last = end;
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// Removes running single time stamps ("kya 0:02 chahata tha? ... aur 0:08 open code ..."), the other way
+/// Gemini marks time in a long answer (live 2026-11-05 19:56, D-040): three or more, the first at most 0:10,
+/// each later than the one before and at most 30 s after it. Spoken times ("6:00, 7:00 aur 8:00") stay.
+fn strip_stamps(text: &str) -> String {
+    let mut stamps = Vec::new(); // (start byte, end byte, s)
+    let mut i = 0;
+    while i < text.len() {
+        let word_start = !text[..i].ends_with(|c: char| c.is_ascii_digit() || c == ':');
+        if let Some((.., len)) = time_range(&text[i..]).filter(|_| word_start) {
+            i += len; // a range is the other pass's business
+            continue;
+        }
+        if let Some((at, len)) = clock(&text[i..]).filter(|_| word_start) {
+            stamps.push((i, i + len, at));
+            i += len;
+            continue;
+        }
+        i += text[i..].chars().next().map_or(1, char::len_utf8);
+    }
+    let running = stamps.len() >= 3
+        && stamps[0].2 <= 10
+        && stamps
+            .windows(2)
+            .all(|w| w[1].2 > w[0].2 && w[1].2 - w[0].2 <= 30);
+    if !running {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (start, end, _) in stamps {
         out.push_str(&text[last..start]);
         out.push(' ');
         last = end;
@@ -270,6 +308,24 @@ mod tests {
             "Pehla 0:00 - 0:05 tha.",
             "0:00 - 0:05 aur phir 0:20 - 0:25 dekho.",
             "Score 10:00-12:301 tha.",
+        ] {
+            assert_eq!(clean(kept), kept);
+        }
+    }
+
+    #[test]
+    fn running_single_stamps_are_removed_but_spoken_times_stay() {
+        // Live 2026-11-05 19:56 (Flash, 41 s clip), shortened.
+        let raw = "You know what? Main hamesha se kya 0:02 chahata tha? Ke main Hermes ka aur 0:08 open code ka                    tujhe is tarah se control 0:13 doon jaisey ke anti-gravity ka 0:15 tu browser mein leta hai.";
+        assert_eq!(
+            clean(raw),
+            "You know what? Main hamesha se kya chahata tha? Ke main Hermes ka aur open code ka tujhe is tarah se control doon jaisey ke anti-gravity ka tu browser mein leta hai."
+        );
+        for kept in [
+            "Kal 6:00, 7:00 aur 8:00 baje teen meetings hain.",
+            "Score 0:02 tha, phir 0:05.",
+            "Lap 0:05, 0:09, 0:08 tha.",
+            "Pehle 0:05, phir 0:50, phir 1:00.",
         ] {
             assert_eq!(clean(kept), kept);
         }

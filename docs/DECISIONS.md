@@ -257,7 +257,8 @@ use (~500 requests/day), while Flash and Transcribe allow only 20 / 25 a day; bu
 2026-11-03, run `eval/results/m1-fallback` (local).
 
 **D-029 Engine chain: Gemini 3.5 Transcribe (+ Roman cleanup on Groq) → Gemini 3.5 Flash → Gemini 3.5 Flash-Lite
-→ Groq Whisper; a model out of free requests is skipped and the user is told.** (2026-11-03) *(the Groq
+→ Groq Whisper; a model out of free requests is skipped and the user is told.** (2026-11-03) *(the hourly
+re-ask after a daily 429, and the waits while the main model is out, superseded by D-040)* *(the Groq
 `gpt-oss-20b` Roman cleanup after Transcribe is replaced by the D-031 format step while formatting is on)*
 Supersedes D-028. The clip goes to `gemini-3.5-transcribe+gptoss20b`; with no answer after 4 s, or on an error,
 also to `gemini-3.5-flash`; 3 s later `gemini-3.5-flash-lite`; 3 s later `groq-whisper-hint`; the first good
@@ -443,3 +444,24 @@ answers. `eval` does not run the step (the benchmark measures each engine's own 
 `spec/providers.json` `romanize`, `desktop/core/src/spec.rs` (`romanize`), `normalize.rs`
 (`needs_romanizing`), `client.rs` (`Client::with_romanize`, `romanized`), `gemini.rs` (`strip_timeline`),
 `desktop/win/src/key.rs` (`engines`).
+
+**D-040 A model out of free requests rests until Google's reset, remembered across restarts; while the main
+model is out, the fallbacks are asked together.** (2026-11-05)
+Supersedes two parts of D-029. (1) A 429 naming a daily quota rests the model until the next midnight in Los
+Angeles plus 5 minutes (08:00 UTC, 07:00 UTC in US summer time: about 1 PM / 12 PM in Pakistan), not for an
+hour; the rests are kept in `%LOCALAPPDATA%\SonicScript\resting.json` (engine id → Unix seconds; every run
+merges its own), so a restart does not ask a used-up model again. (2) While the main model (the chain's first)
+is resting, or once it has failed on a clip, every other engine that is not a last resort is asked at once
+and the first good answer wins; while the main model is only slow, the waits stay (Flash after 4 s,
+Flash-Lite 3 s later). Also: Gemini's answer loses running single time stamps ("kya 0:02 chahata tha? ... aur
+0:08 ..."): three or more, the first at most 0:10, each later than the one before by at most 30 s.
+*Why:* the owner's evening of 2026-11-05: Transcribe's 25 free requests ran out at 18:13; from then on
+key-up → text was 2.3-11 s (before: 2.1-3.7 s). Flash took 3.8-5.7 s, so Flash-Lite started only after
+Flash's 3 s wait; and the hourly re-ask of Transcribe was not "one quick 429": Google took 4-6 s to refuse
+(7.8, 8.2 and 11 s dictations), twice right after the app was restarted (the rests lived in memory only).
+The owner chose all three fixes (2026-11-05). Checked: with Transcribe resting, a 3.8 s clip came back in
+1.8 s (6.0 s before). Cost: while the main model is out, Flash and Flash-Lite are both asked on every clip,
+so Flash's 20 free requests a day go faster (Flash-Lite has ~500); a clock far off from real time rests a
+model too long or too short. *Where:* `desktop/core/src/client.rs` (`daily_rest`, `next_pacific_midnight`,
+`Chain::with_rest_file`, `save_rests`, the `together` start in `Chain::transcribe`), `gemini.rs`
+(`strip_stamps`), `desktop/win/src/key.rs` (`rest_file`), `spec/providers.json` (`about`).

@@ -3,6 +3,22 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · fix/m1-chain-speed (D-040)
+
+- Fix: dictation took 5-11 s all evening once Transcribe's free requests ran out (18:13). Root causes: the
+  chain still waited 3 s for a slow Flash (3.8-5.7 s tonight) before asking Flash-Lite, and a used-up model
+  was asked again every hour, which cost 4-6 s each time Google was slow to refuse (and after every restart,
+  since the rest lived in memory only).
+- A daily 429 now rests the model until midnight in Los Angeles + 5 min (`client::daily_rest`, US summer time
+  handled), kept in `%LOCALAPPDATA%\SonicScript\resting.json` across restarts and runs (each run merges its
+  own engines). While the main model is resting or has failed, Flash and Flash-Lite are asked together.
+- Gemini's answer also loses running single time stamps ("kya 0:02 chahata tha? ... 0:08 ...", live 19:56),
+  which D-039's range rule missed.
+- Checked: 4 new unit tests (racing on failure and on rest, the rest file across a restart and a lone run, the
+  Pacific midnight in winter / summer / both switch nights) + the stamp test; the real chain on the 19:57
+  recording: 6.0 s with Transcribe asked, 1.8 s with it resting (Flash-Lite answered, Flash's daily 429 saved
+  too). The first try showed a lone `--engine` run erasing other engines' rests; fixed before commit.
+
 ## 2026-11-05 · fix/m1-script-answer (D-039)
 
 - Fix: a 57 s dictation with `--no-format` (live, 19:48) pasted "纳 jaane galtee kar gayaa kuch. baree
