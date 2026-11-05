@@ -336,7 +336,7 @@ drive C:. *Where:* `desktop/win/src/history.rs`, `dictate.rs` (`transcribe`, `op
 settings switch, a size or age limit, and whether it starts on or off for other users.
 
 **D-033 Groq Whisper is a last resort: asked only when every Gemini model has failed, never because they are
-slow.** (2026-11-04) Changes D-029's timing for Groq (the Gemini order and waits stay: Transcribe, Flash after
+slow.** (2026-11-04) *(superseded by D-035: Groq is out of the chain)* Changes D-029's timing for Groq (the Gemini order and waits stay: Transcribe, Flash after
 4 s, Flash-Lite 3 s later). `spec/providers.json` marks `groq-whisper-hint` `"last_resort": true`; the chain
 asks it only once every engine asked before it has failed or is resting (also when every Gemini model is out of
 free requests, or the Gemini key is missing). *Why:* the owner's live try (2026-11-04, dictation history): with
@@ -363,3 +363,17 @@ from what it knows about them. *Where:* `desktop/core/src/words.rs`, `normalize.
 (`with_words`, `words_at`), `gemini.rs`, `client.rs` (`Client::with_words`), `desktop/win/src/mywords.rs`,
 `key.rs` (`Choice.words`, `normalizer`), `spec/prompts/words-assistant-v1.md`,
 `docs/plans/2026-11-04-word-list.md`.
+
+**D-035 The chain is Gemini only: when every Gemini model fails, nothing is typed and the user is told why.**
+(2026-11-04) Supersedes D-033. `spec/providers.json` `chain`: Transcribe, Flash after 4 s, Flash-Lite 3 s later;
+no Groq Whisper. When all of them fail the chain returns `ApiError::AllFailed` (each model's id and error) and
+dictation prints "Nothing typed: no model answered", each reason, and what to do: when every model is out of free
+requests, that they come back at about 1 PM in Pakistan and `--engine groq-whisper-hint` meanwhile; when one was
+slow or busy, to try again in a minute; the recording stays in the history. `groq-whisper-hint` stays in the spec
+and the catalog for `--engine` (and the `last_resort` mechanism stays in the code, unused). *Why:* the owner's
+second live try (2026-11-04): with Transcribe and Flash out of free requests and Flash-Lite timing out, Groq
+answered 5 clips after 10-12.6 s, all misspelt; the owner: "Groq's reply is better not to come at all, it is of
+no use"; approved. Wrong text pasted into a chat is worse than none (as D-007). Cost: in a Google outage or
+after every free request of the day, nothing is typed until Google answers again. *Where:* `spec/providers.json`
+`chain`, `desktop/core/src/api.rs` (`AllFailed`, `is_key_error`), `client.rs` (`Chain::transcribe`),
+`desktop/win/src/dictate.rs` (`failure_notes`), `bench.rs`, `spec/models.json` (Groq no longer a fallback).

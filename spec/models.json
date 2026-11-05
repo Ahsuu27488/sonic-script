@@ -137,7 +137,7 @@
       "provider": "groq",
       "tier": "free",
       "recommended": false,
-      "fallback": 3,
+      "fallback": null,
       "keys": [
         "GROQ_API_KEY"
       ],

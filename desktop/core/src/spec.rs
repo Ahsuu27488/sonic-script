@@ -349,8 +349,9 @@ mod tests {
     }
 
     #[test]
-    fn the_chain_is_gemini_first_and_groq_last() {
-        // D-029, D-033: the most accurate free engines first; Groq only when every Gemini model failed.
+    fn the_chain_is_gemini_only() {
+        // D-029, D-035: the most accurate free engines in order; no Groq Whisper (its text was too often
+        // wrong live), so when every Gemini model fails nothing is typed and the user is told why.
         let chain = chain();
         let ids: Vec<&str> = chain.iter().map(|l| l.engine.id()).collect();
         assert_eq!(
@@ -358,19 +359,16 @@ mod tests {
             [
                 "gemini-3.5-transcribe+gptoss20b",
                 "gemini-3.5-flash",
-                "gemini-3.5-flash-lite",
-                "groq-whisper-hint"
+                "gemini-3.5-flash-lite"
             ]
         );
         assert_eq!(default_engine().id(), ids[0]);
-        assert_eq!(
-            chain[3].engine.provider().key_env,
-            "GROQ_API_KEY",
-            "another provider last, so Google's bad hour does not take every engine"
-        );
         assert!(chain[..2].iter().all(|l| l.wait >= Duration::from_secs(2)));
-        let last_resort: Vec<bool> = chain.iter().map(|l| l.last_resort).collect();
-        assert_eq!(last_resort, [false, false, false, true]);
+        assert!(chain.iter().all(|l| !l.last_resort));
+        assert!(
+            engine("groq-whisper-hint").is_some(),
+            "still there for --engine"
+        );
     }
 
     #[test]
