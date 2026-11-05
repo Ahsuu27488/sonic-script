@@ -65,7 +65,8 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `desktop/win/src/history.rs` | `History::open()` (`%LOCALAPPDATA%\SonicScript\history`), `save(&Outcome, Clip) -> path`: the whole recording as `audio/<date>/<time>.ogg` + one line in `history.jsonl` (raw / final text, engines, app in front, paste result, timings; also the step 9 latency log), D-032 |
 | `desktop/win/src/hotkey.rs` | `spawn(vk, Sender<Action>)`: `WH_KEYBOARD_LL` hook on its own thread, runs `keys::Machine`, swallows only what it says; injected keys (programs, our own paste) pass untouched; `force_stop()` (cap, mic failure) |
 | `desktop/win/src/inject.rs` | `paste(text) -> Pasted` (`Pasted` / `Copied(why)`): save the clipboard (memory formats) → set the text (kept out of Win+V history and cloud clipboard) → Ctrl+V, Ctrl+Shift+V in terminals → restore after 300 ms if nothing new was copied; administrator windows get the text copied only; clears our own console's input; one paste at a time; `app_in_front()` (exe name, window class) for the history |
-| `desktop/win/src/audio.rs` | `Recorder::start() / stop() -> Recording { samples, stream }`: default mic via cpal, mono, resampled and encoded on a worker thread |
+| `desktop/win/src/audio.rs` | `Recorder::start() / stop() -> Recording { samples, stream }`: default mic via cpal, mono, resampled and encoded on a worker thread; `Ready` (D-036): `new()`, `refill()` (prepares the next stream on a thread: set up, not started), `start()` (starts the prepared one, waits for its first audio; broken or silent: opens the mic the old way); `Recorder.prepared` |
+| `desktop/win/examples/mic_open.rs` | Times each part of opening the mic (device, format, build, play, first audio); `--sound`, `--reuse`, `--cache`, `--prebuild` |
 | `desktop/win/src/bench.rs` | `run(dir, out, &Engines) -> Summary`: pipeline on every WAV, paced by the primary's `rpm`, one row per clip in `eval`'s `results.jsonl` shape (`row`; engine `app-<first>~<next>~...` for a chain, plus `answered_by`, `passed`), p50 / p95, answers per engine; with formatting the run is `app-...+fmt` and priced with the format step |
 | `desktop/win/src/models.rs` | `print()`: `--models`, the catalog grouped free / paid with limits, results and the app check |
 | `desktop/win/src/key.rs` | `choose(Option<id>) -> Choice` (the spec's chain, or one engine), `engines(Choice) -> Engines` (= `Chain<Client>`; an engine whose key is missing is left out with a notice), `describe`: keys from the process environment, then `HKCU\Environment`; never printed; `Choice.format` (`choose(id, format)`): `engines` applies it to every client, or leaves it out with a notice when its key is missing |
@@ -106,7 +107,7 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 ## Dictation pipeline (desktop/core)
 
 ```
-key down ─► start chime (cue) ─► mic (cpal) ─► mono ─► resample 16 kHz ─► encode::Stream (20 ms packets while recording)
+key down ─► start chime (cue) ─► mic (cpal: the stream `Ready` set up beforehand, D-036) ─► mono ─► resample 16 kHz ─► encode::Stream (20 ms packets while recording)
 key up / Enter ─► run_streamed:
 samples (16 kHz mono) ─► vad::detect ─► no speech? → nothing sent
                       ─► packets for speech ± 500 ms ─► Ogg ─► Chain (D-029) ─► Normalizer::clean (per line)
@@ -145,6 +146,7 @@ python -m ruff check . && python -m pytest -q
 cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cargo run -q --example clean -- [words.txt] < texts.txt   # (in desktop/) cleanup on one text per line
 cargo run -q --example gate -- ../spec/fixtures/audio/*.wav   # (in desktop/) voice gate per clip
+cargo run -q --release -p sonicscript --example mic_open -- 6 20000 --prebuild   # (in desktop/) mic-open timings
 cargo run -q --release -p sonicscript                     # (in desktop/) dictation: tap / hold Right Ctrl, Esc cancels; --no-format = exact words
 cargo run -q --release -p sonicscript -- --record 5       # (in desktop/) mic check: record 5 s, print the text
 cargo run -q --release -p sonicscript -- --models         # (in desktop/) the model catalog, free / paid
