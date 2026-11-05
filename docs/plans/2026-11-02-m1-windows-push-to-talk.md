@@ -45,8 +45,11 @@
 - 2026-11-05: PR #24 (Gemini-only chain, D-035), PR #25 (mic ready on key-down: a prepared stream starts in
   ~2 ms instead of 113-512 ms, D-036) and PR #26 (step 6, the changeable key: `--set-key`, `config.toml`,
   mouse side buttons, D-037; keys that do something alone are kept from the app) merged. All steps built.
-- Left (STATUS Next): the owner's live tries of the key and mic, the paste checks, the full chain benchmark
-  `m1-chain3`, then "done when": 3 days of daily use.
+- 2026-11-05 evening: the mic fix checked live (14-16 ms on 18 dictations). PR #28 (D-038): the format step
+  gets the transcript in tags and its answer is checked, after a live paste of the whole format prompt.
+  Found: Gemini Transcribe sometimes cuts a long mixed clip (STATUS known gap 15).
+- Left (STATUS Next 1-6): the owner's tries (no formatter, the key, My words), a guard for cut Transcribe
+  answers, the full chain benchmark `m1-chain3`, then "done when": 3 days of daily use.
 
 **Goal.** Tap Right Ctrl, speak, tap again or press Enter (or hold Right Ctrl while speaking): clean Roman Urdu /
 Hinglish appears at the cursor in any normal app (D-015).
