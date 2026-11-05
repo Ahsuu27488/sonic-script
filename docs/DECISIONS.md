@@ -377,3 +377,18 @@ no use"; approved. Wrong text pasted into a chat is worse than none (as D-007). 
 after every free request of the day, nothing is typed until Google answers again. *Where:* `spec/providers.json`
 `chain`, `desktop/core/src/api.rs` (`AllFailed`, `is_key_error`), `client.rs` (`Chain::transcribe`),
 `desktop/win/src/dictate.rs` (`failure_notes`), `bench.rs`, `spec/models.json` (Groq no longer a fallback).
+
+**D-036 Dictation keeps one microphone stream set up but not started; the key-down only starts it.**
+(2026-11-05) At start-up and after each recording a thread looks up the default mic and builds its stream
+without starting it (`audio::Ready`); the key-down starts that stream and waits for its first audio (~15 ms,
+nothing lost). A stream marked broken (device gone, default mic changed, stream invalidated) or silent for
+300 ms is dropped and the mic is opened the old way. *Why:* opening the mic took 113-512 ms after the key-down
+and that speech was lost (STATUS known gap 8, the first word cut). Measured (`examples/mic_open.rs`): the
+stream build costs ~130 ms every time and after ~20 s idle the device wake adds ~330 ms; caching the device
+and format only moves that wait. A prepared stream starts in 0-2 ms even after 2 minutes idle. Keeping the mic
+recording all the time would also remove it, but Windows then shows the mic-in-use icon the whole time (STATUS
+said to ask the owner first); a built, unstarted stream shows no icon (checked on the owner's PC), so no
+always-on mic is needed. Cost: one idle WASAPI stream and its thread while SonicScript runs; the start chime
+now plays while the mic is already open, so with speakers it may be faintly in the recording. *Where:*
+`desktop/win/src/audio.rs` (`Ready`, `prepare`, `Recorder::begin`, `FIRST_AUDIO`), `dictate.rs`,
+`desktop/win/examples/mic_open.rs`.

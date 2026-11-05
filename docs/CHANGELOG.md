@@ -3,6 +3,22 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-05 · feat/m1-mic-open (D-036)
+
+- Mic-open delay (known gap 8) measured with the new `desktop/win/examples/mic_open.rs`: building the stream
+  takes ~110-160 ms every time, and after ~20 s idle Windows wakes the device, which adds ~330 ms (to
+  `default_input_config`, or to the build when the format is cached): the 113-133 / 462-512 ms seen live.
+  Caching the device and format moved the wait, it did not remove it. A stream built ahead and only started on
+  key-down: 0 ms after 20 s and 2 min idle, first audio after ~14 ms. A built, not started stream shows no mic
+  icon on the taskbar (checked by screenshot; a recording stream shows it).
+- `audio::Ready`: one stream prepared at start-up and after each recording (on its own thread); the key-down
+  starts it and waits for its first audio (nothing lost: Windows buffers it); a stream that is broken (device
+  gone, default mic changed, invalidated, e.g. after sleep) or gives no audio within 300 ms is dropped and the
+  mic is opened the old way. WASAPI's glitch flag on the first packet (`Xrun`) and reroutes no longer count as
+  errors or get printed. The console says "mic ready in N ms" (prepared) or "mic opened in N ms".
+- Tests: manual `ready_mic_starts_at_once_after_idle` (25 s idle: started in 2 ms, 1 s = 16,000 samples; the
+  next one prepared again). Not checked yet: the owner's live dictations (`ms.mic_open` in the history).
+
 ## 2026-11-04 · feat/m1-no-groq-fallback (D-035)
 
 - The owner approved taking Groq Whisper out of the chain (STATUS Next 1 of the end-of-session docs). Chain:

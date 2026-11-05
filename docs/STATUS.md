@@ -4,9 +4,9 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-04 (end of a long session; the next one starts fresh) · **Code at:** `main` = PRs
-#3-#24 (paste, history, chimes, My words, a start-up crash fix, the Gemini-only chain; merged 2026-11-04 on
-the owner's word after CI passed).
+**Last updated:** 2026-11-05 · **Code at:** `main` = PRs #3-#24 (paste, history, chimes, My words, a start-up
+crash fix, the Gemini-only chain; #24 merged 2026-11-05 on the owner's word after CI passed); branch
+`feat/m1-mic-open` (D-036, the mic-open delay) in review.
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029, D-035): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, Gemini
 only (when all three fail nothing is typed and the console says why),
@@ -106,6 +106,12 @@ and lakh amount right).
   prompt (D-014). Checked: unit tests (parser, merge, near words, the words in both requests, cleanup), real
   runs of every command on a scratch folder, clip #12 with and without a list on Flash (right both times: the
   live "McCloud" was a one-off). Not checked yet: a before / after where an engine gets a name wrong.
+- **Mic ready on key-down (D-036, branch `feat/m1-mic-open`):** dictation keeps one mic stream set up but not
+  started (no mic icon while idle) and only starts it on key-down; the console says "mic ready in N ms".
+  Checked: a manual test (`cargo test -p sonicscript ready_mic -- --ignored`): after 25 s idle it started in
+  2 ms (was 113-512 ms) with a full second of audio; `examples/mic_open.rs` measured the cause (stream build
+  ~130 ms, device wake after ~20 s idle ~330 ms) and 0 ms with a prepared stream after 2 minutes idle. Not yet
+  checked: the owner's live dictations (`ms.mic_open` in `history.jsonl` should be ~15 ms).
 - **Start / stop chimes (PR #19, until M2's on-screen ring):** dictation plays a soft rising
   chime when recording starts (before the mic opens, ~110 ms), a falling one after the mic closes, one low note
   on cancel or a mic failure (`cue.rs`: sine notes built in memory, `PlaySoundW` without waiting); `--no-sound`
@@ -149,7 +155,7 @@ and lakh amount right).
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-04, `main`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 16 app (+1 manual clipboard test, +1 manual sound test)
+- **Tests (2026-11-05, `feat/m1-mic-open`):** `eval`: 39 offline tests, ruff clean; `desktop`: 75 core + 17 app (+1 manual clipboard test, +1 manual sound test, +1 manual mic test)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -159,8 +165,8 @@ and lakh amount right).
 
 - M1 (plan approved 2026-11-02): steps 0-5 and 8 (catalog) done; engine chain done early (D-029); smart
   formatting merged (D-031, PR #12); step 7 (paste) works live (3 checks left, Next 1); step 9 (latency log) is part of the dictation
-  history (D-032); start / stop chimes and My words phase A built. Left: the mic-open delay (Next 2) and step 6
-  (changeable key, D-018). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
+  history (D-032); start / stop chimes and My words phase A built; mic-open delay fixed (D-036, in review).
+  Left: step 6 (changeable key, D-018, Next 3). Pop-up mic on text fields, settings page (main model + 2 fallbacks,
   formatting switch) are M2 (D-016, D-017).
 - Punctuation: the owner finds the formatted text over-punctuated and wants about as much as the Gemini app's
   and Claude's dictation. Measured 2026-11-04 (runs `fmt-120b`, `m1-format-app`): after Transcribe the format
@@ -198,10 +204,11 @@ and lakh amount right).
    a phantom (D-019).
 7. The voice gate is tuned on one male voice (the owner) and one room; loud talking or TV counts as speech.
    Silero VAD only if this fails in daily use.
-8. Opening the mic takes 113-512 ms after the key goes down, and that audio is lost: in 24 live dictations
-   (2026-11-04) it was either 113-133 ms (12) or 462-512 ms (12), unrelated to how long the app had been idle.
-   Tap and hold start alike (recording starts on key-down; key-up decides tap or hold, D-023). Not fixed
-   (Next 2).
+8. Mic-open delay: fixed by D-036 (a prepared stream starts in ~2 ms); was 113-512 ms of lost speech. Still
+   slow (~130-500 ms) right after start-up (the first stream is still being prepared) and when the ready
+   stream broke (mic changed, PC resumed from sleep): then the mic opens the old way. The start chime now
+   plays while the mic is already open: with speakers it may be faintly in the recording (check the first
+   200 ms of a few history recordings).
 9. Urdu-script "میں" is always romanized "mein" (it can be "main" = I) by the local cleanup. With formatting on
    (D-031) the format step romanizes Urdu script first, so this matters only with `--no-format` or when the
    format step fails (then mostly-Urdu output from Groq gets only a rough letter-by-letter draft, `needs_llm`).
@@ -220,16 +227,14 @@ and lakh amount right).
 
 ## Next
 
-1. **Owner: the paste checks still open:** Win+V must show no dictated text; a copied image must be back on the
+1. **Owner (later, after more progress; owner 2026-11-05): the paste checks still open:** Win+V must show no dictated text; a copied image must be back on the
    clipboard after a dictation; an app run as administrator gets "press Ctrl+V". And try My words
    (`--words-prompt` → your AI assistant → copy its answer → `--words-paste`, restart, dictate names).
-2. **Agent: mic-open delay (known gap 8)** before step 6, since it cuts the first word: measure which part of
-   `audio::Recorder::start` takes the extra ~350 ms half the time (device lookup, `build_input_stream`,
-   `play`) and move what can be prepared to startup. If only a mic kept open removes it, ask the owner first
-   (Windows shows the mic-in-use icon the whole time). Check: `ms.mic_open` in `history.jsonl`.
+2. **Agent: mic-open delay: done (D-036, branch `feat/m1-mic-open`).** Owner: in the next live dictations the
+   console should say "mic ready in ~15 ms"; the first word should no longer be cut.
 3. **Agent: M1 step 6 (changeable key, D-018)**; with it, My words phase A is complete. M1's open steps come
    before anything else (owner, 2026-11-04: milestones unchanged, M1 first).
-4. **Owner: punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
+4. **Owner (later, at a milestone): punctuation examples:** paste 2-3 outputs that felt over-punctuated (best: the same words said
    into Claude's dictation too); then the agent changes the prompt's punctuation rule and re-runs D-031's checks.
 5. **Agent, after Google's daily reset (~1 PM Pakistan), without running benchmarks first:** a My words before /
    after on clips with names the engines got wrong; then, after M1, the full chain benchmark `m1-chain3` (the app

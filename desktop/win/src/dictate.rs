@@ -13,7 +13,7 @@ use sonicscript_core::normalize::Normalizer;
 use sonicscript_core::pipeline::{self, Outcome, PipelineError, Transcribe};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_RCONTROL;
 
-use crate::audio::{Recorder, Recording};
+use crate::audio::{Ready, Recorder, Recording};
 use crate::cue::{self, Cue};
 use crate::history::{Clip, History};
 use crate::inject::{self, Pasted};
@@ -45,6 +45,8 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
     if let Some(words) = words {
         println!("{words}");
     }
+    // Sets up the mic stream now, so the key-down only starts it (D-036).
+    let ready = Ready::new();
     let (tx, rx) = mpsc::channel();
     // The key is a setting from step 6 on (D-018); Right Ctrl is the default (D-015).
     hotkey::spawn(VK_RCONTROL, tx)?;
@@ -71,21 +73,24 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
         };
         match action {
             Action::Start => {
-                // First, so the short chime is mostly over before the mic opens.
+                // The chime starts first; the mic starts ~15 ms later, so with speakers (not headphones) its
+                // start may be in the recording, quietly.
                 cue::play(Cue::Start);
                 let client = client.clone();
                 std::thread::spawn(move || client.warm());
                 let t = Instant::now();
-                match Recorder::start() {
+                match ready.start() {
                     Ok(r) => {
                         let mic_open_ms = t.elapsed().as_millis();
+                        let how = if r.prepared { "ready" } else { "opened" };
                         println!(
-                            "● Recording ({}, {} Hz, mic open in {mic_open_ms} ms)",
+                            "● Recording ({}, {} Hz, mic {how} in {mic_open_ms} ms)",
                             r.device, r.rate,
                         );
                         recording = Some((r, Instant::now(), mic_open_ms));
                     }
                     Err(e) => {
+                        ready.refill();
                         hotkey::force_stop();
                         cue::play(Cue::Cancel);
                         eprintln!("  Could not open the microphone: {e}");
@@ -95,6 +100,7 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
             Action::Cancel => {
                 if let Some((r, ..)) = recording.take() {
                     drop(r.stop());
+                    ready.refill();
                     cue::play(Cue::Cancel);
                     println!("  Cancelled.");
                 }
@@ -109,6 +115,7 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
                     mic_open_ms,
                     paste: true,
                 };
+                ready.refill();
                 // After the mic is closed, so the chime is not recorded.
                 cue::play(Cue::Stop);
                 let (client, normalizer, history) =
