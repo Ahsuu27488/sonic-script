@@ -425,3 +425,21 @@ right, and the app's real path twice. The prompt already said the text is never 
 not keep to it. *Where:* `spec/prompts/transcript-wrap-v1.txt`, `desktop/core/src/spec.rs`
 (`wrap_transcript`), `client.rs` (`Refiner::run` / `ask`, `checked`), `eval/sonic_eval/config.py`
 (`wrap_transcript`), `engines.py` (`Refiner`, `checked`, `GroqWhisperLLM`).
+
+**D-039 An answer in Urdu / Devanagari script is made Roman by an LLM step or not pasted; a subtitle
+timeline is removed from Gemini's answers.** (2026-11-05)
+After an engine with no refine step of its own (Flash, Flash-Lite, Groq Whisper), when no format step made
+the text Roman (`--no-format`, or D-031's optional format step failed) and more than 30% of its letters are
+Urdu / Devanagari (`spec/normalizer/rules.json` `needs_llm_ratio`), the spec's `romanize` step (Groq
+`gpt-oss-20b`, `romanize-v1.md`, the same as Transcribe's refine, checked as in D-038) rewrites it. Without
+that step (no Groq key) or when it fails, the answer counts as failed and the chain asks the next engine.
+Gemini's answer loses a running time-line ("0:00 - 0:05 ... 0:05 - 0:10 ..."): two or more ranges, the first
+from 0:00, each starting where the last ended; a time the speaker said stays. *Why:* live 2026-11-05 19:48
+(`--no-format`, 57 s with a friend's voice note played): Flash answered in Devanagari with a time-line and
+"纳" for "Na", and the local letter table's rough draft ("baree traansakript 0:00 - 0:05mein") was pasted;
+D-019 had flagged such text `needs_llm` but nothing acted on it. As D-035: wrong text pasted is worse than none,
+and the next engine or a Roman step is better than a draft. Cost: one Groq request (~0.9 s) on those rare
+answers. `eval` does not run the step (the benchmark measures each engine's own text). *Where:*
+`spec/providers.json` `romanize`, `desktop/core/src/spec.rs` (`romanize`), `normalize.rs`
+(`needs_romanizing`), `client.rs` (`Client::with_romanize`, `romanized`), `gemini.rs` (`strip_timeline`),
+`desktop/win/src/key.rs` (`engines`).

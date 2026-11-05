@@ -4,7 +4,7 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-05 evening (end of session; the next one starts fresh) · **Code at:** `main` = PRs
+**Last updated:** 2026-11-05 night (branch `fix/m1-script-answer`, D-039: a script answer is made Roman or not pasted) · **Code at:** `main` = PRs
 #3-#28 (#24 Gemini-only chain, #25 mic ready on key-down, #26 changeable key, #28 format-step guard D-038;
 merged 2026-11-05 on the owner's word after CI passed).
 **All M1 code steps are built.** What is left in M1: Next 1-5 below (owner's tries, the Transcribe guard) and the
@@ -85,6 +85,17 @@ checked, after a live paste of the whole format prompt.
   commands in PowerShell after it quits); old console windows get line breaks as spaces. `--record` never
   pastes. The key hook ignores injected keys. Checked: unit tests (keys per window class, line breaks, saved
   formats) and a manual round-trip on the real clipboard (`cargo test -p sonicscript inject -- --ignored`).
+- **Script answers (D-039, branch `fix/m1-script-answer`):** an answer mostly in Urdu / Devanagari from
+  Flash / Flash-Lite / Groq that no format step made Roman goes through the spec's `romanize` step (Groq 20b)
+  or counts as failed (the chain moves on); Gemini's subtitle time-line ("0:00 - 0:05 ...") is removed. Fixes
+  the live 19:48 paste of "baree traansakript 0:00 - 0:05mein". Checked: unit tests and the saved 19:48 answer
+  through the real Groq step (884 ms, all Roman, sentences start lower-case).
+- **Fourth live try (2026-11-05, 18:19-19:50, 10 dictations, last 6 with `--no-format`):** Transcribe out of
+  free requests all evening; Flash-Lite answered 6, Flash 4, key-up → text 2.6-8.3 s. Compared with OpenAI
+  `gpt-4o-mini-transcribe` (~$0.012, `eval/results/live-openai-2026-11-05/compare-mini-since-18-19.jsonl`):
+  9 of 10 as good as or better than OpenAI ("panga" vs "ping", "persona" vs "purpose"); both missed "Hermes"
+  at 18:29 ("her message in ka"); 19:48 was the D-039 bug. The owner said while dictating (19:46): the
+  formatter should be off by default with a setting to turn it on (needs a decision superseding D-031).
 - **Text step guard (D-038, PR #28):** the format / refine step gets the
   transcript in `<transcript>` tags and its answer is checked (empty, its own prompt, far longer / shorter)
   before it is pasted: asked once more, then "Not formatted" (after Transcribe: the next engine). Fixes a live
@@ -180,7 +191,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-05, `main` after PR #28):** `eval`: 42 offline tests, ruff clean; `desktop`: 78 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-05, `main` after PR #28):** `eval`: 42 offline tests, ruff clean; `desktop`: 84 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -263,12 +274,11 @@ checked, after a live paste of the whole format prompt.
 
 The order agreed with the owner on 2026-11-05 (evening). One branch and PR per item.
 
-1. **Owner, now: try the new build without the formatter.** Close the running SonicScript (its exe is locked
-   while it runs), then `cd desktop && cargo run -q --release -p sonicscript -- --no-format`; 5-10 normal
-   dictations. With `--no-format` Flash / Flash-Lite paste their own text, and Transcribe still makes a second
-   request (Groq `gpt-oss-20b` romanizes its Urdu / Devanagari script; no list or take-back rules). The owner
-   then decides whether formatting stays on by default; turning it off is a new decision superseding D-031's
-   "on by default".
+1. **Formatter off by default?** The owner tried `--no-format` (6 dictations, 2026-11-05 19:45-19:50) and said
+   while dictating: off by default, with a setting to turn it on. Confirm with him, then a new decision
+   superseding D-031's "on by default" (a `--format` switch until the M2 settings page). With `--no-format`
+   Transcribe still makes a second request (Groq 20b romanizes its script), and since D-039 so does any
+   engine that answers in script.
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.

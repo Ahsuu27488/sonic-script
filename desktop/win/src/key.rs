@@ -74,14 +74,21 @@ pub fn engines(choice: Choice) -> Result<Engines, String> {
         }
         ok
     });
+    // D-039: an answer in Urdu / Devanagari script is made Roman by this step, or not pasted at all.
+    let romanize = spec::romanize().filter(|r| !read(&r.provider.key_env).is_empty());
     let mut links = Vec::new();
     let mut first_error = None;
     for (engine, wait, last_resort) in choice.links {
         let id = engine.id().to_string();
-        let client = Client::new(engine, read).and_then(|c| match &format {
-            Some(f) => c.with_format(f.clone(), read),
-            None => Ok(c),
-        });
+        let client = Client::new(engine, read)
+            .and_then(|c| match &format {
+                Some(f) => c.with_format(f.clone(), read),
+                None => Ok(c),
+            })
+            .and_then(|c| match &romanize {
+                Some(r) => c.with_romanize(r.clone(), read),
+                None => Ok(c),
+            });
         match client {
             Ok(client) => {
                 let client = match &choice.words {
