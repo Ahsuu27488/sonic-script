@@ -33,7 +33,7 @@ use sonicscript_core::pipeline::{self, Transcribe};
 use crate::key::Choice;
 
 const USAGE: &str = "\
-usage: sonicscript [--engine <id>] [--no-format] [--no-history] [--no-sound] [mode]
+usage: sonicscript [--engine <id>] [--format] [--no-history] [--no-sound] [mode]
   sonicscript                                 dictation: tap or hold the dictation key (Right Ctrl), speak; the text is typed at the cursor
   sonicscript --set-key [<name> | list]       choose the dictation key: press it, or give its name (F9, RightAlt, Mouse4, ...)
   sonicscript --models                        the models you can use: free / paid, limits, test results
@@ -43,8 +43,8 @@ usage: sonicscript [--engine <id>] [--no-format] [--no-history] [--no-sound] [mo
 Without --engine the spec's engine chain runs (D-029, D-035): Gemini 3.5 Transcribe, then Gemini 3.5 Flash
 and Flash-Lite, each asked when the one before is slow, fails or is out of free requests;
 --engine <id> runs that engine from spec/providers.json alone.
-The text is formatted (lists, take-backs, fillers, numbers as digits) on Groq after whichever engine answers;
---no-format gives the exact words.
+The text comes as it was said (exact words, in Roman letters). --format adds smart formatting on Groq after
+whichever engine answers: lists, take-backs, fillers dropped, numbers as digits.
 Dictation and --record keep each recording (Opus, about 2 KB a second) and its text in
 %LOCALAPPDATA%\\SonicScript\\history (history.jsonl + audio\\); --no-history keeps nothing.
 A short chime plays when dictation starts, stops or is cancelled; --no-sound turns it off.
@@ -73,13 +73,12 @@ fn main() -> ExitCode {
         Some(_) => return usage(),
         None => None,
     };
-    let format = match args.iter().position(|a| a == "--no-format") {
-        Some(i) => {
-            args.remove(i);
-            false
-        }
-        None => true,
-    };
+    // D-041: off by default; --format turns smart formatting on. --no-format (the old switch) is still taken.
+    let format = take_flag(&mut args, "--format");
+    if take_flag(&mut args, "--no-format") && format {
+        eprintln!("--format and --no-format: pick one");
+        return usage();
+    }
     let keep_history = match args.iter().position(|a| a == "--no-history") {
         Some(i) => {
             args.remove(i);
@@ -156,6 +155,17 @@ fn main() -> ExitCode {
 fn usage() -> ExitCode {
     eprintln!("{USAGE}");
     ExitCode::from(2)
+}
+
+/// Removes `flag` from `args`; whether it was there.
+fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
+    match args.iter().position(|a| a == flag) {
+        Some(i) => {
+            args.remove(i);
+            true
+        }
+        None => false,
+    }
 }
 
 /// Prints the text to paste for each file (one line each) and its timings to stderr.

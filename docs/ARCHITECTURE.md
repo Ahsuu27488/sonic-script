@@ -59,7 +59,7 @@ report ──► eval/results/<run>/report.html (self-contained, uses design/tok
 | `desktop/core/src/pipeline.rs` | `Transcribe` trait (`id`, `warm`, `transcribe`); `run(samples, &impl Transcribe, &Normalizer) -> Outcome` (text, raw, sent, sizes, `engine`, `passed`, `Stages` timings, error) for recorded clips; `run_streamed(samples, &mut Stream, ..)` for live ones; `Outcome.unformatted` |
 | `desktop/core/src/keys.rs` | `Machine::down / up(Key, time_ms) -> Reply { action: Start / Stop / Cancel, swallow }`, `force_stop()`: the D-015 / D-023 key rules |
 | `desktop/core/src/resample.rs` | `Resampler::new(in_rate).process(&[f32]) / flush()`: any rate → 16 kHz, windowed sinc, streaming (D-024) |
-| `desktop/win/src/main.rs` | `sonicscript.exe [--engine <id>]` (without it: the spec's chain; with it: that engine alone): no arguments = dictation, `--record <s>` (mic check), `--file <wav>...` (prints the text), `--bench <dir> [--out <file>]`; console set to UTF-8; `--no-format` (exact words); `--no-history`; `--no-sound`; `--set-key` (setkey.rs) |
+| `desktop/win/src/main.rs` | `sonicscript.exe [--engine <id>]` (without it: the spec's chain; with it: that engine alone): no arguments = dictation, `--record <s>` (mic check), `--file <wav>...` (prints the text), `--bench <dir> [--out <file>]`; console set to UTF-8; `--format` (smart formatting, off by default since D-041; `--no-format` still accepted); `--no-history`; `--no-sound`; `--set-key` (setkey.rs) |
 | `desktop/win/src/mywords.rs` | `%APPDATA%\SonicScript\words.txt`: `load()`, `summary`, `command(args)`: `--words` (Notepad), `--words-prompt` (copies `spec/prompts/words-assistant-v1.md`), `--words-add <file>`, `--words-paste`, `--words-suggest` (names from the history); each previews and asks before appending |
 | `desktop/win/src/cue.rs` | `play(Cue)` (`Start` / `Stop` / `Cancel`): short soft chimes built in memory as WAV, played with `PlaySoundW` without waiting; `set_enabled` (`--no-sound`) |
 | `desktop/win/src/dictate.rs` | `run()`: the dictation loop (key actions → `Recorder` → `run_streamed` on a worker thread → console, with "Used <engine>: <first> was slow" when a later engine answered and a one-time notice when a model's free requests are used up: when they come back and how to change the main model), 5-minute cap; `record_for(s)` (prints only, never pastes); prints lists line by line and "Not formatted" when the format step failed; pastes the text (`inject`) and says when it was only copied; then saves the recording and its line in the history (`open_history`, D-032) |
@@ -115,7 +115,7 @@ samples (16 kHz mono) ─► vad::detect ─► no speech? → nothing sent
                       ─► packets for speech ± 500 ms ─► Ogg ─► Chain (D-029) ─► Normalizer::clean (per line)
 text ─► console + inject::paste (dictation mode only; clipboard → Ctrl+V → clipboard restored)
      ─► history: whole recording (Ogg) + one line in history.jsonl (D-032; --no-history: nothing)
-each engine in the Chain: speech call ─► format step (Groq, format-v1.md, D-030; --no-format: the engine's
+each engine in the Chain: speech call ─► format step (Groq, format-v1.md, D-030; only with --format since D-041, else the engine's
        own refine, if any)
 Chain: Gemini Transcribe + Groq Roman cleanup ─(4 s or error)─► + Gemini Flash ─(3 s)─► + Gemini Flash-Lite
        (D-035: Gemini only; all fail → AllFailed, nothing typed, the console says why); an answer mostly in Urdu / Devanagari
@@ -152,7 +152,7 @@ cd desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && 
 cargo run -q --example clean -- [words.txt] < texts.txt   # (in desktop/) cleanup on one text per line
 cargo run -q --example gate -- ../spec/fixtures/audio/*.wav   # (in desktop/) voice gate per clip
 cargo run -q --release -p sonicscript --example mic_open -- 6 20000 --prebuild   # (in desktop/) mic-open timings
-cargo run -q --release -p sonicscript                     # (in desktop/) dictation: tap / hold Right Ctrl, Esc cancels; --no-format = exact words
+cargo run -q --release -p sonicscript                     # (in desktop/) dictation: tap / hold Right Ctrl, Esc cancels; --format = smart formatting (off by default, D-041); without it exact words
 cargo run -q --release -p sonicscript -- --record 5       # (in desktop/) mic check: record 5 s, print the text
 cargo run -q --release -p sonicscript -- --models         # (in desktop/) the model catalog, free / paid
 cargo run -q --release -p sonicscript -- --set-key        # (in desktop/) choose the dictation key (press it; or a name; list)

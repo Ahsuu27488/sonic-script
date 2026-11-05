@@ -299,7 +299,7 @@ Flash / Flash-Lite / Groq engines), spoken list sentences in `spec/fixtures/sent
 `eval`. Not built yet; the model choice is confirmed by that benchmark first.
 
 **D-031 Smart formatting as built: one `format` step on Groq `gpt-oss-120b` after every engine; the Gemini
-audio prompt stays as it is.** (2026-11-04)
+audio prompt stays as it is.** (2026-11-04) *("on by default" superseded by D-041)*
 Builds D-030 (its "Where" line changes). `spec/providers.json` `format` (Groq `openai/gpt-oss-120b`,
 `reasoning_effort` low, `spec/prompts/format-v1.md`) runs after whichever engine answers, chain or `--engine`,
 in place of that engine's own `refine` step (the prompt also romanizes, so Transcribe's 20b romanize step is
@@ -465,3 +465,15 @@ so Flash's 20 free requests a day go faster (Flash-Lite has ~500); a clock far o
 model too long or too short. *Where:* `desktop/core/src/client.rs` (`daily_rest`, `next_pacific_midnight`,
 `Chain::with_rest_file`, `save_rests`, the `together` start in `Chain::transcribe`), `gemini.rs`
 (`strip_stamps`), `desktop/win/src/key.rs` (`rest_file`), `spec/providers.json` (`about`).
+
+**D-041 Smart formatting is off by default; `--format` turns it on.** (2026-11-05)
+Supersedes D-031's "on by default" (the format step itself is unchanged). Without `--format` the app pastes
+the engine's own words: Flash / Flash-Lite as they answer, Transcribe after its Roman step (Groq `gpt-oss-20b`,
+`romanize-v1.md`), and a script answer after D-039's step. `--no-format` is still accepted; both flags
+together is an error. In M2 the settings page gets a formatting switch, off for new users, with a short
+explanation so a user can study it and turn it on. *Why:* the owner, after dictating with `--no-format` on
+2026-11-05 (19:45-19:50): the formatter is not needed by default, it stays as an optional setting; confirmed in
+chat the same night. The plain text came out right on his clips, and skipping the format step saves a Groq
+request (~0.7-1 s and ~1,300 of the 8K tokens a minute) on every dictation. Cost: spoken lists, take-backs
+and fillers come out as said unless `--format` is given. *Where:* `desktop/win/src/main.rs` (`--format`,
+`take_flag`), `key.rs` (comments), `docs/STATUS.md`.
