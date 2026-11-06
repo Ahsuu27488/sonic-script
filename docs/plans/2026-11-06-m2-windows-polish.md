@@ -17,6 +17,8 @@
   Windows); start with Windows is off until ticked (the installer turns it on, Phase 7).
 - 2026-11-06: Phase 3 built on `feat/m2-hud` (tasks 3.1-3.2; 3.3 checked except a real dictation). Change from
   the plan (D-048): the pill is solid `--surface-2`, no acrylic.
+- 2026-11-06: Phase 4 built on `feat/m2-settings-ui` (tasks 4.1-4.4; 4.5 checked in the real window over DevTools,
+  14 of 14). Choices in D-049 (saves at once, Test key = model list).
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").

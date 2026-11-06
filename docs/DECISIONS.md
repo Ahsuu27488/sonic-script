@@ -564,3 +564,20 @@ DESIGN.md already names the solid form for "transparency off", and the pill is a
 app). Cost: no frosted glass. *Where:* `desktop/app/src/hudwin.rs` (`WIDTH`, `HEIGHT`, `native::show`),
 `desktop/app/ui/hud.css`.
 
+**D-049 The settings window saves every change at once and dictation reloads it in place; "Test key" asks the
+provider's model list.** (2026-11-06)
+M2 phase 4. (1) Each control saves the moment it changes (`config.toml`, Credential Manager, `words.txt`) and
+the running dictation picks it up at its next idle moment: `dictate::request_reload` makes `run` return
+between recordings, the tray app's thread loads the settings and starts it again, and `hotkey::spawn` called
+again switches the running hook to the new key (a mouse hook is added the first time a side button is
+chosen). Key fields save with their own button. (2) "Test key" sends `GET {base}/models` with the key: it
+needs a valid key and uses no daily request (a transcription would spend one of Transcribe's 25). (3) The page
+gets where a key comes from and its last 4 characters, never the key. (4) "Insert" in the history minimises
+the window, waits 400 ms for the user's app to come back to the front and pastes there. (5) While the user
+picks a new dictation key, dictation is paused, so pressing the old key does not start a recording.
+*Why:* the plan asks for changes without a restart (Phase 4); a Save button per page would be one more step
+for a friend who only flips a switch. *Where:* `desktop/app/src/prefs.rs`, `desktop/app/ui/settings.*`,
+`desktop/win/src/dictate.rs` (`request_reload`, `take_reload`), `hotkey.rs` (`rebind`), `key.rs`
+(`source`), `history.rs` (`recent`, `delete`), `mywords.rs` (`preview`, `add`), `desktop/core/src/api.rs`
+(`test_key`), `spec.rs` (`provider`).
+

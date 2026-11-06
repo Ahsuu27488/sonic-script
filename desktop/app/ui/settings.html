@@ -6,22 +6,179 @@
 <title>SonicScript settings</title>
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="settings.css">
+<script src="settings.js" defer></script>
 </head>
 <body>
-<main>
-  <h1>Settings</h1>
-  <p class="lead">The settings window comes in the next update. Until then, SonicScript uses the settings file
-    and a few commands.</p>
-  <dl>
-    <dt>Settings file</dt>
-    <dd><code>%APPDATA%\SonicScript\config.toml</code><br>Restart SonicScript after editing it.</dd>
-    <dt>Dictation key</dt>
-    <dd><code>sonicscript --set-key</code>, then press the key you want.</dd>
-    <dt>API keys</dt>
-    <dd><code>sonicscript --key gemini</code> (and <code>groq</code>) saves a key in Windows Credential Manager.</dd>
-    <dt>Your words</dt>
-    <dd><code>sonicscript --words</code> opens your word list.</dd>
-  </dl>
-</main>
+<div class="app">
+  <nav class="side" aria-label="Settings sections">
+    <div class="brand" aria-hidden="true"><span class="ring"></span>SonicScript</div>
+    <div class="tabs" role="tablist" aria-orientation="vertical">
+      <button role="tab" id="tab-general" aria-controls="general" aria-selected="true">General</button>
+      <button role="tab" id="tab-models" aria-controls="models" aria-selected="false" tabindex="-1">Models &amp; keys</button>
+      <button role="tab" id="tab-words" aria-controls="words" aria-selected="false" tabindex="-1">Words</button>
+      <button role="tab" id="tab-history" aria-controls="history" aria-selected="false" tabindex="-1">History</button>
+      <button role="tab" id="tab-about" aria-controls="about" aria-selected="false" tabindex="-1">About</button>
+    </div>
+  </nav>
+
+  <main>
+    <div class="notices" id="notices" role="alert" hidden></div>
+
+    <section id="general" role="tabpanel" aria-labelledby="tab-general">
+      <h1>General</h1>
+      <div class="card">
+        <div class="row">
+          <div class="text">
+            <h2 id="key-title">Dictation key</h2>
+            <p class="hint" id="key-hint">Tap it to start and stop, or hold it while you speak. Esc cancels.</p>
+          </div>
+          <div class="control keypick">
+            <kbd class="keycap" id="key-cap" aria-describedby="key-title">Right Ctrl</kbd>
+            <button class="btn" id="key-change">Change</button>
+          </div>
+        </div>
+        <p class="hint warn" id="key-warning" hidden></p>
+        <p class="picking" id="key-picking" hidden>Press the key or mouse side button you want. Esc keeps the old one.</p>
+      </div>
+
+      <div class="card">
+        <label class="row switch-row">
+          <span class="text">
+            <span class="title">Smart formatting</span>
+            <span class="hint">Turns spoken lists into lists, applies "nahi nahi, actually…" corrections and drops
+              fillers. Off: you get exactly your words. Uses one more Groq request per dictation.</span>
+          </span>
+          <input type="checkbox" role="switch" data-setting="format">
+        </label>
+        <label class="row switch-row">
+          <span class="text">
+            <span class="title">Sounds</span>
+            <span class="hint">A soft chime when recording starts and stops.</span>
+          </span>
+          <input type="checkbox" role="switch" data-setting="sound">
+        </label>
+        <label class="row switch-row">
+          <span class="text">
+            <span class="title">Start with Windows</span>
+            <span class="hint">SonicScript waits in the tray from sign-in.</span>
+          </span>
+          <input type="checkbox" role="switch" id="autostart">
+        </label>
+        <label class="row switch-row">
+          <span class="text">
+            <span class="title">Pop-up mic on text fields</span>
+            <span class="hint">A small mic next to the text box you click into; click it or press your key.</span>
+          </span>
+          <input type="checkbox" role="switch" data-setting="popup_mic">
+        </label>
+      </div>
+    </section>
+
+    <section id="models" role="tabpanel" aria-labelledby="tab-models" hidden>
+      <h1>Models &amp; keys</h1>
+      <p class="lead">SonicScript uses your own free keys. They stay in Windows Credential Manager on this PC; only
+        the last 4 characters are ever shown.</p>
+      <div id="keys"></div>
+
+      <h2 class="section-title">Which model writes your text</h2>
+      <div class="card">
+        <div class="field">
+          <label for="main-model">Main model</label>
+          <select id="main-model"></select>
+          <p class="hint model-info" id="main-info"></p>
+        </div>
+        <div class="field">
+          <label for="fallback-1">If it is slow or out of free requests</label>
+          <select id="fallback-1"></select>
+          <p class="hint model-info" id="fallback-1-info"></p>
+        </div>
+        <div class="field">
+          <label for="fallback-2">Then</label>
+          <select id="fallback-2"></select>
+          <p class="hint model-info" id="fallback-2-info"></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="words" role="tabpanel" aria-labelledby="tab-words" hidden>
+      <h1>Your words</h1>
+      <p class="lead">Names and terms it should spell your way: one per line, <code>Word</code> or
+        <code>Word = how it gets misheard</code>.</p>
+      <div class="card steps">
+        <h2>Let your AI assistant write the list</h2>
+        <ol>
+          <li><button class="btn" id="words-prompt">Copy the prompt</button> and paste it into Claude, ChatGPT or Gemini.</li>
+          <li>Copy its answer, then <button class="btn" id="words-paste">Add words from the clipboard</button></li>
+        </ol>
+        <div class="preview" id="words-preview" hidden>
+          <p id="words-preview-text"></p>
+          <ul id="words-preview-list" class="mono"></ul>
+          <div class="actions">
+            <button class="btn primary" id="words-add">Add them</button>
+            <button class="btn ghost" id="words-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <label for="words-text" class="title">The list</label>
+        <textarea id="words-text" spellcheck="false" rows="12"></textarea>
+        <div class="actions">
+          <button class="btn primary" id="words-save">Save list</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="history" role="tabpanel" aria-labelledby="tab-history" hidden>
+      <h1>History</h1>
+      <div class="card">
+        <label class="row switch-row">
+          <span class="text">
+            <span class="title">Keep my dictations</span>
+            <span class="hint">The recording and the text stay on this PC only, so you can copy or re-insert them.</span>
+          </span>
+          <input type="checkbox" role="switch" data-setting="history">
+        </label>
+        <div class="row">
+          <label class="text" for="history-days">
+            <span class="title">Delete them after</span>
+            <span class="hint">Days; 0 keeps them forever.</span>
+          </label>
+          <div class="control">
+            <input type="number" id="history-days" min="0" max="365" inputmode="numeric">
+            <span class="unit">days</span>
+          </div>
+        </div>
+      </div>
+      <h2 class="section-title">Last 50</h2>
+      <ul class="history" id="history-list" aria-label="Your last dictations"></ul>
+      <p class="empty" id="history-empty" hidden>Nothing yet. Your dictations show up here.</p>
+    </section>
+
+    <section id="about" role="tabpanel" aria-labelledby="tab-about" hidden>
+      <h1>About</h1>
+      <div class="card">
+        <p class="title">SonicScript <span class="mono" id="version"></span></p>
+        <p class="hint">Speak Urdu, Hindi or English, mixed as you like: it types Roman Urdu / Hinglish where your
+          cursor is. Open source (MIT).</p>
+      </div>
+      <div class="card">
+        <h2>Privacy</h2>
+        <ul class="plain">
+          <li>No SonicScript server: your voice goes from this PC straight to the provider of your key (Google,
+            Groq, or OpenAI).</li>
+          <li>On Google's free tier, Google may use requests to improve its products and people may review them;
+            the paid tier does not.</li>
+          <li>History and your words stay on this PC. Keys stay in Windows Credential Manager.</li>
+        </ul>
+        <div class="actions">
+          <button class="btn link" data-link="https://ai.google.dev/gemini-api/terms">Gemini API terms</button>
+          <button class="btn link" data-link="https://github.com/Ahsuu27488/sonic-script">Source code</button>
+          <button class="btn link" data-link="https://github.com/Ahsuu27488/sonic-script/blob/main/LICENSE">License</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

@@ -7,6 +7,7 @@
 mod autostart;
 mod hud;
 mod hudwin;
+mod prefs;
 mod tray;
 
 use std::sync::{Arc, Mutex};
@@ -23,8 +24,8 @@ use crate::tray::{ICON_SIZE, Status};
 const TRAY: &str = "main";
 
 /// The tray's menu items that change, and what it shows.
-struct Tray {
-    status: Mutex<Status>,
+pub(crate) struct Tray {
+    pub(crate) status: Mutex<Status>,
     headline: MenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
 }
@@ -51,21 +52,47 @@ impl Sink for TraySink {
 fn main() {
     // `--hud-demo`: shows every HUD state with made-up events instead of dictating (task 3.2's focus check).
     let demo = std::env::args().any(|a| a == "--hud-demo");
+    // `--settings-preview` (debug builds): only the settings window, no dictation (checks of the page with
+    // `APPDATA` / `LOCALAPPDATA` pointed at a scratch folder).
+    let preview = cfg!(debug_assertions) && std::env::args().any(|a| a == "--settings-preview");
     let mut builder = tauri::Builder::default();
     // A second start opens the first one's settings instead of a second dictation (Review Focus 4). The demo
-    // never dictates (no key hook), so it may run next to the real app.
-    if !demo {
+    // and the preview never dictate (no key hook), so they may run next to the real app.
+    if !demo && !preview {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
             open_settings(app)
         }));
     }
     builder
-        .invoke_handler(tauri::generate_handler![hudwin::level])
+        .invoke_handler(tauri::generate_handler![
+            hudwin::level,
+            prefs::prefs_state,
+            prefs::prefs_save,
+            prefs::prefs_key_name,
+            prefs::prefs_pause,
+            prefs::key_save,
+            prefs::key_delete,
+            prefs::key_test,
+            prefs::words_text,
+            prefs::words_save,
+            prefs::words_prompt_copy,
+            prefs::words_preview_clipboard,
+            prefs::words_add,
+            prefs::history_list,
+            prefs::history_delete,
+            prefs::history_copy,
+            prefs::history_play,
+            prefs::history_reinsert,
+            prefs::autostart_set,
+            prefs::open_link,
+        ])
         .setup(move |app| {
             build_tray(app.handle())?;
             hudwin::build(app.handle())?;
             if demo {
                 hud_demo(app.handle().clone());
+            } else if preview {
+                open_settings(app.handle());
             } else {
                 start_dictation(app.handle().clone());
             }
@@ -189,7 +216,8 @@ fn open_settings(app: &AppHandle) {
     }
     let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
         .title("SonicScript settings")
-        .inner_size(560.0, 500.0)
+        .inner_size(760.0, 540.0)
+        .min_inner_size(400.0, 420.0)
         .resizable(true)
         .build();
     if let Err(e) = built {
