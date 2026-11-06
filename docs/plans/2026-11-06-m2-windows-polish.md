@@ -12,6 +12,9 @@
   `dictate::run` takes `keep_history`, not the whole `Settings` (the key is still read by `setkey::load`).
 - 2026-11-06: Phase 2 started on `feat/m2-tray` (from `feat/m2-settings`: PRs #35 / #36 still open); tasks
   2.1-2.4 written below.
+- 2026-11-06: Phase 2 built (tasks 2.1-2.3; 2.4 checked except a real-key dictation). Changes from the plan
+  (D-047): the app's exe is `sonicscript-tray.exe` (`SonicScript.exe` and `sonicscript.exe` are one file on
+  Windows); start with Windows is off until ticked (the installer turns it on, Phase 7).
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").

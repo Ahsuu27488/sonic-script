@@ -34,6 +34,8 @@ struct Job {
 }
 
 pub fn run(choice: Choice, keep_history: bool, sink: Arc<dyn Sink>) -> Result<(), String> {
+    // One dictation per user: a second copy would install a second hook and paste twice (M2 task 2.2).
+    let _instance = crate::instance::claim()?;
     let normalizer = Arc::new(key::normalizer(&choice));
     let words = choice.words.as_ref().map(|w| crate::mywords::summary(w));
     let client = Arc::new(key::engines(choice)?);

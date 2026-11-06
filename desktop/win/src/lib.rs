@@ -15,6 +15,8 @@ pub mod history;
 pub mod hotkey;
 #[cfg(windows)]
 pub mod inject;
+#[cfg(windows)]
+pub mod instance;
 pub mod key;
 pub mod keystore;
 pub mod models;
