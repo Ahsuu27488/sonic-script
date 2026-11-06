@@ -4,7 +4,7 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-06 (M2 plan written, waiting for the owner's go-ahead) · **Code at:** `main` = PRs
+**Last updated:** 2026-11-06 (M2 go-ahead given, D-044; phase 1 on `feat/m2-settings`) · **Code at:** `main` = PRs
 #3-#34 (#32 D-041 formatting off by default, #33 D-042 cut-answer guard, #34 M1 done; merged 2026-11-05).
 **M1 is done (D-043, the owner's call on 2026-11-05):** every step is built and used live; the owner's own checks
 (Next) continue alongside M2. Next big step: M2, plan `docs/plans/2026-11-06-m2-windows-polish.md` (Next 1).
@@ -289,9 +289,8 @@ checked, after a live paste of the whole format prompt.
 M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR per item.
 
 1. **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
-   (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Waits
-   for the owner's go-ahead and 5 decisions (UI stack, output modes, history default, unsigned release, keys a
-   friend needs). Phase 2 (Tauri) needs ~10 GB free on C: (6.4 GB on 2026-11-06).
+   (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Go-ahead
+   and the 5 decisions given 2026-11-06 (D-044). Phase 1 in progress: `config.toml` settings done (D-045). Phase 2 (Tauri) needs ~10 GB free on C: (6.4 GB on 2026-11-06).
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.

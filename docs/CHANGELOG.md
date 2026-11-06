@@ -3,6 +3,18 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-06 · feat/m2-settings (M2 phase 1, D-045)
+
+- `config.toml` holds every setting now (`settings.rs`: key, main model + 2 fallbacks, formatting, sounds,
+  history and its days, pop-up mic, apps without it), read with `toml` + `serde`; every field has a default,
+  so M1's `hotkey = "..."` file loads unchanged. `--set-key` saves through it and keeps the other settings.
+  Checked: 5 tests (M1's file, missing file, broken file, round trip, at most 2 fallbacks) and `--set-key
+  RightAlt` on a scratch M1-style file (key changed, `format = true` kept).
+
+## 2026-11-06 · docs/m2-plan (D-044)
+
+- The M2 plan (`docs/plans/2026-11-06-m2-windows-polish.md`, 7 phases) and the owner's 5 answers (D-044).
+
 ## 2026-11-05 · docs/m1-done (D-043)
 
 - M1 declared done by the owner, without the plan's 3 days of daily use; his open checks (the key, My words,

@@ -21,6 +21,7 @@ mod models;
 #[cfg(windows)]
 mod mywords;
 mod setkey;
+mod settings;
 mod wav;
 
 use std::fs::File;
