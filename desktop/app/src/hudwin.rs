@@ -86,7 +86,10 @@ fn put(app: &AppHandle, state: &HudState, change: Change) {
             let js = format!(
                 "(v => window.hudShow ? window.hudShow(v) : (window.__hudPending = v))({json})"
             );
+            let clickable = view.action.is_some();
             on_main(app, generation, move |w| {
+                // Click-through, except while the pill has a button ("Try again").
+                let _ = w.set_ignore_cursor_events(!clickable);
                 let _ = w.eval(js);
                 native::show(w);
             });
@@ -101,7 +104,10 @@ fn put(app: &AppHandle, state: &HudState, change: Change) {
             let app = app.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_millis(EXIT_MS));
-                on_main(&app, generation, native::hide);
+                on_main(&app, generation, |w| {
+                    native::hide(w);
+                    let _ = w.set_ignore_cursor_events(true);
+                });
             });
         }
     }
@@ -141,6 +147,12 @@ fn on_main(app: &AppHandle, generation: u64, f: impl FnOnce(&WebviewWindow) + Se
             f(&w);
         }
     });
+}
+
+/// The HUD's "Try again": sends the kept recording again (M2 phase 6).
+#[tauri::command]
+pub fn retry_last() -> bool {
+    sonicscript::dictate::retry()
 }
 
 /// The mic level for the ring, 0.0-1.0 (the page asks once a frame while listening).

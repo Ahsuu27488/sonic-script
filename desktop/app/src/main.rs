@@ -31,6 +31,8 @@ pub(crate) struct Tray {
     pub(crate) status: Mutex<Status>,
     headline: MenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
+    /// "Try again": sends the last recording nothing answered (M2 phase 6).
+    retry: MenuItem<Wry>,
     /// "Start with Windows": the settings window changes it too (`prefs::autostart_set`).
     pub(crate) autostart: CheckMenuItem<Wry>,
 }
@@ -75,6 +77,7 @@ fn main() {
     builder
         .invoke_handler(tauri::generate_handler![
             hudwin::level,
+            hudwin::retry_last,
             prefs::prefs_state,
             prefs::prefs_save,
             prefs::prefs_key_name,
@@ -137,6 +140,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let status = Status::default();
     let headline = MenuItem::with_id(app, "status", status.headline(), false, None::<&str>)?;
     let pause = CheckMenuItem::with_id(app, "pause", "Pause dictation", true, false, None::<&str>)?;
+    let retry = MenuItem::with_id(app, "retry", "Try again", false, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let history = MenuItem::with_id(app, "history", "Open history folder", true, None::<&str>)?;
     let start = CheckMenuItem::with_id(
@@ -153,6 +157,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         &[
             &headline,
             &PredefinedMenuItem::separator(app)?,
+            &retry,
             &pause,
             &settings,
             &history,
@@ -167,6 +172,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "pause" => toggle_pause(app),
+            "retry" => {
+                if !dictate::retry() {
+                    problem(app, "Nothing to send again.".into());
+                }
+            }
             "settings" => open_settings(app),
             "history" => open_history(app),
             "autostart" => {
@@ -187,6 +197,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         status: Mutex::new(status),
         headline,
         pause,
+        retry,
         autostart: start,
     });
     Ok(())
@@ -212,6 +223,7 @@ fn redraw(app: &AppHandle) {
         }
         let _ = t.headline.set_text(s.headline());
         let _ = t.pause.set_checked(s.paused);
+        let _ = t.retry.set_enabled(s.can_retry);
     });
 }
 

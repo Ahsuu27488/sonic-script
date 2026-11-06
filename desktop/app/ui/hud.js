@@ -7,6 +7,12 @@
   const glow = pill.querySelector(".glow");
   const ring = pill.querySelector(".ring");
   const shimmer = pill.querySelector(".shimmer");
+  const action = document.getElementById("action");
+  // mousedown with preventDefault: the press never moves the keyboard focus.
+  action.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    if (invoke) invoke("retry_last");
+  });
   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -59,6 +65,8 @@
     pill.dataset.kind = view.kind;
     pill.dataset.tone = view.tone;
     label.textContent = view.label;
+    action.hidden = !view.action;
+    action.textContent = view.action || "";
     if (kind === "listening" && was !== "listening") {
       started = performance.now();
       level = 0;

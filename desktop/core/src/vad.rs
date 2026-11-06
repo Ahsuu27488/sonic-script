@@ -96,8 +96,8 @@ pub fn split(speech: &[bool], keep: Range<usize>, every: usize, over: usize) -> 
         let hi = ((mark + SPLIT_WINDOW).min(keep.end - FRAME) / FRAME).min(speech.len());
         // The longest run of silent frames in [lo, hi): (first frame, length).
         let (mut best, mut run_start, mut run) = ((0, 0), 0, 0);
-        for f in lo..hi {
-            if speech[f] {
+        for (f, &is_speech) in speech.iter().enumerate().take(hi).skip(lo) {
+            if is_speech {
                 run = 0;
                 continue;
             }
@@ -147,12 +147,8 @@ mod tests {
         let frames_per_s = RATE / FRAME;
         // 200 s of speech with a short pause at 80 s and a longer one at 95 s.
         let mut speech = vec![true; 200 * frames_per_s];
-        for f in 80 * frames_per_s..80 * frames_per_s + 20 {
-            speech[f] = false;
-        }
-        for f in 95 * frames_per_s..95 * frames_per_s + 50 {
-            speech[f] = false;
-        }
+        speech[80 * frames_per_s..80 * frames_per_s + 20].fill(false);
+        speech[95 * frames_per_s..95 * frames_per_s + 50].fill(false);
         let parts = split(&speech, 0..200 * RATE, SPLIT_EVERY, SPLIT_OVER);
         assert_eq!(parts.len(), 2);
         // The middle of the 1 s pause at 95 s.
@@ -164,10 +160,9 @@ mod tests {
     #[test]
     fn short_clips_stay_whole_and_no_pause_cuts_at_the_mark() {
         let speech = vec![true; 100 * 50];
-        assert_eq!(
-            split(&speech, 0..100 * RATE, SPLIT_EVERY, SPLIT_OVER),
-            [0..100 * RATE]
-        );
+        let whole = split(&speech, 0..100 * RATE, SPLIT_EVERY, SPLIT_OVER);
+        assert_eq!(whole.len(), 1);
+        assert_eq!(whole[0], 0..100 * RATE);
         // 300 s with no pause at all: cuts at 90 s and 180 s, the rest (120 s) whole.
         let speech = vec![true; 300 * 50];
         let parts = split(&speech, 0..300 * RATE, SPLIT_EVERY, SPLIT_OVER);

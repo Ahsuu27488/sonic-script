@@ -3,11 +3,12 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
-## 2026-11-06 (feat/m2-reliability, in progress)
+## 2026-11-06 (feat/m2-reliability)
 
 - History older than the kept days is deleted (at start, then at most hourly). The chain learns each engine's
   wait from its last 50 answers (D-017), kept in `timings.json`.
   Clips over 2 minutes go in parts cut at the longest pause near every 90 s, sent in order and joined.
+  Try again (tray item, HUD button) sends the last recording nothing answered again (D-051).
 
 ## 2026-11-06 (feat/m2-popup-mic)
 

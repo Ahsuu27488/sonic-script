@@ -602,3 +602,22 @@ pill's last good settings.
 (`click`), `desktop/win/src/hotkey.rs` (`click`), `inject.rs` (`is_terminal`), `desktop/app/src/popup.rs`,
 `focuswatch.rs`, `popupwin.rs`, `ui/popup.*`.
 
+**D-051 Reliability as built: learned waits, long clips in parts, Try again, history kept N days.**
+(2026-11-06) M2 phase 6 (builds D-017 and D-044 (3)). (1) Each engine's wait is learned: the time per second of
+audio of its last 50 good answers (a losing answer counts too), kept in `%LOCALAPPDATA%\SonicScript\timings.json`;
+once there are 10, the next engine starts after max(3 s, 2 x the median x the clip's seconds, a clip counting
+as at least 1 s), before that after the spec's `wait_ms`. The client's 10 s timeout still ends a slow request.
+(2) A clip whose kept speech is over 120 s is sent in parts, cut in the middle of the longest pause within 15 s
+of every 90 s mark (at the mark without one), in order; the texts are joined with a space; a part that fails
+fails the clip (half a dictation pasted reads as all of it, as D-035). (3) "Try again" keeps the last recording
+nothing answered when a second try could help (not a refused or missing key, not every model out of free
+requests for the day) and sends it again on request (the tray's item, the HUD's button: the HUD window takes
+clicks only while that button shows); the retry is a new history line (the plan said "updated"); a text that
+came through forgets the kept recording. (4) History older than `history_days` (default 30, 0 = forever) is
+deleted at dictation start and then at most hourly: the line and its recording.
+*Why:* the plan's Phase 6 list and the owner's brief. *Where:* `desktop/core/src/deadline.rs`, `client.rs`
+(`with_timing_file`, `wait_for`), `vad.rs` (`speech_frames`, `split`), `pipeline.rs` (`run_streamed`),
+`desktop/win/src/dictate.rs` (`retry`, `retryable`, `Pending`), `events.rs` (`CanRetry`), `history.rs`
+(`with_keep_days`, `prune`), `key.rs` (`data_file`), `desktop/app/src/hud.rs` / `hudwin.rs` (`retry_last`),
+`tray.rs` / `main.rs` (Try again).
+

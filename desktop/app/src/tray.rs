@@ -21,6 +21,8 @@ pub struct Status {
     state: State,
     /// The user paused dictation from the menu.
     pub paused: bool,
+    /// A recording nothing answered is kept: the menu's "Try again" is on (M2 phase 6).
+    pub can_retry: bool,
     /// The last thing that went wrong; cleared by the next text that was pasted or copied.
     problem: Option<String>,
     /// A one-off note for the tooltip (e.g. "copied, press Ctrl+V"); cleared by the next recording.
@@ -34,6 +36,7 @@ impl Default for Status {
         Self {
             state: State::Starting,
             paused: false,
+            can_retry: false,
             problem: None,
             note: None,
             key: String::new(),
@@ -126,7 +129,12 @@ pub fn apply(s: &mut Status, e: &Event) -> bool {
             s.note = None;
             s.state = State::Recording;
         }
-        Event::Processing => s.state = State::Working,
+        Event::Processing => {
+            // A new clip or the kept one is on its way: nothing is kept until it fails again.
+            s.can_retry = false;
+            s.state = State::Working;
+        }
+        Event::CanRetry => s.can_retry = true,
         // Only the dictation loop sends it, and only for the running recording.
         Event::Cancelled => s.state = s.rest(),
         // A job's end, from its worker thread: the next recording may already run (a slow answer).
@@ -334,6 +342,23 @@ mod tests {
         // The problem is kept for when the recording ends.
         apply(&mut s, &Event::Cancelled);
         assert_eq!(s.shown(), State::Problem);
+    }
+
+    #[test]
+    fn try_again_is_on_after_a_kept_failure_until_the_next_clip_is_sent() {
+        let mut s = ready();
+        apply(&mut s, &listening());
+        apply(&mut s, &Event::Processing);
+        apply(
+            &mut s,
+            &Event::Failed {
+                lines: vec!["! Nothing typed: no model answered.".into()],
+            },
+        );
+        assert!(apply(&mut s, &Event::CanRetry));
+        assert!(s.can_retry);
+        apply(&mut s, &Event::Processing);
+        assert!(!s.can_retry);
     }
 
     #[test]

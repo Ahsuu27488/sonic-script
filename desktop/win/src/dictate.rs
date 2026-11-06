@@ -29,6 +29,39 @@ pub fn request_reload() {
     RELOAD.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// The last recording nothing answered, kept for "Try again" (M2 phase 6).
+struct Pending {
+    samples: Vec<f32>,
+    stream: sonicscript_core::encode::Stream,
+    mic_open_ms: u128,
+}
+
+static PENDING: std::sync::Mutex<Option<Pending>> = std::sync::Mutex::new(None);
+static RETRY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// "Try again" (the tray, the HUD): the kept recording is sent again at the next idle moment. False when no
+/// recording is kept.
+pub fn retry() -> bool {
+    let kept = PENDING.lock().is_ok_and(|p| p.is_some());
+    if kept {
+        RETRY.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    kept
+}
+
+/// Whether sending the same recording again could work: no answer came, but not because of a key or because
+/// every model's free requests for the day are used up (those need the user, or tomorrow).
+fn retryable(e: &PipelineError) -> bool {
+    let PipelineError::Api(e) = e else {
+        return false;
+    };
+    let daily = |e: &ApiError| matches!(e, ApiError::RateLimited { daily: true, .. });
+    match e {
+        ApiError::AllFailed(all) => !e.is_key_error() && !all.iter().all(|(_, e)| daily(e)),
+        other => !other.is_key_error() && !daily(other),
+    }
+}
+
 /// True once when a reload was asked for and nothing is recording (a recording finishes first).
 fn reload_now(recording: bool) -> bool {
     !recording && take_reload()
@@ -92,6 +125,31 @@ pub fn run(choice: Choice, keep_history: bool, sink: Arc<dyn Sink>) -> Result<()
                     Action::Stop
                 }
                 _ if reload_now(recording.is_some()) => return Ok(()),
+                None if RETRY.swap(false, std::sync::atomic::Ordering::SeqCst) => {
+                    let Some(p) = PENDING.lock().ok().and_then(|mut p| p.take()) else {
+                        continue;
+                    };
+                    let job = Job {
+                        stopped: Instant::now(),
+                        rec: Recording {
+                            samples: p.samples,
+                            stream: Ok(p.stream),
+                        },
+                        mic_open_ms: p.mic_open_ms,
+                        paste: true,
+                    };
+                    sink.send(Event::Processing);
+                    let (client, normalizer, history, sink) = (
+                        client.clone(),
+                        normalizer.clone(),
+                        history.clone(),
+                        sink.clone(),
+                    );
+                    std::thread::spawn(move || {
+                        transcribe(job, &client, &normalizer, history.as_deref(), &*sink);
+                    });
+                    continue;
+                }
                 _ => continue,
             },
             Err(RecvTimeoutError::Disconnected) => return Err("the key hook stopped".into()),
@@ -295,6 +353,23 @@ fn transcribe(
         }
         history.prune_now_and_then();
     }
+    // "Try again" keeps the last recording nothing answered (dictation only; a text that came through
+    // forgets it).
+    if paste && let Ok(mut pending) = PENDING.lock() {
+        match &out.error {
+            Some(e) if retryable(e) => {
+                *pending = Some(Pending {
+                    samples: rec.samples,
+                    stream,
+                    mic_open_ms,
+                });
+                drop(pending);
+                sink.send(Event::CanRetry);
+            }
+            None if typeable => *pending = None,
+            _ => {}
+        }
+    }
 }
 
 /// What the user is told about one finished recording, in order (M1's console lines, now events).
@@ -410,6 +485,27 @@ fn limit_notes(out: &Outcome) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_failures_a_second_try_could_fix_are_kept() {
+        let api = |e| PipelineError::Api(e);
+        assert!(retryable(&api(ApiError::Network("dns".into()))));
+        assert!(retryable(&api(ApiError::Timeout)));
+        assert!(retryable(&all(vec![
+            ApiError::Timeout,
+            daily(),
+            ApiError::Timeout
+        ])));
+        assert!(
+            !retryable(&all(vec![daily(), daily(), daily()])),
+            "tomorrow, not now"
+        );
+        assert!(!retryable(&api(ApiError::BadKey("GEMINI_API_KEY".into()))));
+        assert!(!retryable(&api(ApiError::MissingKey(
+            "GEMINI_API_KEY".into()
+        ))));
+        assert!(!retry(), "nothing kept: nothing to send again");
+    }
 
     #[test]
     fn a_reload_waits_for_the_recording() {
