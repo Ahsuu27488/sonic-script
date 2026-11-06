@@ -4,7 +4,9 @@
 > use checkbox (`- [ ]`) syntax. One branch and one PR per phase (`feat/m2-<phase>`); each phase leaves the app
 > working and is checked before the next starts.
 
-**Progress:** plan written 2026-11-06; waiting for the owner's go-ahead and the decisions below.
+**Progress:**
+- 2026-11-06: plan written; the owner took the recommended answer to all 5 decisions (D-044) and asked
+  for M2 to be built. Phase 1 started on `feat/m2-settings`.
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").
@@ -96,7 +98,7 @@ No UI yet; the CLI gains what the UI will use, so every piece is tested before a
   (temp file + rename). `setkey::load` reads `Settings.hotkey`; `setkey::save` loads, sets `hotkey`, saves.
 - [ ] **Step 4:** `cargo test -p sonicscript` → all pass, including setkey's existing tests (adjusted only where
   they called the removed helpers).
-- [ ] **Step 5:** commit (STATUS, CHANGELOG, D-044 "settings in TOML, superseding D-037's one-line file").
+- [ ] **Step 5:** commit (STATUS, CHANGELOG, D-045 "settings in TOML, superseding D-037's one-line file").
 
 ### Task 1.2: main model + 2 fallbacks from the settings
 
@@ -137,7 +139,7 @@ No UI yet; the CLI gains what the UI will use, so every piece is tested before a
 - [ ] **Step 2:** run → FAIL. **Step 3:** implement. **Step 4:** unit tests PASS and
   `cargo test -p sonicscript keystore -- --ignored` PASS; the key never reaches stdout / stderr (grep the test
   output for the test value).
-- [ ] **Step 5:** commit (D-045: "keys in Credential Manager; environment first").
+- [ ] **Step 5:** commit (D-046: "keys in Credential Manager; environment first").
 
 ### Task 1.4: the dictation loop emits events
 
