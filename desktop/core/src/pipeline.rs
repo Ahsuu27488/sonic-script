@@ -128,50 +128,82 @@ pub fn run_streamed(
     }
     out.sent_ms = ms_of(detection.keep.len());
 
-    let t = Instant::now();
-    let encoded = stream.finish(detection.keep);
-    out.stages.encode = elapsed(t);
-    let encoded = match encoded {
-        Ok(e) => Encoded {
-            speech_ms: Some(detection.speech_ms),
-            ..e
-        },
-        Err(e) => {
-            out.error = Some(PipelineError::Encode(e));
-            out.total_ms = elapsed(started);
-            return out;
-        }
+    // A clip over 2 minutes goes in parts, cut at pauses, in order (M2 phase 6); the texts are joined.
+    let keep_len = detection.keep.len().max(1);
+    let parts = if detection.keep.len() > vad::SPLIT_OVER {
+        vad::split(
+            &vad::speech_frames(samples),
+            detection.keep.clone(),
+            vad::SPLIT_EVERY,
+            vad::SPLIT_OVER,
+        )
+    } else {
+        vec![detection.keep.clone()]
     };
-    out.bytes = encoded.bytes.len();
-    out.sent = true;
+    let mut texts = Vec::new();
+    let mut raws = Vec::new();
+    for part in parts {
+        let t = Instant::now();
+        let encoded = stream.finish(part.clone());
+        out.stages.encode += elapsed(t);
+        let encoded = match encoded {
+            Ok(e) => Encoded {
+                // This part's share of the speech, for the cut-answer check (D-042).
+                speech_ms: Some(
+                    (u64::from(detection.speech_ms) * part.len() as u64 / keep_len as u64) as u32,
+                ),
+                ..e
+            },
+            Err(e) => {
+                out.error = Some(PipelineError::Encode(e));
+                out.total_ms = elapsed(started);
+                return out;
+            }
+        };
+        out.bytes += encoded.bytes.len();
+        out.sent = true;
+
+        let t = Instant::now();
+        let transcript = engine.transcribe(&encoded);
+        out.stages.transcribe += elapsed(t);
+        // A part that fails fails the clip: half a dictation pasted reads as all of it (D-035).
+        let tr = match transcript {
+            Ok(tr) => tr,
+            Err(e) => {
+                out.error = Some(PipelineError::Api(e));
+                out.total_ms = elapsed(started);
+                return out;
+            }
+        };
+        out.stages.request += f64::from(tr.request_ms);
+        out.stages.refine += f64::from(tr.refine_ms);
+        out.retries = out.retries.saturating_add(tr.retries);
+        out.engine = tr.engine;
+        out.passed.extend(tr.passed);
+        out.unformatted = out.unformatted.take().or(tr.unformatted);
+        for (sum, n) in out.tokens.iter_mut().zip([
+            tr.tokens_in,
+            tr.tokens_out,
+            tr.refine_tokens_in,
+            tr.refine_tokens_out,
+        ]) {
+            *sum += n;
+        }
+        raws.push(tr.asr.unwrap_or_else(|| tr.text.clone()));
+        texts.push(tr.text);
+    }
+    let join = |v: &[String]| {
+        v.iter()
+            .map(|t| t.trim())
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    out.raw = join(&raws);
+    let text = join(&texts);
 
     let t = Instant::now();
-    let transcript = engine.transcribe(&encoded);
-    out.stages.transcribe = elapsed(t);
-    let tr = match transcript {
-        Ok(tr) => tr,
-        Err(e) => {
-            out.error = Some(PipelineError::Api(e));
-            out.total_ms = elapsed(started);
-            return out;
-        }
-    };
-    out.stages.request = f64::from(tr.request_ms);
-    out.stages.refine = f64::from(tr.refine_ms);
-    out.retries = tr.retries;
-    out.engine = tr.engine;
-    out.passed = tr.passed;
-    out.unformatted = tr.unformatted;
-    out.tokens = [
-        tr.tokens_in,
-        tr.tokens_out,
-        tr.refine_tokens_in,
-        tr.refine_tokens_out,
-    ];
-    out.raw = tr.asr.unwrap_or_else(|| tr.text.clone());
-
-    let t = Instant::now();
-    let cleaned = normalizer.clean(&tr.text);
+    let cleaned = normalizer.clean(&text);
     out.stages.clean = elapsed(t);
     out.text = cleaned.text;
     out.needs_llm = cleaned.needs_llm;
@@ -251,6 +283,28 @@ mod tests {
             out.sent_ms
         );
         assert!(out.bytes > 0 && out.stages.request == 7.0);
+    }
+
+    #[test]
+    fn a_long_clip_goes_in_parts_and_comes_back_joined() {
+        // 150 s of talk with a 1 s pause at 90 s. Over 2 minutes, so two requests, in order.
+        let mut samples = Vec::with_capacity(150 * RATE);
+        for i in 0..150 * RATE {
+            // Words of 0.6 s with 0.4 s gaps (a real noise floor for the gate), and the 1 s pause.
+            let gap = i % RATE >= RATE * 6 / 10;
+            let quiet = gap || (90 * RATE..91 * RATE).contains(&i);
+            let tone = (std::f32::consts::TAU * 150.0 * i as f32 / RATE as f32).sin() * 0.2;
+            samples.push(if quiet { 0.0005 } else { tone });
+        }
+        let fake = Fake::new(Ok("ek hissa"));
+        let out = run(&samples, &fake, &Normalizer::new());
+        assert!(out.error.is_none(), "{:?}", out.error);
+        assert_eq!(fake.calls.get(), 2);
+        assert_eq!(out.text, "ek hissa ek hissa ");
+        assert_eq!(out.stages.request, 14.0, "both parts' times");
+        // A failing part fails the whole clip.
+        let failing = Fake::new(Err(ApiError::Timeout));
+        assert!(run(&samples, &failing, &Normalizer::new()).error.is_some());
     }
 
     #[test]

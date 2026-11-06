@@ -7,6 +7,7 @@
 
 - History older than the kept days is deleted (at start, then at most hourly). The chain learns each engine's
   wait from its last 50 answers (D-017), kept in `timings.json`.
+  Clips over 2 minutes go in parts cut at the longest pause near every 90 s, sent in order and joined.
 
 ## 2026-11-06 (feat/m2-popup-mic)
 
