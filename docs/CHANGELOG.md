@@ -10,6 +10,12 @@
   so M1's `hotkey = "..."` file loads unchanged. `--set-key` saves through it and keeps the other settings.
   Checked: 5 tests (M1's file, missing file, broken file, round trip, at most 2 fallbacks) and `--set-key
   RightAlt` on a scratch M1-style file (key changed, `format = true` kept).
+- The settings choose the engines: `main_model` + `fallbacks` (`key::choose_from`), each waited for as long as
+  the spec's chain waits at that place (4 s, then 3 s); none = the spec's chain; an id the spec does not know
+  gives the spec's chain and a notice; `--engine` still wins. `format`, `sound`, `history` come from the
+  settings too, and `--format` / `--no-format` / `--no-sound` / `--no-history` override them for one run;
+  `--bench` ignores the settings (comparable runs). Checked: 5 tests (red with the settings ignored), a real
+  clip with `main_model = "gemini-3.5-flash-lite"` (Flash-Lite answered) and `main_model = "gemini-9"` (notice).
 
 ## 2026-11-06 · docs/m2-plan (D-044)
 

@@ -51,6 +51,59 @@ pub fn choose(id: Option<&str>, format: bool) -> Result<Choice, String> {
     })
 }
 
+/// The engines from the user's settings (D-045): the main model and its fallbacks, each waited for as long as
+/// the spec's chain waits at that place (4 s, then 3 s); no main model = the spec's chain. `--engine` wins
+/// over the settings. An id the spec no longer has gives the spec's chain and a notice, never an error (a model
+/// renamed after an update must not stop dictation).
+pub fn choose_from(
+    s: &crate::settings::Settings,
+    engine_override: Option<&str>,
+    format: bool,
+) -> Result<(Choice, Vec<String>), String> {
+    if engine_override.is_some() {
+        return Ok((choose(engine_override, format)?, Vec::new()));
+    }
+    let Some(main) = &s.main_model else {
+        return Ok((choose(None, format)?, Vec::new()));
+    };
+    let mut ids: Vec<&str> = Vec::new();
+    for id in std::iter::once(main).chain(&s.fallbacks) {
+        if !ids.contains(&id.as_str()) {
+            ids.push(id);
+        }
+    }
+    let unknown: Vec<&str> = ids
+        .iter()
+        .copied()
+        .filter(|id| spec::engine(id).is_none())
+        .collect();
+    if !unknown.is_empty() {
+        let note = format!(
+            "Settings: {} is not a model this version knows (list: sonicscript --models): using the default chain.",
+            unknown.join(", ")
+        );
+        return Ok((choose(None, format)?, vec![note]));
+    }
+    let waits: Vec<Duration> = spec::chain().iter().map(|l| l.wait).collect();
+    let links = ids
+        .iter()
+        .filter_map(|id| spec::engine(id))
+        .enumerate()
+        .map(|(i, e)| {
+            let wait = waits.get(i).copied().unwrap_or(Duration::from_secs(3));
+            (e, wait, false)
+        })
+        .collect();
+    Ok((
+        Choice {
+            links,
+            format: if format { spec::format() } else { None },
+            words: None,
+        },
+        Vec::new(),
+    ))
+}
+
 /// The text cleanup with the user's words (D-034), when the choice has them.
 pub fn normalizer(choice: &Choice) -> Normalizer {
     match &choice.words {
@@ -179,5 +232,79 @@ mod tests {
         );
         assert!(choose(None, false).unwrap().format.is_none());
         assert!(choose(Some("nope"), true).is_err());
+    }
+
+    use crate::settings::Settings;
+
+    fn ids(c: &Choice) -> Vec<String> {
+        c.links.iter().map(|(e, ..)| e.id().to_string()).collect()
+    }
+
+    fn with(main: &str, fallbacks: &[&str]) -> Settings {
+        Settings {
+            main_model: Some(main.into()),
+            fallbacks: fallbacks.iter().map(|s| s.to_string()).collect(),
+            ..Settings::default()
+        }
+    }
+
+    #[test]
+    fn default_settings_give_the_spec_chain() {
+        let (c, notes) = choose_from(&Settings::default(), None, false).unwrap();
+        let spec: Vec<_> = spec::chain()
+            .iter()
+            .map(|l| (l.engine.id().to_string(), l.wait))
+            .collect();
+        let got: Vec<_> = c
+            .links
+            .iter()
+            .map(|(e, w, _)| (e.id().to_string(), *w))
+            .collect();
+        assert_eq!(got, spec);
+        assert!(notes.is_empty());
+    }
+
+    #[test]
+    fn main_and_fallbacks_in_order() {
+        let (c, notes) = choose_from(
+            &with("gemini-3.5-flash-lite", &["gemini-3.5-flash"]),
+            None,
+            false,
+        )
+        .unwrap();
+        assert_eq!(ids(&c), ["gemini-3.5-flash-lite", "gemini-3.5-flash"]);
+        let waits: Vec<_> = c.links.iter().map(|(_, w, _)| w.as_secs()).collect();
+        assert_eq!(waits, [4, 3]);
+        assert!(notes.is_empty());
+    }
+
+    #[test]
+    fn unknown_model_falls_back_to_spec_chain() {
+        let (c, notes) = choose_from(&with("gemini-9", &[]), None, false).unwrap();
+        assert_eq!(ids(&c), ids(&choose(None, false).unwrap()));
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("gemini-9"), "{notes:?}");
+    }
+
+    #[test]
+    fn duplicates_are_dropped() {
+        let s = with(
+            "gemini-3.5-flash",
+            &["gemini-3.5-flash", "gemini-3.5-flash-lite"],
+        );
+        let (c, _) = choose_from(&s, None, false).unwrap();
+        assert_eq!(ids(&c), ["gemini-3.5-flash", "gemini-3.5-flash-lite"]);
+    }
+
+    #[test]
+    fn engine_flag_beats_the_settings() {
+        let (c, _) = choose_from(
+            &with("gemini-3.5-flash", &[]),
+            Some("groq-whisper-hint"),
+            true,
+        )
+        .unwrap();
+        assert_eq!(ids(&c), ["groq-whisper-hint"]);
+        assert!(c.format.is_some());
     }
 }
