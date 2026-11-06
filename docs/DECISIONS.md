@@ -404,7 +404,7 @@ F-keys, Insert, Caps Lock, Pause, Scroll Lock and the mouse side buttons are swa
 passed on, they would do their own job on every dictation: Insert switches to overwrite, Caps Lock flips
 capitals, F-keys run app commands (F5 reloads), the side buttons go Back / Forward in browsers. The
 alternative, passing everything on, would make most of the allowed keys unusable. The setting is a small
-`config.toml` read line by line (`hotkey = "..."`), no TOML library: one value until the M2 settings page.
+`config.toml` read line by line (`hotkey = "..."`), no TOML library: one value until the M2 settings page *(the file format superseded by D-045)*.
 *Where:* `desktop/win/src/setkey.rs` (`PassOn`, `allowed`, `by_name`, `by_trigger`, `load`, `save`,
 `command`), `hotkey.rs` (`spawn`, `handle`, `capture`), `dictate.rs`, `main.rs`.
 
@@ -514,3 +514,26 @@ Groq key (optional: without it the chain starts at Gemini Flash, since Transcrib
 *Why:* the owner chose the recommended option for each, 2026-11-06. Cost: Tauri needs ~3 GB more build space on
 a nearly full C: (6.4 GB free on 2026-11-06) and ~60 MB of RAM for WebView2 while a window shows. *Where:* the
 M2 plan; built phase by phase.
+
+**D-045 Settings are one `config.toml` read with a TOML library; every field has a default.** (2026-11-06)
+Supersedes the file format in D-037 (its key rules stay). `desktop/win/src/settings.rs` `Settings`: `hotkey`,
+`main_model` (an engine id, or none = the spec's chain), `fallbacks` (at most 2), `format` (off, D-041),
+`sound`, `history`, `history_days` (30, D-044), `popup_mic`, `popup_off_apps`. Read with `serde` + `toml`;
+a missing file gives the defaults, a broken one the defaults and a notice; written with a header comment
+through a temporary file. *Why:* M2's settings page saves many values; a line-by-line reader for each would
+be fragile, and M1's one-line file is valid TOML, so it still loads. Settings this version does not know are reported and kept
+when it saves; a file that cannot be read is never overwritten (the save is refused). Cost: comments a user
+wrote by hand are not kept when the app saves (only its own header). *Where:* `desktop/win/src/settings.rs`, `setkey.rs`
+(`load`, `from_settings`, `save`).
+
+**D-046 API keys are kept in Windows Credential Manager; the environment still comes first.** (2026-11-06)
+Each key is a generic credential `SonicScript/<ENV_NAME>` (`GEMINI_API_KEY`, `GROQ_API_KEY`,
+`OPENAI_API_KEY`), persisted for this Windows user, written by `sonicscript --key <provider>` (typed without
+echo; only the last 4 characters are shown back) and later by the settings window. Read order: the process
+environment, then Credential Manager, then the Windows user environment (`HKCU\Environment`). *Why:*
+blueprint §5.2 (BYOK in the OS keystore): a friend should paste a key into the app, not set environment
+variables, and Credential Manager keeps it out of plain-text files. The environment stays first so a
+developer's setup (and `eval`, which reads the same variables) keeps working. Cost: a key in the environment
+silently wins over one saved in the app; `--key` says so when both exist. *Where:* `desktop/win/src/keystore.rs`
+(`get`, `set`, `delete`, `command`), `key.rs` (`read`, `read_from`), `main.rs`.
+

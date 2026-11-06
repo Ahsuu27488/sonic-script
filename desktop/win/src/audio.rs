@@ -6,7 +6,7 @@
 //! lost, so dictation keeps one stream set up but not started ([`Ready`], D-036): the key-down only starts it.
 //! A stream that is set up but not started does not count as "in use" (no mic icon on the taskbar).
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
@@ -32,6 +32,15 @@ pub struct Recorder {
     pub rate: u32,
     /// True when it started from a stream [`Ready`] had set up beforehand.
     pub prepared: bool,
+}
+
+/// The last chunk's level for the Voice Ring (`events::level_of`, as f32 bits); 0 when not recording.
+static LEVEL: AtomicU32 = AtomicU32::new(0);
+
+/// The mic level now, 0.0-1.0 (M2 HUD); 0.0 when nothing is recording.
+#[allow(dead_code, reason = "the HUD Voice Ring reads it from M2 phase 3")]
+pub fn level() -> f32 {
+    f32::from_bits(LEVEL.load(Ordering::Relaxed))
 }
 
 /// How long a started stream may take to deliver its first audio (normally ~15 ms) before it counts as broken.
@@ -220,6 +229,7 @@ fn worker(rx: Receiver<Vec<f32>>, first: Vec<f32>, rate: u32, stop: &AtomicBool)
     let mut stream = encode::Stream::new();
     let mut feed = |chunk: Vec<f32>, samples: &mut Vec<f32>| {
         let out = resampler.process(&chunk);
+        LEVEL.store(crate::events::level_of(&out).to_bits(), Ordering::Relaxed);
         feed_encoder(&mut stream, &out);
         samples.extend_from_slice(&out);
     };
@@ -234,6 +244,7 @@ fn worker(rx: Receiver<Vec<f32>>, first: Vec<f32>, rate: u32, stop: &AtomicBool)
     while let Ok(chunk) = rx.try_recv() {
         feed(chunk, &mut samples);
     }
+    LEVEL.store(0, Ordering::Relaxed);
     let tail = resampler.flush();
     feed_encoder(&mut stream, &tail);
     samples.extend_from_slice(&tail);

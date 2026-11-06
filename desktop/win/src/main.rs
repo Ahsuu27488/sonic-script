@@ -10,6 +10,7 @@ mod bench;
 mod cue;
 #[cfg(windows)]
 mod dictate;
+mod events;
 #[cfg(windows)]
 mod history;
 #[cfg(windows)]
@@ -17,10 +18,12 @@ mod hotkey;
 #[cfg(windows)]
 mod inject;
 mod key;
+mod keystore;
 mod models;
 #[cfg(windows)]
 mod mywords;
 mod setkey;
+mod settings;
 mod wav;
 
 use std::fs::File;
@@ -54,7 +57,8 @@ Your words (names and terms to always get right): %APPDATA%\\SonicScript\\words.
   sonicscript --words-add <file>...           add the words in text files (any list works)
   sonicscript --words-paste                   add the words on the clipboard (e.g. your AI assistant's answer)
   sonicscript --words-suggest                 pick names from your dictation history to add
-Keys come from GROQ_API_KEY / GEMINI_API_KEY (this console or your Windows user environment).";
+Keys: sonicscript --key gemini|groq|openai saves one in Windows Credential Manager (--delete removes it);
+GROQ_API_KEY / GEMINI_API_KEY in the environment are used first.";
 
 fn main() -> ExitCode {
     // Text and status symbols are UTF-8; the console's default code page would garble them.
@@ -73,25 +77,34 @@ fn main() -> ExitCode {
         Some(_) => return usage(),
         None => None,
     };
-    // D-041: off by default; --format turns smart formatting on. --no-format (the old switch) is still taken.
-    let format = take_flag(&mut args, "--format");
-    if take_flag(&mut args, "--no-format") && format {
+    // The user's settings (D-045); the flags below override them for this run.
+    let (settings, setting_notes) = settings::load();
+    // D-041: off by default (settings `format`); --format turns smart formatting on, --no-format off.
+    let format_on = take_flag(&mut args, "--format");
+    let format_off = take_flag(&mut args, "--no-format");
+    if format_on && format_off {
         eprintln!("--format and --no-format: pick one");
         return usage();
     }
-    let keep_history = match args.iter().position(|a| a == "--no-history") {
-        Some(i) => {
-            args.remove(i);
-            false
-        }
-        None => true,
-    };
-    if let Some(i) = args.iter().position(|a| a == "--no-sound") {
-        args.remove(i);
+    // --bench measures the spec's engines with the flags only, never the user's settings (comparable runs).
+    let bench_run = args.iter().any(|a| a == "--bench");
+    let format = format_on || (!bench_run && settings.format && !format_off);
+    let keep_history = !take_flag(&mut args, "--no-history") && settings.history;
+    if take_flag(&mut args, "--no-sound") || !settings.sound {
         #[cfg(windows)]
         cue::set_enabled(false);
     }
     if let Some(result) = setkey::command(&args) {
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        };
+    }
+    #[cfg(windows)]
+    if let Some(result) = keystore::command(&args) {
         return match result {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
@@ -110,8 +123,18 @@ fn main() -> ExitCode {
             }
         };
     }
-    let mut choice = match key::choose(engine_id.as_deref(), format) {
-        Ok(e) => e,
+    let chosen = if bench_run {
+        key::choose(engine_id.as_deref(), format).map(|c| (c, Vec::new()))
+    } else {
+        key::choose_from(&settings, engine_id.as_deref(), format)
+    };
+    let mut choice = match chosen {
+        Ok((c, notes)) => {
+            for note in setting_notes.iter().chain(&notes) {
+                eprintln!("  ! {note}");
+            }
+            c
+        }
         Err(e) => {
             eprintln!("{e}");
             return ExitCode::from(2);
@@ -119,7 +142,7 @@ fn main() -> ExitCode {
     };
     // The user's words for dictation and --file; --bench stays without them (comparable runs).
     #[cfg(windows)]
-    if args.first().map(String::as_str) != Some("--bench") {
+    if !bench_run {
         choice.words = Some(std::sync::Arc::new(mywords::load()));
     }
     let result = match args.first().map(String::as_str) {
@@ -133,7 +156,7 @@ fn main() -> ExitCode {
             _ => return usage(),
         },
         #[cfg(windows)]
-        None => dictate::run(choice, keep_history),
+        None => dictate::run(choice, keep_history, std::sync::Arc::new(events::Console)),
         #[cfg(windows)]
         Some("--record") => match args.get(1).and_then(|s| s.parse::<f64>().ok()) {
             Some(s) if args.len() == 2 && (0.5..=300.0).contains(&s) => {

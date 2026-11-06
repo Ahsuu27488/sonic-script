@@ -7,6 +7,9 @@
 **Progress:**
 - 2026-11-06: plan written; the owner took the recommended answer to all 5 decisions (D-044) and asked
   for M2 to be built. Phase 1 started on `feat/m2-settings`.
+- 2026-11-06: Phase 1 built (tasks 1.1-1.4). Change from the plan: the mic level is `audio::level()`, read by
+  the HUD at its own frame rate, not a `Level` event (an event every 20 ms would flood the dictation channel);
+  `dictate::run` takes `keep_history`, not the whole `Settings` (the key is still read by `setkey::load`).
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").

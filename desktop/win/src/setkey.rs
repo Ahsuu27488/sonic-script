@@ -224,90 +224,30 @@ pub fn by_trigger(trigger: Trigger) -> Result<DictationKey, String> {
     })
 }
 
-/// `%APPDATA%\SonicScript\config.toml`.
-pub fn config_path() -> Result<PathBuf, String> {
-    let base = std::env::var_os("APPDATA")
-        .map(PathBuf::from)
-        .ok_or("APPDATA is not set")?;
-    Ok(base.join("SonicScript").join("config.toml"))
-}
-
-/// The `hotkey = "..."` value in the config text, if there is one.
-fn read_hotkey(text: &str) -> Option<String> {
-    text.lines().find_map(|line| {
-        let line = line.split('#').next()?.trim();
-        let (key, value) = line.split_once('=')?;
-        (key.trim() == "hotkey").then(|| value.trim().trim_matches('"').trim().to_string())
-    })
-}
-
-/// The config text with `hotkey` set to `name`, other lines kept.
-fn with_hotkey(text: &str, name: &str) -> String {
-    let line = format!("hotkey = \"{name}\"");
-    let mut found = false;
-    let mut out: Vec<String> = text
-        .lines()
-        .map(|l| {
-            let is_it = l
-                .split('#')
-                .next()
-                .and_then(|l| l.split_once('='))
-                .map(|(k, _)| k.trim())
-                == Some("hotkey");
-            if is_it && !found {
-                found = true;
-                line.clone()
-            } else {
-                l.to_string()
-            }
-        })
-        .collect();
-    if !found {
-        if out.is_empty() {
-            out.push(
-                "# SonicScript settings. Change the dictation key with: sonicscript --set-key"
-                    .into(),
-            );
-        }
-        out.push(line);
-    }
-    out.join("\n") + "\n"
-}
-
-/// The key from the config; Right Ctrl when there is none. A bad value gives Right Ctrl and a notice.
+/// The key from the settings (D-045); Right Ctrl when there is none. A bad value gives Right Ctrl and a notice.
 pub fn load() -> (DictationKey, Option<String>) {
-    let default = || by_name(DEFAULT).expect("the default key is allowed");
-    let Ok(path) = config_path() else {
-        return (default(), None);
-    };
-    let Some(name) = std::fs::read_to_string(&path)
-        .ok()
-        .as_deref()
-        .and_then(read_hotkey)
-    else {
-        return (default(), None);
-    };
-    match by_name(&name) {
+    let (settings, _) = crate::settings::load();
+    from_settings(&settings)
+}
+
+/// The key a `Settings` names; Right Ctrl and a notice when it is not an allowed key.
+pub fn from_settings(settings: &crate::settings::Settings) -> (DictationKey, Option<String>) {
+    match by_name(&settings.hotkey) {
         Ok(k) => (k, None),
         Err(e) => (
-            default(),
-            Some(format!(
-                "{} ({}): {e} Using Right Ctrl.",
-                path.display(),
-                "hotkey"
-            )),
+            by_name(DEFAULT).expect("the default key is allowed"),
+            Some(format!("config.toml (hotkey): {e} Using Right Ctrl.")),
         ),
     }
 }
 
-/// Saves the key in the config and returns the file's path.
+/// Saves the key in the settings, keeping the others, and returns the file's path.
 pub fn save(key: &DictationKey) -> Result<PathBuf, String> {
-    let path = config_path()?;
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    let old = std::fs::read_to_string(&path).unwrap_or_default();
-    std::fs::write(&path, with_hotkey(&old, key.name))
+    let path = crate::settings::path()?;
+    let (mut settings, _) = crate::settings::Settings::load(&path);
+    settings.hotkey = key.name.to_string();
+    settings
+        .save(&path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(path)
 }
@@ -467,19 +407,14 @@ mod tests {
     }
 
     #[test]
-    fn the_config_line_is_read_and_replaced_keeping_the_rest() {
-        assert_eq!(read_hotkey("hotkey = \"F9\"\n").as_deref(), Some("F9"));
-        assert_eq!(
-            read_hotkey("# hotkey = \"F8\"\n  hotkey=\"Mouse4\" # side button").as_deref(),
-            Some("Mouse4")
-        );
-        assert_eq!(read_hotkey("other = 1"), None);
-        let fresh = with_hotkey("", "F9");
-        assert!(
-            fresh.starts_with("# SonicScript settings") && fresh.ends_with("hotkey = \"F9\"\n")
-        );
-        assert_eq!(read_hotkey(&fresh).as_deref(), Some("F9"));
-        let kept = with_hotkey("# mine\nhotkey = \"F9\"\nother = 1\n", "RightAlt");
-        assert_eq!(kept, "# mine\nhotkey = \"RightAlt\"\nother = 1\n");
+    fn a_bad_key_in_the_settings_gives_right_ctrl_and_a_notice() {
+        let mut s = crate::settings::Settings::default();
+        assert_eq!(from_settings(&s).0.name, "RightCtrl");
+        s.hotkey = "F9".into();
+        assert_eq!(from_settings(&s), (by_name("F9").unwrap(), None));
+        s.hotkey = "Space".into();
+        let (k, note) = from_settings(&s);
+        assert_eq!(k.name, "RightCtrl");
+        assert!(note.unwrap().contains("Right Ctrl"));
     }
 }
