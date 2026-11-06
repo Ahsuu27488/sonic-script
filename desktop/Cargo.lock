@@ -3763,6 +3763,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sonicscript",
+ "sonicscript-core",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",

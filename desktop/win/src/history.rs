@@ -22,8 +22,24 @@ use windows_sys::Win32::System::SystemInformation::GetLocalTime;
 
 pub struct History {
     dir: PathBuf,
-    /// Two dictations can finish at the same moment (each on its own thread): one line at a time.
-    lines: Mutex<()>,
+}
+
+/// One writer of `history.jsonl` at a time in this process: two dictations can finish at the same moment, and
+/// the settings window rewrites the file to delete a line (M2 phase 4).
+static LINES: Mutex<()> = Mutex::new(());
+
+/// One dictation as the settings window lists it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Item {
+    /// The line's Unix time in seconds (with ms): its id for [`History::delete`].
+    pub at: f64,
+    /// Local time, `2026-11-06T15:30:12`.
+    pub time: String,
+    pub text: String,
+    /// The app it went into (exe name), when known.
+    pub app: Option<String>,
+    /// The recording, relative to the history folder.
+    pub audio: Option<String>,
 }
 
 /// What the app knows about a dictation besides the pipeline's [`Outcome`].
@@ -55,10 +71,7 @@ impl History {
 
     pub fn at(dir: PathBuf) -> Result<Self, String> {
         fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        Ok(Self {
-            dir,
-            lines: Mutex::new(()),
-        })
+        Ok(Self { dir })
     }
 
     pub fn dir(&self) -> &Path {
@@ -81,7 +94,7 @@ impl History {
             Err(e) => (None, Some(e.clone())),
         };
         let line = line(out, &clip, &now.iso, audio.as_deref(), audio_error);
-        let _one = self.lines.lock().unwrap_or_else(|e| e.into_inner());
+        let _one = LINES.lock().unwrap_or_else(|e| e.into_inner());
         let index = self.dir.join("history.jsonl");
         let mut f = OpenOptions::new()
             .create(true)
@@ -90,6 +103,68 @@ impl History {
             .map_err(|e| format!("{}: {e}", index.display()))?;
         writeln!(f, "{line}").map_err(|e| format!("{}: {e}", index.display()))?;
         Ok(self.dir.join(audio.unwrap_or_default()))
+    }
+}
+
+impl History {
+    /// The last `n` dictations that typed something, newest first.
+    pub fn recent(&self, n: usize) -> Vec<Item> {
+        let index = fs::read_to_string(self.dir.join("history.jsonl")).unwrap_or_default();
+        index
+            .lines()
+            .rev()
+            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+            .filter_map(|v| {
+                let text = v["text"].as_str().unwrap_or_default().trim().to_string();
+                (!text.is_empty()).then(|| Item {
+                    at: v["at"].as_f64().unwrap_or_default(),
+                    time: v["time"].as_str().unwrap_or_default().to_string(),
+                    text,
+                    app: v["app"].as_str().map(str::to_string),
+                    audio: v["audio"].as_str().map(str::to_string),
+                })
+            })
+            .take(n)
+            .collect()
+    }
+
+    /// Deletes one dictation: its line and its recording. False when no line has that `at`.
+    pub fn delete(&self, at: f64) -> Result<bool, String> {
+        let _one = LINES.lock().unwrap_or_else(|e| e.into_inner());
+        let index = self.dir.join("history.jsonl");
+        let old = fs::read_to_string(&index).map_err(|e| format!("{}: {e}", index.display()))?;
+        let mut audio = None;
+        let mut kept = String::with_capacity(old.len());
+        for line in old.lines() {
+            let v = serde_json::from_str::<Value>(line).unwrap_or(Value::Null);
+            if audio.is_none() && v["at"].as_f64() == Some(at) {
+                audio = Some(v["audio"].as_str().map(str::to_string));
+                continue;
+            }
+            kept.push_str(line);
+            kept.push('\n');
+        }
+        let Some(audio) = audio else {
+            return Ok(false);
+        };
+        // The recording first: when it is open in a player, the line stays and the user is told, so nothing
+        // is left behind that the list no longer shows. Only a recording inside the history folder: a
+        // hand-edited line must not delete anything else.
+        if let Some(rel) = audio.filter(|r| r.starts_with("audio/") && !r.contains("..")) {
+            match fs::remove_file(self.dir.join(rel)) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    return Err(format!(
+                        "The recording could not be deleted (is it playing?): {e}"
+                    ));
+                }
+            }
+        }
+        let tmp = index.with_extension("jsonl.tmp");
+        fs::write(&tmp, kept).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        fs::rename(&tmp, &index).map_err(|e| format!("{}: {e}", index.display()))?;
+        Ok(true)
     }
 }
 
@@ -182,6 +257,44 @@ fn local_now() -> Now {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recent_lists_newest_first_and_delete_removes_line_and_recording() {
+        let dir = std::env::temp_dir().join(format!("sonicscript-recent-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("audio/2026-11-06")).unwrap();
+        fs::write(dir.join("audio/2026-11-06/a.ogg"), b"OggS").unwrap();
+        fs::write(dir.join("outside.txt"), b"keep").unwrap();
+        let lines = [
+            r#"{"at":1.0,"time":"t1","text":"pehla","app":"notepad.exe","audio":"audio/2026-11-06/a.ogg"}"#,
+            r#"{"at":2.0,"time":"t2","text":"","audio":null}"#,
+            r#"{"at":3.0,"time":"t3","text":"teesra","app":null,"audio":"../outside.txt"}"#,
+        ];
+        fs::write(dir.join("history.jsonl"), lines.join("\n") + "\n").unwrap();
+        let h = History::at(dir.clone()).unwrap();
+        let items = h.recent(50);
+        assert_eq!(
+            items.iter().map(|i| i.text.as_str()).collect::<Vec<_>>(),
+            ["teesra", "pehla"]
+        );
+        assert_eq!(items[1].app.as_deref(), Some("notepad.exe"));
+        assert_eq!(h.recent(1).len(), 1);
+        assert!(h.delete(1.0).unwrap());
+        assert!(
+            !dir.join("audio/2026-11-06/a.ogg").exists(),
+            "its recording is gone"
+        );
+        assert!(!h.delete(1.0).unwrap(), "already gone");
+        assert!(h.delete(3.0).unwrap());
+        assert!(
+            dir.join("outside.txt").exists(),
+            "never a file outside audio/"
+        );
+        let left = fs::read_to_string(dir.join("history.jsonl")).unwrap();
+        assert_eq!(left.lines().count(), 1);
+        assert!(left.contains(r#""at":2.0"#));
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     fn clip(audio: Result<Vec<u8>, String>) -> Clip<'static> {
         Clip {

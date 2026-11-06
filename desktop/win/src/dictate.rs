@@ -20,6 +20,25 @@ use crate::inject::{self, Pasted};
 use crate::key::{Choice, Engines};
 use crate::{hotkey, key, setkey};
 
+/// Set by the settings window (M2 phase 4): `run` returns at the next idle moment so its caller starts it again
+/// with the new settings.
+static RELOAD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Asks the running dictation to stop when no recording runs, so it can be started with new settings.
+pub fn request_reload() {
+    RELOAD.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// True once when a reload was asked for and nothing is recording (a recording finishes first).
+fn reload_now(recording: bool) -> bool {
+    !recording && take_reload()
+}
+
+/// True once per [`request_reload`] (for a caller whose dictation stopped and waits for new settings).
+pub fn take_reload() -> bool {
+    RELOAD.swap(false, std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Safety cap on one recording (M1 plan step 5): a forgotten toggle does not keep the mic open.
 const MAX_RECORDING: Duration = Duration::from_secs(5 * 60);
 
@@ -33,6 +52,7 @@ struct Job {
     paste: bool,
 }
 
+/// Dictates until the key hook stops (an error) or a reload is asked for (`Ok`, see [`request_reload`]).
 pub fn run(choice: Choice, keep_history: bool, sink: Arc<dyn Sink>) -> Result<(), String> {
     // One dictation per user: a second copy would install a second hook and paste twice (M2 task 2.2).
     let _instance = crate::instance::claim()?;
@@ -71,6 +91,7 @@ pub fn run(choice: Choice, keep_history: bool, sink: Arc<dyn Sink>) -> Result<()
                     hotkey::force_stop();
                     Action::Stop
                 }
+                _ if reload_now(recording.is_some()) => return Ok(()),
                 _ => continue,
             },
             Err(RecvTimeoutError::Disconnected) => return Err("the key hook stopped".into()),
@@ -379,6 +400,14 @@ fn limit_notes(out: &Outcome) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reload_waits_for_the_recording() {
+        request_reload();
+        assert!(!reload_now(true), "never during a recording");
+        assert!(reload_now(false));
+        assert!(!reload_now(false), "once per request");
+    }
 
     fn all(errors: Vec<ApiError>) -> PipelineError {
         let ids = ["transcribe", "flash", "flash-lite"];

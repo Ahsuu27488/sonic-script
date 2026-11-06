@@ -201,6 +201,65 @@ fn read(var: &str) -> String {
     read_from(&[&env, &store, &user], var)
 }
 
+/// A key's value for a test request (the settings window's "Test key"); "" when none is set. Never printed.
+pub fn get(var: &str) -> String {
+    read(var)
+}
+
+/// Where the key in use comes from (shown in the settings window).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyFrom {
+    /// An environment variable of this process (a developer's setup).
+    Environment,
+    /// Saved by the app in Windows Credential Manager (D-046).
+    App,
+    /// The Windows user environment (`HKCU\Environment`).
+    UserEnvironment,
+}
+
+/// The key in use, without the key: where it comes from and its last 4 characters.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct KeySource {
+    pub from: KeyFrom,
+    pub last4: String,
+}
+
+/// Which key dictation would use for `var`, in [`read`]'s order; `None` when there is none.
+pub fn source(var: &str) -> Option<KeySource> {
+    let env = |v: &str| std::env::var(v).ok();
+    let store = |v: &str| crate::keystore::get(v);
+    let user = |v: &str| user_env(v);
+    source_from(
+        &[
+            (KeyFrom::Environment, &env),
+            (KeyFrom::App, &store),
+            (KeyFrom::UserEnvironment, &user),
+        ],
+        var,
+    )
+}
+
+fn source_from(sources: &[(KeyFrom, Source)], var: &str) -> Option<KeySource> {
+    sources.iter().find_map(|(from, get)| {
+        get(var)
+            .filter(|k| !k.trim().is_empty())
+            .map(|k| KeySource {
+                from: *from,
+                last4: last4(&k),
+            })
+    })
+}
+
+/// The last 4 characters of a key (nothing of a key shorter than 12: too much of it would show).
+pub fn last4(key: &str) -> String {
+    let chars: Vec<char> = key.trim().chars().collect();
+    if chars.len() < 12 {
+        return String::new();
+    }
+    chars[chars.len() - 4..].iter().collect()
+}
+
 /// One place a key can come from.
 type Source<'a> = &'a dyn Fn(&str) -> Option<String>;
 
@@ -231,6 +290,32 @@ fn user_env(_name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_source_says_where_without_the_key() {
+        let env = |_: &str| None;
+        let store = |_: &str| Some("AIzaSyExampleExample1234".to_string());
+        let user = |_: &str| Some("other-key-from-the-user-env".to_string());
+        let s = source_from(
+            &[
+                (KeyFrom::Environment, &env),
+                (KeyFrom::App, &store),
+                (KeyFrom::UserEnvironment, &user),
+            ],
+            "GEMINI_API_KEY",
+        )
+        .unwrap();
+        assert_eq!(
+            s,
+            KeySource {
+                from: KeyFrom::App,
+                last4: "1234".into()
+            }
+        );
+        assert_eq!(last4("short-key"), "", "short keys show nothing");
+        let none = |_: &str| Some("  ".to_string());
+        assert_eq!(source_from(&[(KeyFrom::App, &none)], "X"), None);
+    }
 
     #[test]
     fn formatting_is_on_unless_no_format_is_given() {

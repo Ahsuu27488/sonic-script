@@ -7,6 +7,7 @@
 mod autostart;
 mod hud;
 mod hudwin;
+mod prefs;
 mod tray;
 
 use std::sync::{Arc, Mutex};
@@ -23,10 +24,12 @@ use crate::tray::{ICON_SIZE, Status};
 const TRAY: &str = "main";
 
 /// The tray's menu items that change, and what it shows.
-struct Tray {
-    status: Mutex<Status>,
+pub(crate) struct Tray {
+    pub(crate) status: Mutex<Status>,
     headline: MenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
+    /// "Start with Windows": the settings window changes it too (`prefs::autostart_set`).
+    pub(crate) autostart: CheckMenuItem<Wry>,
 }
 
 /// Dictation's events, on the tray (and on stderr, seen in a debug build).
@@ -51,21 +54,47 @@ impl Sink for TraySink {
 fn main() {
     // `--hud-demo`: shows every HUD state with made-up events instead of dictating (task 3.2's focus check).
     let demo = std::env::args().any(|a| a == "--hud-demo");
+    // `--settings-preview` (debug builds): only the settings window, no dictation (checks of the page with
+    // `APPDATA` / `LOCALAPPDATA` pointed at a scratch folder).
+    let preview = cfg!(debug_assertions) && std::env::args().any(|a| a == "--settings-preview");
     let mut builder = tauri::Builder::default();
     // A second start opens the first one's settings instead of a second dictation (Review Focus 4). The demo
-    // never dictates (no key hook), so it may run next to the real app.
-    if !demo {
+    // and the preview never dictate (no key hook), so they may run next to the real app.
+    if !demo && !preview {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
             open_settings(app)
         }));
     }
     builder
-        .invoke_handler(tauri::generate_handler![hudwin::level])
+        .invoke_handler(tauri::generate_handler![
+            hudwin::level,
+            prefs::prefs_state,
+            prefs::prefs_save,
+            prefs::prefs_key_name,
+            prefs::prefs_pause,
+            prefs::key_save,
+            prefs::key_delete,
+            prefs::key_test,
+            prefs::words_text,
+            prefs::words_save,
+            prefs::words_prompt_copy,
+            prefs::words_preview_clipboard,
+            prefs::words_add,
+            prefs::history_list,
+            prefs::history_delete,
+            prefs::history_copy,
+            prefs::history_play,
+            prefs::history_reinsert,
+            prefs::autostart_set,
+            prefs::open_link,
+        ])
         .setup(move |app| {
             build_tray(app.handle())?;
             hudwin::build(app.handle())?;
             if demo {
                 hud_demo(app.handle().clone());
+            } else if preview {
+                open_settings(app.handle());
             } else {
                 start_dictation(app.handle().clone());
             }
@@ -121,11 +150,14 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             "settings" => open_settings(app),
             "history" => open_history(app),
             "autostart" => {
-                let on = start.is_checked().unwrap_or(false);
+                let Some(t) = app.try_state::<Tray>() else {
+                    return;
+                };
+                let on = t.autostart.is_checked().unwrap_or(false);
                 if let Err(e) = autostart::set(on) {
                     problem(app, e);
                 }
-                let _ = start.set_checked(autostart::enabled());
+                let _ = t.autostart.set_checked(autostart::enabled());
             }
             "quit" => app.exit(0),
             _ => {}
@@ -135,6 +167,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         status: Mutex::new(status),
         headline,
         pause,
+        autostart: start,
     });
     Ok(())
 }
@@ -189,11 +222,21 @@ fn open_settings(app: &AppHandle) {
     }
     let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
         .title("SonicScript settings")
-        .inner_size(560.0, 500.0)
+        .inner_size(760.0, 540.0)
+        .min_inner_size(400.0, 420.0)
         .resizable(true)
         .build();
-    if let Err(e) = built {
-        problem(app, format!("could not open the settings window: {e}"));
+    match built {
+        // Closed while a new key was being picked: dictation must not stay paused.
+        Ok(w) => {
+            let handle = app.clone();
+            w.on_window_event(move |e| {
+                if matches!(e, tauri::WindowEvent::Destroyed) {
+                    prefs::prefs_pause(handle.clone(), false);
+                }
+            });
+        }
+        Err(e) => problem(app, format!("could not open the settings window: {e}")),
     }
 }
 
@@ -230,22 +273,39 @@ fn start_dictation(app: AppHandle) {
             }
             redraw(&app);
         }
-        let (settings, notes) = settings::load();
-        cue::set_enabled(settings.sound);
-        let result =
-            key::choose_from(&settings, None, settings.format).and_then(|(mut choice, more)| {
-                for note in notes.into_iter().chain(more) {
-                    sink.send(Event::Warning(note));
+        // Each turn runs dictation with the settings as they are now; a change in the settings window ends
+        // the turn (`dictate::request_reload`) and the next one picks it up (M2 task 4.1).
+        loop {
+            let (settings, notes) = settings::load();
+            cue::set_enabled(settings.sound);
+            let result = key::choose_from(&settings, None, settings.format).and_then(
+                |(mut choice, more)| {
+                    for note in notes.into_iter().chain(more) {
+                        sink.send(Event::Warning(note));
+                    }
+                    choice.words = Some(Arc::new(mywords::load()));
+                    dictate::run(choice, settings.history, sink.clone())
+                },
+            );
+            if let Err(e) = result {
+                // The hook of an earlier turn may still be in place: it must not take the user's keys.
+                hotkey::stop_listening();
+                // No recording or answer is coming any more: the HUD must not wait for one.
+                hudwin::reset(&app);
+                sink.send(Event::Failed {
+                    lines: vec![format!("Dictation stopped: {e}")],
+                });
+                // A missing or wrong key is fixed in the settings window: wait for its next change.
+                while !dictate::take_reload() {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
                 }
-                choice.words = Some(Arc::new(mywords::load()));
-                dictate::run(choice, settings.history, sink.clone())
-            });
-        if let Err(e) = result {
-            // No recording or answer is coming any more: the HUD must not wait for one.
-            hudwin::reset(&app);
-            sink.send(Event::Failed {
-                lines: vec![format!("Dictation stopped: {e}")],
-            });
+                if let Some(t) = app.try_state::<Tray>() {
+                    if let Ok(mut s) = t.status.lock() {
+                        s.clear_problem();
+                    }
+                    redraw(&app);
+                }
+            }
         }
     });
 }
