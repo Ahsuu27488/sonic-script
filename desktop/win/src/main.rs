@@ -198,7 +198,7 @@ fn file(paths: &[String], choice: Choice) -> Result<(), String> {
 }
 
 fn bench(dir: &Path, out: Option<PathBuf>, choice: Choice) -> Result<(), String> {
-    let client = key::engines(choice)?;
+    let client = key::engines_fixed(choice)?;
     let summary = match &out {
         Some(path) => {
             if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {

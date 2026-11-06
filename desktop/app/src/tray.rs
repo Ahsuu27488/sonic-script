@@ -127,6 +127,8 @@ pub fn apply(s: &mut Status, e: &Event) -> bool {
         }
         Event::Listening { .. } => {
             s.note = None;
+            // A new recording: Try again waits until it is over (it would paste in the middle of it).
+            s.can_retry = false;
             s.state = State::Recording;
         }
         Event::Processing => {

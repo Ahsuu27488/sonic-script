@@ -129,10 +129,15 @@ pub fn run_streamed(
     out.sent_ms = ms_of(detection.keep.len());
 
     // A clip over 2 minutes goes in parts, cut at pauses, in order (M2 phase 6); the texts are joined.
-    let keep_len = detection.keep.len().max(1);
-    let parts = if detection.keep.len() > vad::SPLIT_OVER {
+    let long = detection.keep.len() > vad::SPLIT_OVER;
+    let speech = if long {
+        vad::speech_frames(samples)
+    } else {
+        Vec::new()
+    };
+    let parts = if long {
         vad::split(
-            &vad::speech_frames(samples),
+            &speech,
             detection.keep.clone(),
             vad::SPLIT_EVERY,
             vad::SPLIT_OVER,
@@ -148,10 +153,13 @@ pub fn run_streamed(
         out.stages.encode += elapsed(t);
         let encoded = match encoded {
             Ok(e) => Encoded {
-                // This part's share of the speech, for the cut-answer check (D-042).
-                speech_ms: Some(
-                    (u64::from(detection.speech_ms) * part.len() as u64 / keep_len as u64) as u32,
-                ),
+                // This part's own speech, for the cut-answer check (D-042).
+                speech_ms: Some(if long {
+                    let frames = part.start / vad::FRAME..(part.end / vad::FRAME).min(speech.len());
+                    (speech[frames].iter().filter(|s| **s).count() * 20) as u32
+                } else {
+                    detection.speech_ms
+                }),
                 ..e
             },
             Err(e) => {
@@ -192,12 +200,19 @@ pub fn run_streamed(
         raws.push(tr.asr.unwrap_or_else(|| tr.text.clone()));
         texts.push(tr.text);
     }
+    // A space between parts, a line break when a part holds lines (a formatted list, D-031).
     let join = |v: &[String]| {
-        v.iter()
+        let parts: Vec<&str> = v
+            .iter()
             .map(|t| t.trim())
             .filter(|t| !t.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ")
+            .collect();
+        let sep = if parts.iter().any(|t| t.contains('\n')) {
+            "\n"
+        } else {
+            " "
+        };
+        parts.join(sep)
     };
     out.raw = join(&raws);
     let text = join(&texts);

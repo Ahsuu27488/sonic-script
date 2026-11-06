@@ -410,10 +410,11 @@ Detailed tasks (written 2026-11-06; branch from `feat/m2-popup-mic`, PR #40 open
   forever; lines without a time kept), `prune_now_and_then()` (at dictation start, then at most hourly).
 
 ### Task 6.2: the learned deadline (`core/src/deadline.rs`, `client.rs`)
-- `Timings`: per engine, ms per second of audio of its last 50 good answers; `wait(id, audio_ms, spec)` =
-  max(3 s, 2 x median x clip seconds) once 10 answers exist, else the spec's wait; kept in
-  `%LOCALAPPDATA%\SonicScript\timings.json`. `Chain::with_timing_file`, `wait_for`; every good answer (also a
-  losing one) is recorded.
+- `Timings`: per engine, the time of its last 50 good answers; `wait(id, spec)` = 2 x median, never under
+  the spec's wait nor over 8 s, once 10 answers exist, else the spec's wait; kept in
+  `%LOCALAPPDATA%\SonicScript\answer-times.json`. `Chain::with_timing_file`, `wait_for`; every good answer
+  (also a losing one) is recorded; `--bench` uses the fixed waits. (A per-second-of-audio version was built
+  first and dropped after review: D-051.)
 
 ### Task 6.3: clips over 2 minutes (`core/src/vad.rs`, `pipeline.rs`)
 - `vad::speech_frames`, `vad::split(speech, keep, every, over)`: over 120 s, cut in the middle of the longest

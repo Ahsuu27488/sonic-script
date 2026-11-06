@@ -78,6 +78,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             hudwin::level,
             hudwin::retry_last,
+            hudwin::hud_hit_area,
             prefs::prefs_state,
             prefs::prefs_save,
             prefs::prefs_key_name,
@@ -173,7 +174,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "pause" => toggle_pause(app),
             "retry" => {
-                if !dictate::retry() {
+                // From the menu: copied, not pasted (the menu took the focus from the user's app).
+                if !dictate::retry(true) {
                     problem(app, "Nothing to send again.".into());
                 }
             }
@@ -375,6 +377,7 @@ fn hud_demo(app: AppHandle) {
                 },
                 3000,
             ),
+            (Event::CanRetry, 3000),
             (
                 Event::Notice(
                     "! gemini-3.5-transcribe+gptoss20b has used up today's free requests. More."

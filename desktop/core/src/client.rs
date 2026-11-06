@@ -318,12 +318,12 @@ impl<T: Transcribe + Send + Sync + 'static> Chain<T> {
         self
     }
 
-    /// How long to wait for link `link` on a clip of `audio_ms` before also asking the next engine: learned
-    /// once the engine has answered often enough, else the spec's wait.
-    pub fn wait_for(&self, link: usize, audio_ms: u32) -> Duration {
+    /// How long to wait for link `link` before also asking the next engine: learned once the engine has
+    /// answered often enough (never shorter than the spec's wait), else the spec's wait (D-051).
+    pub fn wait_for(&self, link: usize) -> Duration {
         let l = &self.links[link];
         match self.timings.lock() {
-            Ok(t) => t.wait(l.engine.id(), audio_ms, l.wait),
+            Ok(t) => t.wait(l.engine.id(), l.wait),
             Err(_) => l.wait,
         }
     }
@@ -380,7 +380,7 @@ impl<T: Transcribe + Send + Sync + 'static> Chain<T> {
             if result.is_ok()
                 && let Ok(mut t) = timings.lock()
             {
-                t.record(engine.id(), started.elapsed(), audio.audio_ms);
+                t.record(engine.id(), started.elapsed());
                 if let Some(file) = &timing_file {
                     t.save(file);
                 }
@@ -526,7 +526,7 @@ impl<T: Transcribe + Send + Sync + 'static> Transcribe for Chain<T> {
                 asked < order.len() && self.links[order[asked]].last_resort;
             let reply = if asked < order.len() && !next_waits_for_failures {
                 let wait = self
-                    .wait_for(order[asked - 1], audio.audio_ms)
+                    .wait_for(order[asked - 1])
                     .saturating_sub(since.elapsed());
                 // We still hold a sender, so this can only time out.
                 rx.recv_timeout(wait).ok()
@@ -1186,25 +1186,29 @@ mod tests {
     fn the_wait_is_learned_from_answers() {
         // D-017: the spec's wait until ten answers, then twice the median for the clip.
         let (c, _) = chain(vec![Fake::new("a", 0, Ok("x")), Fake::new("b", 0, Ok("y"))]);
-        assert_eq!(c.wait_for(0, 5000), WAIT);
+        assert_eq!(c.wait_for(0), WAIT);
         if let Ok(mut t) = c.timings.lock() {
             for _ in 0..crate::deadline::MIN_ANSWERS {
-                t.record("a", Duration::from_secs(4), 4000);
+                t.record("a", Duration::from_secs(2));
             }
         }
-        // 1 s per second of audio: a 5 s clip waits 10 s.
-        assert_eq!(c.wait_for(0, 5000), Duration::from_secs(10));
-        assert_eq!(c.wait_for(1, 5000), WAIT, "each engine learns its own");
+        // Twice the median.
+        assert_eq!(c.wait_for(0), Duration::from_secs(4));
+        assert_eq!(c.wait_for(1), WAIT, "each engine learns its own");
     }
 
     #[test]
     fn answers_teach_the_timings() {
-        let (c, _) = chain(vec![Fake::new("a", 0, Ok("x"))]);
+        let (c, _) = chain(vec![Fake::new("a", 200, Ok("x"))]);
         for _ in 0..crate::deadline::MIN_ANSWERS {
             run(&c).0.unwrap();
         }
-        // Fast fakes: the learned wait is the 3 s floor, not the spec's.
-        assert_eq!(c.wait_for(0, 1000), crate::deadline::MIN_WAIT);
+        // About 200 ms each: twice that is over the spec's 300 ms wait.
+        let learned = c.wait_for(0);
+        assert!(
+            learned >= Duration::from_millis(400) && learned < Duration::from_millis(600),
+            "{learned:?}"
+        );
     }
 
     #[test]

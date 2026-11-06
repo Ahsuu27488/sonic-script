@@ -603,17 +603,25 @@ pill's last good settings.
 `focuswatch.rs`, `popupwin.rs`, `ui/popup.*`.
 
 **D-051 Reliability as built: learned waits, long clips in parts, Try again, history kept N days.**
-(2026-11-06) M2 phase 6 (builds D-017 and D-044 (3)). (1) Each engine's wait is learned: the time per second of
-audio of its last 50 good answers (a losing answer counts too), kept in `%LOCALAPPDATA%\SonicScript\timings.json`;
-once there are 10, the next engine starts after max(3 s, 2 x the median x the clip's seconds, a clip counting
-as at least 1 s), before that after the spec's `wait_ms`. The client's 10 s timeout still ends a slow request.
+(2026-11-06) M2 phase 6 (builds D-017, changing its estimator, and D-044 (3)). (1) Each engine's wait is learned
+from the total time of its last 50 good answers (a losing answer counts too), kept in
+`%LOCALAPPDATA%\SonicScript\answer-times.json` (saves merge with the file); once there are 10, the next engine
+starts after twice the median, never sooner than the spec's `wait_ms` and never later than 8 s (under the
+client's 10 s timeout); before that after the spec's `wait_ms`. `--bench` keeps the spec's fixed waits (comparable
+runs). D-017's "time per second of audio" was built first and dropped after review: the owner's history
+(23 Transcribe answers) shows 2.1 s on a 1.5 s clip and 3.7 s on a 35 s one, so a per-second wait asked Flash
+too early on short clips (spending its 20 free requests) and never on long ones; never sooner than the spec
+means a fallback is never asked earlier than before.
 (2) A clip whose kept speech is over 120 s is sent in parts, cut in the middle of the longest pause within 15 s
 of every 90 s mark (at the mark without one), in order; the texts are joined with a space; a part that fails
 fails the clip (half a dictation pasted reads as all of it, as D-035). (3) "Try again" keeps the last recording
 nothing answered when a second try could help (not a refused or missing key, not every model out of free
-requests for the day) and sends it again on request (the tray's item, the HUD's button: the HUD window takes
-clicks only while that button shows); the retry is a new history line (the plan said "updated"); a text that
-came through forgets the kept recording. (4) History older than `history_days` (default 30, 0 = forever) is
+requests for the day) and sends it again on request: the HUD's button pastes (the HUD never took the focus;
+while the button shows, only the pill's area takes clicks), the tray's item copies (the menu took the focus;
+the user presses Ctrl+V). Recordings are numbered: only a newer failure replaces the kept one and only a newer
+text forgets it (a slow older clip answering late does not). A recording started after the request cancels it.
+The retry is a new history line (the plan said "updated"). Each part of a long clip gets its own speech time
+(D-042), and parts holding lines are joined with a line break. (4) History older than `history_days` (default 30, 0 = forever) is
 deleted at dictation start and then at most hourly: the line and its recording.
 *Why:* the plan's Phase 6 list and the owner's brief. *Where:* `desktop/core/src/deadline.rs`, `client.rs`
 (`with_timing_file`, `wait_for`), `vad.rs` (`speech_frames`, `split`), `pipeline.rs` (`run_streamed`),

@@ -67,6 +67,17 @@
     label.textContent = view.label;
     action.hidden = !view.action;
     action.textContent = view.action || "";
+    if (view.action && invoke) {
+      // Only the pill takes clicks: send its area once it has its new width.
+      setTimeout(() => {
+        const r = pill.getBoundingClientRect();
+        const d = window.devicePixelRatio || 1;
+        invoke("hud_hit_area", {
+          x: Math.floor(r.left * d), y: Math.floor(r.top * d),
+          w: Math.ceil(r.width * d), h: Math.ceil(r.height * d),
+        });
+      }, 260);
+    }
     if (kind === "listening" && was !== "listening") {
       started = performance.now();
       level = 0;

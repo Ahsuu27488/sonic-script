@@ -39,12 +39,14 @@ checked, after a live paste of the whole format prompt.
 ## What works (verified)
 
 - **Reliability (M2 phase 6, D-051, branch `feat/m2-reliability`):** each engine's wait is learned from its
-  last 50 answers (`timings.json`; the spec's wait until 10); clips over 2 minutes go in parts cut at pauses
-  and come back joined; after a failure a retry could fix, the tray's "Try again" and a button on the HUD send
-  the kept recording again; history older than the kept days (Settings → History, default 30) is deleted.
-  Checked 2026-11-06: unit tests; a 164 s clip of 31 test sentences through `sonicscript --file` and the real
-  chain came back whole (first to last sentence, two parts, Flash); `timings.json` filled. Not checked: Try
-  again with the network really off (the owner), the HUD button's look at full size.
+  last 50 answer times (`answer-times.json`: twice the median, never sooner than the spec's wait, at most 8 s;
+  `--bench` keeps the fixed waits); clips over 2 minutes go in parts cut at pauses and come back joined; after a
+  failure a retry could fix, the HUD's "Try again" button pastes the kept recording's text, the tray's item
+  copies it; history older than the kept days (Settings → History, default 30) is deleted. Checked 2026-11-06:
+  unit tests; a 164 s clip of 31 test sentences through `sonicscript --file` and the real chain came back whole
+  (first to last sentence, two parts, Flash); `--hud-demo` with the Try again state: focus moved 0 times. Not
+  checked: Try again with the network really off (the owner), the HUD button's look at full size. A
+  `timings.json` from the first (dropped) version may be in `%LOCALAPPDATA%\SonicScript` (3 numbers): unused.
 
 - **Pop-up mic (M2 phase 5, D-016, D-050, branch `feat/m2-popup-mic`):** when a text field gets the focus, a
   small Voice Ring shows just below its right end; a click starts a recording (as a tap of the key) and another
@@ -255,7 +257,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-06, `feat/m2-reliability`):** `eval`: 42 offline tests, ruff clean; `desktop`: 103 core + 55 `win` + 32 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-06, `feat/m2-reliability`):** `eval`: 42 offline tests, ruff clean; `desktop`: 103 core + 56 `win` + 32 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
