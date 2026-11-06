@@ -39,13 +39,13 @@ checked, after a live paste of the whole format prompt.
 ## What works (verified)
 
 - **Tray app (M2 phase 2, D-047, branch `feat/m2-tray`):** `cd desktop && cargo run -p sonicscript-app`
-  (debug: with a console showing M1's lines) or `targetelease\sonicscript-tray.exe` (no console). Runs
+  (debug: with a console showing M1's lines) or `target\release\sonicscript-tray.exe` (no console). Runs
   dictation with the user's settings; tray icon = the Voice Ring per state; tooltip / first menu line say the
   state or the last problem, never the text. Menu: Pause dictation (keys pass untouched; a running recording
   is cancelled), Settings… (placeholder page until Phase 4), Open history folder, Start with Windows (HKCU
   `Run`, off until ticked), Quit. One dictation per user: the CLI's dictation while it runs is refused; a
   second tray start opens the first one's Settings. Checked 2026-11-06 on the owner's PC: icon, menu, pause /
-  resume, settings window (closing it keeps the app), history folder, quit, second start, CLI refused.
+  resume, settings window (closing it keeps the app), history folder, quit, second start (opens the first one's Settings), CLI refused; a tray started while the CLI dictates waits for it to quit.
   Not checked: a dictation by the real key through the tray (programs' keys are ignored by the hook).
 
 - **Engine chain (D-029, PR #10):** `sonicscript` without `--engine` sends the clip to

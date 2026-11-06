@@ -146,6 +146,8 @@ fn handle(hook: &Hook, key: Key, down: bool, time: u32) -> bool {
         }
     }
     let reply = match hook.machine.lock() {
+        // Paused while this event waited for the lock (`pause` sets the flag under it): no recording starts.
+        Ok(_) if hook.paused.load(Ordering::Relaxed) => return false,
         Ok(mut m) if down => m.down(key, time),
         Ok(mut m) => m.up(key, time),
         Err(_) => Default::default(),

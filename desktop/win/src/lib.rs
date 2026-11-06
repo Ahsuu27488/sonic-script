@@ -1,5 +1,5 @@
 //! SonicScript for Windows as a library (M2 plan task 2.1): the M1 dictation app's modules, linked by the CLI
-//! (`src/main.rs`, `sonicscript.exe`) and by the tray app (`desktop/app`, `SonicScript.exe`).
+//! (`src/main.rs`, `sonicscript.exe`) and by the tray app (`desktop/app`, `sonicscript-tray.exe`, D-047).
 
 #[cfg(windows)]
 pub mod audio;

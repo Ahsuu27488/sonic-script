@@ -10,7 +10,7 @@ mod tray;
 use std::sync::{Arc, Mutex};
 
 use sonicscript::events::{self, Event, Sink};
-use sonicscript::{cue, dictate, history, hotkey, key, mywords, settings};
+use sonicscript::{cue, dictate, history, hotkey, instance, key, mywords, settings};
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -195,8 +195,26 @@ fn open_history(app: &AppHandle) {
 
 /// Runs dictation on its own thread with the user's settings, as the CLI's dictation does without flags.
 fn start_dictation(app: AppHandle) {
-    let sink: Arc<dyn Sink> = Arc::new(TraySink(app));
+    let sink: Arc<dyn Sink> = Arc::new(TraySink(app.clone()));
     std::thread::spawn(move || {
+        // Another copy dictating (the CLI in a console): wait for it to quit rather than stay broken.
+        let mut told = false;
+        while instance::claim().is_err() {
+            if !told {
+                sink.send(Event::Warning(
+                    "Another SonicScript is dictating (a console window?): this one starts when it quits."
+                        .into(),
+                ));
+                told = true;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(3));
+        }
+        if told && let Some(t) = app.try_state::<Tray>() {
+            if let Ok(mut s) = t.status.lock() {
+                s.clear_problem();
+            }
+            redraw(&app);
+        }
         let (settings, notes) = settings::load();
         cue::set_enabled(settings.sound);
         let result =

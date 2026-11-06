@@ -63,6 +63,23 @@ impl Status {
         }
     }
 
+    /// Forgets the last problem (it was solved outside dictation, e.g. the other copy quit).
+    pub fn clear_problem(&mut self) {
+        self.problem = None;
+        if self.state == State::Problem {
+            self.state = State::Idle;
+        }
+    }
+
+    /// The state after a finished job: a recording that started meanwhile keeps showing.
+    fn after_job(&self) -> State {
+        if self.state == State::Recording {
+            State::Recording
+        } else {
+            self.rest()
+        }
+    }
+
     /// The first line: the menu's status item and the tooltip's start.
     pub fn headline(&self) -> String {
         match self.shown() {
@@ -110,7 +127,10 @@ pub fn apply(s: &mut Status, e: &Event) -> bool {
             s.state = State::Recording;
         }
         Event::Processing => s.state = State::Working,
-        Event::Cancelled | Event::NoSpeech { .. } | Event::HintOnly => s.state = s.rest(),
+        // Only the dictation loop sends it, and only for the running recording.
+        Event::Cancelled => s.state = s.rest(),
+        // A job's end, from its worker thread: the next recording may already run (a slow answer).
+        Event::NoSpeech { .. } | Event::HintOnly => s.state = s.after_job(),
         Event::Text { paste, .. } => {
             match paste {
                 Paste::Failed(why) => s.problem = Some(format!("Not pasted: {why}")),
@@ -120,12 +140,12 @@ pub fn apply(s: &mut Status, e: &Event) -> bool {
                 }
                 Paste::Pasted(_) | Paste::Off => s.problem = None,
             }
-            s.state = s.rest();
+            s.state = s.after_job();
         }
         Event::Failed { lines } => {
             let first = lines.first().map(String::as_str).unwrap_or("Nothing typed");
             s.problem = Some(first.trim_start_matches("! ").to_string());
-            s.state = State::Problem;
+            s.state = s.after_job();
         }
     }
     *s != before
@@ -279,16 +299,41 @@ mod tests {
         apply(&mut s, &Event::Cancelled);
         assert_eq!(s.shown(), State::Problem);
         apply(&mut s, &listening());
+        apply(&mut s, &Event::Processing);
         apply(&mut s, &text(Paste::Pasted(1)));
         assert_eq!(s.shown(), State::Idle);
         // A warning while recording waits until the recording is over.
         apply(&mut s, &listening());
         apply(&mut s, &Event::Warning("history: disk full".into()));
         assert_eq!(s.shown(), State::Recording);
+        apply(&mut s, &Event::Processing);
         apply(&mut s, &Event::NoSpeech { seconds: 1.0 });
         assert_eq!(s.shown(), State::Problem);
         apply(&mut s, &text(Paste::Failed("no window".into())));
         assert_eq!(s.headline(), "Not pasted: no window");
+    }
+
+    #[test]
+    fn a_slow_answer_does_not_end_the_next_recording() {
+        // Clip 1 is still being written when clip 2 starts; clip 1's answer must not show "Ready".
+        let mut s = ready();
+        apply(&mut s, &listening());
+        apply(&mut s, &Event::Processing);
+        apply(&mut s, &listening());
+        apply(&mut s, &text(Paste::Pasted(1)));
+        assert_eq!(s.shown(), State::Recording);
+        apply(&mut s, &Event::NoSpeech { seconds: 1.0 });
+        assert_eq!(s.shown(), State::Recording);
+        apply(
+            &mut s,
+            &Event::Failed {
+                lines: vec!["Nothing typed".into()],
+            },
+        );
+        assert_eq!(s.shown(), State::Recording);
+        // The problem is kept for when the recording ends.
+        apply(&mut s, &Event::Cancelled);
+        assert_eq!(s.shown(), State::Problem);
     }
 
     #[test]

@@ -211,12 +211,12 @@ String>`: a named mutex `Local\SonicScript.Dictation`; `dictate::run` takes it f
 
 ### Task 2.3: the app crate `desktop/app` (Tauri 2, tray)
 
-**Files:** Create `desktop/app/{Cargo.toml, build.rs, tauri.conf.json, capabilities/default.json, icons/,
+**Files:** Create `desktop/app/{Cargo.toml, build.rs, tauri.conf.json, icons/,
 ui/settings.html, src/main.rs, src/tray.rs, src/autostart.rs}`; add `app` to the workspace.
 **Interfaces:**
 - `tray::State` (`Starting`, `Idle`, `Recording`, `Working`, `Paused`, `Problem`); `tray::apply(&mut Status,
   &Event) -> bool` (pure: the new state, tooltip and last problem from one dictation event; true = redraw);
-  `tray::icon(State) -> (Vec<u8>, u32, u32)` (RGBA drawn in code: the Voice Ring as a ring in `--accent`, a
+  `tray::icon(State) -> Vec<u8>` (RGBA, `ICON_SIZE` square drawn in code: the Voice Ring as a ring in `--accent`, a
   filled dot while recording, grey while paused, a `--danger` dot on a problem).
 - `TraySink` (`events::Sink`): writes M1's console lines to stderr (seen in a debug build; the release build
   has no console), updates the tray icon and tooltip. Never puts dictated text in the tooltip.
