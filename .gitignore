@@ -33,3 +33,8 @@ android/local.properties
 
 # Graphify knowledge graph: generated locally, rebuild with `graphify update .`
 graphify-out/
+
+# Copied from design/tokens.css by desktop/app/build.rs
+desktop/app/ui/tokens.css
+# Tauri build output
+desktop/app/gen/

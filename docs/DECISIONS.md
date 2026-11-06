@@ -537,3 +537,18 @@ developer's setup (and `eval`, which reads the same variables) keeps working. Co
 silently wins over one saved in the app; `--key` says so when both exist. *Where:* `desktop/win/src/keystore.rs`
 (`get`, `set`, `delete`, `command`), `key.rs` (`read`, `read_from`), `main.rs`.
 
+**D-047 The tray app: its own exe `sonicscript-tray.exe`, one dictation per user, start with Windows only by
+choice until the installer.** (2026-11-06)
+M2 phase 2. (1) The tray app's binary is `sonicscript-tray.exe`, not `SonicScript.exe` as the plan wrote:
+Windows file names ignore case, so `SonicScript.exe` and the CLI's `sonicscript.exe` are one file in
+`desktop/target/<profile>/` and each build overwrote the other (seen in the first run). The installed name is
+decided in Phase 7 (the installer can name its shortcut "SonicScript"). (2) `dictate::run` takes the named
+mutex `Local\SonicScript.Dictation` before it installs the key hook, so the CLI's dictation, the tray app or a
+second tray app never run two hooks (two pastes per dictation, plan Review Focus 4): the second one stops with
+"SonicScript is already running"; a second tray app start also opens the first one's Settings
+(`tauri-plugin-single-instance`). (3) Start with Windows is a tray menu check item that writes the HKCU `Run`
+value; it is off until the user ticks it, and the Phase 7 installer turns it on: a dev build must not register
+a `target\` path at sign-in by itself. (4) Pause lives in the hook (`hotkey::set_paused`): every key passes on
+untouched, so a paused F9 or side button does its normal job again. *Why:* the plan's Phase 2 list; the exe name
+from the collision found while checking it. *Where:* `desktop/app/` (`Cargo.toml` `[[bin]]`, `src/main.rs`,
+`src/autostart.rs`), `desktop/win/src/instance.rs`, `hotkey.rs` (`set_paused`), `dictate.rs`.

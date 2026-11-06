@@ -4,7 +4,7 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-06 (M2 go-ahead given, D-044; phase 1 on `feat/m2-settings`) · **Code at:** `main` = PRs
+**Last updated:** 2026-11-06 (M2 phase 1 in PR #36; phase 2, the tray app, on `feat/m2-tray`, D-047) · **Code at:** `main` = PRs
 #3-#34 (#32 D-041 formatting off by default, #33 D-042 cut-answer guard, #34 M1 done; merged 2026-11-05).
 **M1 is done (D-043, the owner's call on 2026-11-05):** every step is built and used live; the owner's own checks
 (Next) continue alongside M2. Next big step: M2, plan `docs/plans/2026-11-06-m2-windows-polish.md` (Next 1).
@@ -37,6 +37,16 @@ checked, after a live paste of the whole format prompt.
    throttles console output. Keys and mic need the owner's unlocked PC.
 
 ## What works (verified)
+
+- **Tray app (M2 phase 2, D-047, branch `feat/m2-tray`):** `cd desktop && cargo run -p sonicscript-app`
+  (debug: with a console showing M1's lines) or `target\release\sonicscript-tray.exe` (no console). Runs
+  dictation with the user's settings; tray icon = the Voice Ring per state; tooltip / first menu line say the
+  state or the last problem, never the text. Menu: Pause dictation (keys pass untouched; a running recording
+  is cancelled), Settings… (placeholder page until Phase 4), Open history folder, Start with Windows (HKCU
+  `Run`, off until ticked), Quit. One dictation per user: the CLI's dictation while it runs is refused; a
+  second tray start opens the first one's Settings. Checked 2026-11-06 on the owner's PC: icon, menu, pause /
+  resume, settings window (closing it keeps the app), history folder, quit, second start (opens the first one's Settings), CLI refused; a tray started while the CLI dictates waits for it to quit.
+  Not checked: a dictation by the real key through the tray (programs' keys are ignored by the hook).
 
 - **Engine chain (D-029, PR #10):** `sonicscript` without `--engine` sends the clip to
   `gemini-3.5-transcribe+gptoss20b`; after 4 s or an error also to `gemini-3.5-flash`; 3 s later
@@ -206,7 +216,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-05, `main` after PR #28):** `eval`: 42 offline tests, ruff clean; `desktop`: 92 core + 22 app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-06, `feat/m2-tray`):** `eval`: 42 offline tests, ruff clean; `desktop`: 92 core + 46 `win` + 7 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -290,7 +300,7 @@ M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR 
 
 1. **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
    (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Go-ahead
-   and the 5 decisions given 2026-11-06 (D-044). Phase 1 in progress: done on `feat/m2-settings` (PR to open): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Next: Phase 2 (tray), after freeing space on C: (6.8 GB free). Phase 2 (Tauri) needs ~10 GB free on C: (6.4 GB on 2026-11-06).
+   and the 5 decisions given 2026-11-06 (D-044). Phase 1 done on `feat/m2-settings` (PR #36, base PR #35): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Phase 2 (tray) built on `feat/m2-tray` (PR based on `feat/m2-settings`): the tray app `sonicscript-tray.exe` (D-047). Not checked yet: a dictation by the real key through the tray, Start with Windows after a real sign-in (the owner). Next: Phase 3 (HUD Voice Ring). C: had 26 GB free after the Tauri builds (2026-11-06).
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.

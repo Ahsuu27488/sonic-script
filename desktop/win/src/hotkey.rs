@@ -31,6 +31,9 @@ struct Hook {
     held: AtomicBool,
     /// Asks the mask thread to send the masking keystroke (Alt / Win, D-037).
     mask: Option<Sender<()>>,
+    /// Dictation is paused (the tray's "Pause dictation", M2 task 2.2): every key and button passes on
+    /// untouched and the rules do not run.
+    paused: AtomicBool,
 }
 
 static HOOK: OnceLock<Hook> = OnceLock::new();
@@ -53,6 +56,7 @@ pub fn spawn(key: DictationKey, tx: Sender<Action>) -> Result<(), String> {
         tx,
         held: AtomicBool::new(false),
         mask,
+        paused: AtomicBool::new(false),
     })
     .map_err(|_| "the key hook is already installed".to_string())?;
     let mouse = matches!(key.trigger, Trigger::Mouse(_));
@@ -100,8 +104,37 @@ pub fn force_stop() -> Option<Action> {
     HOOK.get()?.machine.lock().ok()?.force_stop()
 }
 
+/// Pauses or resumes dictation (M2 task 2.2); false when the hook is not installed yet. While paused the
+/// dictation key does nothing and reaches the app like any key; a recording running when it is paused is
+/// cancelled.
+pub fn set_paused(paused: bool) -> bool {
+    match HOOK.get() {
+        Some(hook) => {
+            pause(hook, paused);
+            true
+        }
+        None => false,
+    }
+}
+
+fn pause(hook: &Hook, paused: bool) {
+    let Ok(mut machine) = hook.machine.lock() else {
+        return;
+    };
+    hook.paused.store(paused, Ordering::Relaxed);
+    if paused && machine.force_stop().is_some() {
+        let _ = hook.tx.send(Action::Cancel);
+    }
+    // Starts clean either way: a key held across the switch must not finish a press the rules never saw.
+    *machine = Machine::new();
+    hook.held.store(false, Ordering::Relaxed);
+}
+
 /// Runs one event of the dictation key or another key through the rules; true = keep it from the app.
 fn handle(hook: &Hook, key: Key, down: bool, time: u32) -> bool {
+    if hook.paused.load(Ordering::Relaxed) {
+        return false;
+    }
     let dictation = key == Key::Dictation;
     if dictation {
         let was_held = hook.held.swap(down, Ordering::Relaxed);
@@ -113,6 +146,8 @@ fn handle(hook: &Hook, key: Key, down: bool, time: u32) -> bool {
         }
     }
     let reply = match hook.machine.lock() {
+        // Paused while this event waited for the lock (`pause` sets the flag under it): no recording starts.
+        Ok(_) if hook.paused.load(Ordering::Relaxed) => return false,
         Ok(mut m) if down => m.down(key, time),
         Ok(mut m) => m.up(key, time),
         Err(_) => Default::default(),
@@ -224,4 +259,56 @@ unsafe extern "system" fn capture_mouse(code: i32, wparam: WPARAM, lparam: LPARA
     }
     // SAFETY: passes the event on unchanged.
     unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::channel;
+
+    fn hook(name: &str) -> (Hook, Receiver<Action>) {
+        let (tx, rx) = channel();
+        let key = crate::setkey::by_name(name).unwrap();
+        let hook = Hook {
+            key,
+            machine: Mutex::new(Machine::new()),
+            tx,
+            held: AtomicBool::new(false),
+            mask: None,
+            paused: AtomicBool::new(false),
+        };
+        (hook, rx)
+    }
+
+    #[test]
+    fn paused_hook_passes_everything() {
+        // F9 is kept from the app when dictation runs (PassOn::Never); paused, it must reach the app.
+        let (hook, rx) = hook("F9");
+        pause(&hook, true);
+        assert!(!handle(&hook, Key::Dictation, true, 0));
+        assert!(!handle(&hook, Key::Dictation, false, 50));
+        assert!(!handle(&hook, Key::Enter, true, 60));
+        assert!(rx.try_recv().is_err(), "no action while paused");
+        // Resumed: the same tap starts a recording again and F9 is kept from the app.
+        pause(&hook, false);
+        assert!(handle(&hook, Key::Dictation, true, 1000));
+        assert!(handle(&hook, Key::Dictation, false, 1050));
+        assert_eq!(rx.try_recv().ok(), Some(Action::Start));
+    }
+
+    #[test]
+    fn pause_cancels_a_recording() {
+        let (hook, rx) = hook("RightCtrl");
+        handle(&hook, Key::Dictation, true, 0);
+        handle(&hook, Key::Dictation, false, 50);
+        assert_eq!(rx.try_recv().ok(), Some(Action::Start));
+        pause(&hook, true);
+        assert_eq!(rx.try_recv().ok(), Some(Action::Cancel));
+        // Enter is no longer taken from the app.
+        assert!(!handle(&hook, Key::Enter, true, 100));
+        // Pausing when idle sends nothing.
+        pause(&hook, false);
+        pause(&hook, true);
+        assert!(rx.try_recv().is_err());
+    }
 }

@@ -3,29 +3,6 @@
 //! `--bench` run the same pipeline on WAV files (the golden check, step 4). Dictation keeps each recording and
 //! its text in the local history (`history`, D-032) unless `--no-history`.
 
-#[cfg(windows)]
-mod audio;
-mod bench;
-#[cfg(windows)]
-mod cue;
-#[cfg(windows)]
-mod dictate;
-mod events;
-#[cfg(windows)]
-mod history;
-#[cfg(windows)]
-mod hotkey;
-#[cfg(windows)]
-mod inject;
-mod key;
-mod keystore;
-mod models;
-#[cfg(windows)]
-mod mywords;
-mod setkey;
-mod settings;
-mod wav;
-
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -33,7 +10,10 @@ use std::process::ExitCode;
 
 use sonicscript_core::pipeline::{self, Transcribe};
 
-use crate::key::Choice;
+use sonicscript::key::Choice;
+use sonicscript::{bench, key, keystore, models, setkey, settings, wav};
+#[cfg(windows)]
+use sonicscript::{cue, dictate, events, mywords};
 
 const USAGE: &str = "\
 usage: sonicscript [--engine <id>] [--format] [--no-history] [--no-sound] [mode]
