@@ -7,6 +7,7 @@
 mod autostart;
 mod hud;
 mod hudwin;
+mod popup;
 mod prefs;
 mod tray;
 

@@ -101,7 +101,8 @@ fn paste_keys(class: &str) -> &'static [u16] {
     }
 }
 
-fn is_terminal(class: &str) -> bool {
+/// Windows Terminal or an old console window (no pop-up mic there, D-016; Ctrl+Shift+V to paste).
+pub fn is_terminal(class: &str) -> bool {
     matches!(
         class,
         "CASCADIA_HOSTING_WINDOW_CLASS" | "ConsoleWindowClass"

@@ -152,6 +152,25 @@ pub fn set_paused(paused: bool) -> bool {
     }
 }
 
+/// A click on the pop-up mic (M2 phase 5): starts or stops a recording as a tap of the key would. False when
+/// there is no hook yet, dictation is paused, or the key is held.
+pub fn click() -> bool {
+    HOOK.get().is_some_and(clicked)
+}
+
+fn clicked(hook: &Hook) -> bool {
+    let Ok(mut machine) = hook.machine.lock() else {
+        return false;
+    };
+    if hook.paused.load(Ordering::Relaxed) {
+        return false;
+    }
+    match (machine.click(), hook.live.lock()) {
+        (Some(action), Ok(live)) => live.tx.send(action).is_ok(),
+        _ => false,
+    }
+}
+
 fn pause(hook: &Hook, paused: bool) {
     let Ok(mut machine) = hook.machine.lock() else {
         return;
@@ -326,6 +345,19 @@ mod tests {
             paused: AtomicBool::new(false),
         };
         (hook, rx)
+    }
+
+    #[test]
+    fn a_click_starts_and_stops_unless_paused() {
+        let (hook, rx) = hook("RightCtrl");
+        assert!(clicked(&hook));
+        assert_eq!(rx.try_recv().ok(), Some(Action::Start));
+        // Enter is now taken from the app, as in any recording.
+        assert!(handle(&hook, Key::Enter, true, 10));
+        assert_eq!(rx.try_recv().ok(), Some(Action::Stop));
+        pause(&hook, true);
+        assert!(!clicked(&hook), "paused: a click does nothing");
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]

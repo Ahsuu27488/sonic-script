@@ -141,6 +141,18 @@ impl Machine {
         Some(Action::Stop)
     }
 
+    /// A click on the pop-up mic (M2 phase 5, D-016): starts a recording in toggle mode (the key, Enter or
+    /// another click stops it), or stops the toggled one. Ignored while the dictation key is held.
+    pub fn click(&mut self) -> Option<Action> {
+        let (state, action) = match self.state {
+            State::Idle => (State::Toggled, Some(Action::Start)),
+            State::Toggled => (State::Idle, Some(Action::Stop)),
+            other => (other, None),
+        };
+        self.state = state;
+        action
+    }
+
     /// Where to go when recording ends while the dictation key may still be down.
     fn after_stop(&self) -> State {
         match self.state {
@@ -158,6 +170,26 @@ mod tests {
 
     fn act(r: Reply) -> Option<Action> {
         r.action
+    }
+
+    #[test]
+    fn a_click_starts_in_toggle_mode_and_the_key_or_a_click_stops() {
+        let mut m = Machine::new();
+        assert_eq!(m.click(), Some(Start));
+        assert!(m.recording());
+        // The key's tap stops it, as in toggle mode.
+        assert_eq!(act(m.down(Dictation, 1000)), None);
+        assert_eq!(act(m.up(Dictation, 1050)), Some(Stop));
+        assert_eq!(m.click(), Some(Start));
+        assert_eq!(m.click(), Some(Stop));
+        assert!(!m.recording());
+        // Enter stops a clicked recording too.
+        m.click();
+        assert_eq!(act(m.down(Enter, 0)), Some(Stop));
+        // While the key is held, a click does nothing.
+        let mut held = Machine::new();
+        held.down(Dictation, 0);
+        assert_eq!(held.click(), None);
     }
 
     #[test]
