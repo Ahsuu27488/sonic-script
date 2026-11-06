@@ -3760,10 +3760,13 @@ dependencies = [
 name = "sonicscript-app"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "sonicscript",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
+ "windows-sys 0.59.0",
  "winreg 0.55.0",
 ]
 
