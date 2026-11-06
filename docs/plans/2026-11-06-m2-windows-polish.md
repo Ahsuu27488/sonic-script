@@ -15,6 +15,8 @@
 - 2026-11-06: Phase 2 built (tasks 2.1-2.3; 2.4 checked except a real-key dictation). Changes from the plan
   (D-047): the app's exe is `sonicscript-tray.exe` (`SonicScript.exe` and `sonicscript.exe` are one file on
   Windows); start with Windows is off until ticked (the installer turns it on, Phase 7).
+- 2026-11-06: Phase 3 built on `feat/m2-hud` (tasks 3.1-3.2; 3.3 checked except a real dictation). Change from
+  the plan (D-048): the pill is solid `--surface-2`, no acrylic.
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").

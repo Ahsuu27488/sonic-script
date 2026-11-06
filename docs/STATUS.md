@@ -38,12 +38,13 @@ checked, after a live paste of the whole format prompt.
 
 ## What works (verified)
 
-- **HUD Voice Ring (M2 phase 3, in progress on `feat/m2-hud`, not reviewed, no PR yet):** `desktop/app/src/hud.rs`
-  (what the pill shows per event, tested), `hudwin.rs` (hidden topmost no-activate click-through window, shown
-  bottom-centre of the foreground window's monitor), `ui/hud.{html,css,js}` + Geist fonts (OFL). Checked:
-  `sonicscript-tray --hud-demo` ran every state, the foreground window never changed (0 moves). Not yet:
-  screenshots of the states, a real dictation, reduced motion, two monitors, D-048 (solid pill instead of
-  acrylic: acrylic fills the whole rectangular window), docs, reviewer, PR.
+- **HUD Voice Ring (M2 phase 3, D-048, branch `feat/m2-hud`):** the tray app shows a pill at the bottom of the
+  monitor you work on: Listening (ring follows the mic, timer), Writing… (one shimmer), a Done tick (600 ms),
+  "Copied: press Ctrl+V" (2.5 s), problems (dot + one sentence: no speech, not pasted, nothing typed, a model
+  out of free requests). Never the dictated text; never takes focus. Checked 2026-11-06: unit tests; every state
+  rendered in a browser (screenshots); `sonicscript-tray --hud-demo` ran every state on the real window with the
+  foreground window unchanged (0 moves). Not checked: a real dictation through the HUD, two monitors, the
+  ring with a real mic level (the owner).
 
 - **Tray app (M2 phase 2, D-047, branch `feat/m2-tray`):** `cd desktop && cargo run -p sonicscript-app`
   (debug: with a console showing M1's lines) or `target\release\sonicscript-tray.exe` (no console). Runs
@@ -307,7 +308,7 @@ M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR 
 
 1. **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
    (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Go-ahead
-   and the 5 decisions given 2026-11-06 (D-044). Phase 1 done on `feat/m2-settings` (PR #36, base PR #35): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Phase 2 (tray) built on `feat/m2-tray` (PR based on `feat/m2-settings`): the tray app `sonicscript-tray.exe` (D-047). Not checked yet: a dictation by the real key through the tray, Start with Windows after a real sign-in (the owner). Next: Phase 3 (HUD Voice Ring). C: had 26 GB free after the Tauri builds (2026-11-06).
+   and the 5 decisions given 2026-11-06 (D-044). Phase 1 done on `feat/m2-settings` (PR #36, base PR #35): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Phase 2 (tray) built on `feat/m2-tray` (PR based on `feat/m2-settings`): the tray app `sonicscript-tray.exe` (D-047). Not checked yet: a dictation by the real key through the tray, Start with Windows after a real sign-in (the owner). Phase 3 (HUD Voice Ring, D-048) built on `feat/m2-hud`; not checked yet: a real dictation with the HUD (the owner). Next: Phase 4 (settings window). C: had 26 GB free after the Tauri builds (2026-11-06).
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.
