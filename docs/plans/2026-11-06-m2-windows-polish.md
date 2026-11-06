@@ -10,6 +10,8 @@
 - 2026-11-06: Phase 1 built (tasks 1.1-1.4). Change from the plan: the mic level is `audio::level()`, read by
   the HUD at its own frame rate, not a `Level` event (an event every 20 ms would flood the dictation channel);
   `dictate::run` takes `keep_history`, not the whole `Settings` (the key is still read by `setkey::load`).
+- 2026-11-06: Phase 2 started on `feat/m2-tray` (from `feat/m2-settings`: PRs #35 / #36 still open); tasks
+  2.1-2.4 written below.
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").
@@ -170,7 +172,7 @@ stored with `--key gemini` and removed from the environment still works.
 
 ## Phase 2: the app shell and tray (T2, `feat/m2-tray`)
 
-Detailed tasks written when the phase starts. Needs ~10 GB free on C: and Decision 1.
+Detailed tasks below (written 2026-11-06 when the phase started; C: had 29 GB free). Decision 1 = Tauri 2 (D-044).
 
 - `desktop/win` split into `lib.rs` (modules) + `main.rs` (CLI). New workspace member `desktop/app` (Tauri 2,
   `windows_subsystem = "windows"`, product name SonicScript, identifier `app.sonicscript`), static `ui/`.
@@ -183,6 +185,56 @@ Detailed tasks written when the phase starts. Needs ~10 GB free on C: and Decisi
   gone: Right Ctrl + C still copies); start twice → one hook; sign out and in → it starts; CPU idle < 1%,
   RAM noted.
 - **Rollback:** the CLI is unchanged; delete the `Run` value; uninstall.
+
+### Task 2.1: `desktop/win` becomes a library + the CLI
+
+**Files:** Create `desktop/win/src/lib.rs` (every module `pub`); modify `main.rs` (uses `sonicscript::...`).
+- [ ] **Step 1:** move the `mod` lines to `lib.rs`; `main.rs` keeps only the CLI. No behaviour change.
+- [ ] **Step 2:** `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` green;
+  `sonicscript --models` and `--file` print as before.
+
+### Task 2.2: pause and one dictation per user, in the library
+
+**Files:** modify `hotkey.rs` (`set_paused(bool)`, `Hook.paused`), create `instance.rs`, modify `dictate.rs`.
+**Interfaces:** `hotkey::set_paused(p: bool) -> bool` (false when no hook yet): while paused the hook passes
+every key and button on untouched and runs no rules; pausing during a recording cancels it (a `Cancel` action
+down the channel) and resets the rules so Enter / Esc are no longer taken. `instance::claim() -> Result<Guard,
+String>`: a named mutex `Local\SonicScript.Dictation`; `dictate::run` takes it first, so the CLI and the app
+(or two apps) never install two hooks (Review Focus 4).
+- [ ] **Step 1: Failing tests:** `paused_hook_passes_everything` (dictation key down / up while paused: no
+  action, not swallowed, even for a `PassOn::Never` key); `pause_cancels_a_recording`;
+  `second_claim_is_refused` (two claims in one process: the second fails, after dropping the first it works).
+- [ ] **Step 2:** run → FAIL. **Step 3:** implement. **Step 4:** PASS.
+
+### Task 2.3: the app crate `desktop/app` (Tauri 2, tray)
+
+**Files:** Create `desktop/app/{Cargo.toml, build.rs, tauri.conf.json, capabilities/default.json, icons/,
+ui/settings.html, src/main.rs, src/tray.rs, src/autostart.rs}`; add `app` to the workspace.
+**Interfaces:**
+- `tray::State` (`Starting`, `Idle`, `Recording`, `Working`, `Paused`, `Problem`); `tray::apply(&mut Status,
+  &Event) -> bool` (pure: the new state, tooltip and last problem from one dictation event; true = redraw);
+  `tray::icon(State) -> (Vec<u8>, u32, u32)` (RGBA drawn in code: the Voice Ring as a ring in `--accent`, a
+  filled dot while recording, grey while paused, a `--danger` dot on a problem).
+- `TraySink` (`events::Sink`): writes M1's console lines to stderr (seen in a debug build; the release build
+  has no console), updates the tray icon and tooltip. Never puts dictated text in the tooltip.
+- Menu: status line (disabled), Pause / Resume dictation, Settings… (placeholder window `ui/settings.html`
+  using `design/tokens.css`, copied in by `build.rs`; the real page is Phase 4), Open history folder, Start
+  with Windows (check item), Quit.
+- `autostart::{enabled, set}`: HKCU `...\CurrentVersion\Run` value `SonicScript` = `"<exe>"`. Left off by
+  default in this phase: a dev build must not register `target\...` at sign-in; Phase 7's installer turns it on.
+- Single instance: `tauri-plugin-single-instance`; a second start opens the first one's Settings window.
+- Dictation: `dictate::run` on a thread with the settings and keys exactly as the CLI's dictation uses them;
+  when it ends with an error (no key, a second copy) the tray shows Problem with the reason.
+- [ ] **Step 1: Failing tests:** `tray::apply` for Listening → Recording, Processing → Working, Text pasted →
+  Idle (tooltip without the text), Text copied → Idle + "press Ctrl+V" note, Failed → Problem with its first
+  line, Warning → Problem; `icon` sizes and the paused icon has no accent pixel; `autostart::command_line`.
+- [ ] **Step 2:** run → FAIL. **Step 3:** implement. **Step 4:** PASS; `cargo build -p sonicscript-app`.
+
+### Task 2.4: the real check, docs, PR
+- [ ] Run the app: tray icon shows; menu items work; a dictation by the key pastes through `TraySink`;
+  pause → key does nothing and Right Ctrl + C still copies; quit → hook gone; start twice → one copy, the
+  first opens Settings; the CLI while the app runs → refused ("already running"). CPU idle and RAM noted.
+- [ ] Docs: ARCHITECTURE (lib + app crate), STATUS, CHANGELOG, plan Progress; PR with base `feat/m2-settings`.
 
 ## Phase 3: the HUD Voice Ring (T1, `feat/m2-hud`)
 
