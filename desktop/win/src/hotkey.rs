@@ -41,6 +41,8 @@ struct Hook {
     /// Dictation is paused (the tray's "Pause dictation", M2 task 2.2): every key and button passes on
     /// untouched and the rules do not run.
     paused: AtomicBool,
+    /// Dictation stopped (`stop_listening`); the next `spawn` starts it again.
+    stopped: AtomicBool,
 }
 
 static HOOK: OnceLock<Hook> = OnceLock::new();
@@ -63,6 +65,7 @@ pub fn spawn(key: DictationKey, tx: Sender<Action>) -> Result<(), String> {
         held: AtomicBool::new(false),
         mouse: AtomicBool::new(mouse),
         paused: AtomicBool::new(false),
+        stopped: AtomicBool::new(false),
     })
     .map_err(|_| "the key hook is already installed".to_string())?;
     install(Some(keyboard), mouse.then_some(mouse_proc as _))
@@ -78,6 +81,7 @@ fn rebind(hook: &Hook, live: Live) {
     if let Ok(mut l) = hook.live.lock() {
         *l = live;
     }
+    hook.stopped.store(false, Ordering::Relaxed);
 }
 
 /// The thread that sends the masking keystroke for an Alt / Win key (D-037); it ends with its sender.
@@ -169,34 +173,62 @@ fn pause(hook: &Hook, paused: bool) {
 }
 
 /// Runs one event of the dictation key or another key through the rules; true = keep it from the app.
+/// Locks: never `live` while `machine` is waited for here (`rebind`, `pause` take `machine`, then `live`).
 fn handle(hook: &Hook, key: Key, down: bool, time: u32) -> bool {
-    if hook.paused.load(Ordering::Relaxed) {
+    if idle(hook) {
         return false;
     }
     let dictation = key == Key::Dictation;
-    let Ok(live) = hook.live.lock() else {
-        return false;
+    let (mask, pass_on) = match hook.live.lock() {
+        Ok(live) => (live.mask.clone(), live.key.pass_on),
+        Err(_) => return false,
     };
     if dictation {
         let was_held = hook.held.swap(down, Ordering::Relaxed);
         if down
             && !was_held
-            && let Some(mask) = &live.mask
+            && let Some(mask) = &mask
         {
             let _ = mask.send(());
         }
     }
     let reply = match hook.machine.lock() {
-        // Paused while this event waited for the lock (`pause` sets the flag under it): no recording starts.
-        Ok(_) if hook.paused.load(Ordering::Relaxed) => return false,
-        Ok(mut m) if down => m.down(key, time),
-        Ok(mut m) => m.up(key, time),
+        // Paused or stopped while this event waited for the lock (both are set under it): nothing starts.
+        Ok(_) if idle(hook) => return false,
+        Ok(mut m) => {
+            let reply = if down {
+                m.down(key, time)
+            } else {
+                m.up(key, time)
+            };
+            // Sent with `machine` held, so a `rebind` cannot slip between the rules and the channel.
+            if let Some(action) = reply.action
+                && let Ok(live) = hook.live.lock()
+            {
+                let _ = live.tx.send(action);
+            }
+            reply
+        }
         Err(_) => Default::default(),
     };
-    if let Some(action) = reply.action {
-        let _ = live.tx.send(action);
+    reply.swallow || (dictation && pass_on == PassOn::Never)
+}
+
+/// The hook passes every key on untouched: the user paused dictation, or it stopped.
+fn idle(hook: &Hook) -> bool {
+    hook.paused.load(Ordering::Relaxed) || hook.stopped.load(Ordering::Relaxed)
+}
+
+/// Dictation stopped (it failed to start again after a settings change): until the next `spawn`, the hook
+/// passes every key on and sends nothing, so an old key or a half-done press cannot take the user's keys.
+pub fn stop_listening() {
+    if let Some(hook) = HOOK.get()
+        && let Ok(mut machine) = hook.machine.lock()
+    {
+        hook.stopped.store(true, Ordering::Relaxed);
+        *machine = Machine::new();
+        hook.held.store(false, Ordering::Relaxed);
     }
-    reply.swallow || (dictation && live.key.pass_on == PassOn::Never)
 }
 
 unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -324,8 +356,33 @@ mod tests {
             held: AtomicBool::new(false),
             mouse: AtomicBool::new(false),
             paused: AtomicBool::new(false),
+            stopped: AtomicBool::new(false),
         };
         (hook, rx)
+    }
+
+    #[test]
+    fn a_stopped_hook_passes_everything_until_rebound() {
+        // A reload failed (e.g. the Gemini key was removed): the old F9 must reach the app again.
+        let (hook, rx) = hook("F9");
+        hook.stopped.store(true, Ordering::Relaxed);
+        assert!(!handle(&hook, Key::Dictation, true, 0));
+        assert!(!handle(&hook, Key::Dictation, false, 50));
+        assert!(rx.try_recv().is_err());
+        let (tx, rx2) = channel();
+        rebind(
+            &hook,
+            Live {
+                key: crate::setkey::by_name("F9").unwrap(),
+                tx,
+                mask: None,
+            },
+        );
+        assert!(
+            handle(&hook, Key::Dictation, true, 1000),
+            "dictating again: F9 is kept"
+        );
+        assert_eq!(rx2.try_recv().ok(), Some(Action::Start));
     }
 
     #[test]

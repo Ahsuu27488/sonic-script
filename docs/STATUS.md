@@ -42,12 +42,15 @@ checked, after a live paste of the whole format prompt.
   (dictation key: Change, then press it; formatting, sounds, start with Windows, pop-up mic switches), Models &
   keys (Gemini / Groq / OpenAI keys: save, test, remove, "Get a key"; main model + 2 fallbacks from the
   catalog), Words (copy the assistant prompt, add words from the clipboard with a preview, edit the list),
-  History (keep on / off, delete after N days, the last 50 with copy / insert / play / delete), About (privacy).
+  History (keep on / off, the last 50 with copy / insert / play / delete; "delete after N days" is saved but
+  nothing deletes yet: Phase 6), About (privacy).
   Every change saves at once and dictation reloads it between recordings (no restart). Checked 2026-11-06: unit
   tests; the real app (`--settings-preview` with a scratch `APPDATA` / `LOCALAPPDATA`) driven over DevTools,
   14 of 14: each control wrote `config.toml` / `words.txt` / the history, Space refused, F9 taken, Test key
   "works" with the real Gemini key and "refused" with a wrong one; screenshots dark / light / 400 px.
-  Not checked: a dictation in the running tray app after a change (the owner), keyboard-only by a person.
+  Review fixes: a failed restart (e.g. the Gemini key removed) stops the hook so it takes no keys; closing the
+  window while picking a key ends the pause; one lock order in the hook. Not checked: a dictation in the running
+  tray app after a change (the owner), Play opening the player, keyboard-only by a person.
 
 - **HUD Voice Ring (M2 phase 3, D-048, branch `feat/m2-hud`):** the tray app shows a pill at the bottom of the
   monitor you work on: Listening (ring follows the mic, timer), Writing… (one shimmer), a Done tick (600 ms),
