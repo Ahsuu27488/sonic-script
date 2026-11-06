@@ -198,8 +198,17 @@ fn open_history(keep: bool, sink: &dyn Sink) -> Option<History> {
     }
     match History::open() {
         Ok(h) => {
+            // Recordings older than the kept days go (D-044, Settings → History); 0 keeps them forever.
+            let days = crate::settings::load().0.history_days;
+            let h = h.with_keep_days(days);
+            h.prune_now_and_then();
+            let kept = match days {
+                0 => String::new(),
+                1 => " for 1 day".into(),
+                n => format!(" for {n} days"),
+            };
             sink.send(Event::Notice(format!(
-                "Each recording and its text are kept in {} (--no-history to turn off).",
+                "Each recording and its text are kept{kept} in {} (--no-history to turn off).",
                 h.dir().display()
             )));
             Some(h)
@@ -284,6 +293,7 @@ fn transcribe(
         if let Err(e) = history.save(&out, clip) {
             sink.send(Event::Warning(format!("Not kept in the history: {e}")));
         }
+        history.prune_now_and_then();
     }
 }
 

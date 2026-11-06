@@ -22,7 +22,14 @@ use windows_sys::Win32::System::SystemInformation::GetLocalTime;
 
 pub struct History {
     dir: PathBuf,
+    /// Delete dictations older than this many days (D-044); 0 keeps them forever.
+    keep_days: u32,
+    /// When the last clean-up ran (Unix seconds): at most one an hour.
+    pruned_at: std::sync::atomic::AtomicU64,
 }
+
+/// How often a long-running dictation cleans the history up.
+const PRUNE_EVERY_S: u64 = 3600;
 
 /// One writer of `history.jsonl` at a time in this process: two dictations can finish at the same moment, and
 /// the settings window rewrites the file to delete a line (M2 phase 4).
@@ -71,7 +78,11 @@ impl History {
 
     pub fn at(dir: PathBuf) -> Result<Self, String> {
         fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        Ok(Self { dir })
+        Ok(Self {
+            dir,
+            keep_days: 0,
+            pruned_at: std::sync::atomic::AtomicU64::new(0),
+        })
     }
 
     pub fn dir(&self) -> &Path {
@@ -107,6 +118,69 @@ impl History {
 }
 
 impl History {
+    /// Dictations older than `days` are deleted by [`History::prune`]; 0 keeps them forever.
+    pub fn with_keep_days(mut self, days: u32) -> Self {
+        self.keep_days = days;
+        self
+    }
+
+    /// Deletes the dictations older than the kept days (their lines and recordings); the number deleted.
+    /// `now` is Unix seconds. Lines without a time are kept.
+    pub fn prune(&self, now: f64) -> Result<usize, String> {
+        self.pruned_at
+            .store(now as u64, std::sync::atomic::Ordering::Relaxed);
+        if self.keep_days == 0 {
+            return Ok(0);
+        }
+        let oldest = now - f64::from(self.keep_days) * 86_400.0;
+        let _one = LINES.lock().unwrap_or_else(|e| e.into_inner());
+        let index = self.dir.join("history.jsonl");
+        let Ok(old) = fs::read_to_string(&index) else {
+            return Ok(0);
+        };
+        let mut kept = String::with_capacity(old.len());
+        let mut gone = Vec::new();
+        for line in old.lines() {
+            let v = serde_json::from_str::<Value>(line).unwrap_or(Value::Null);
+            match v["at"].as_f64() {
+                Some(at) if at < oldest => gone.push(v["audio"].as_str().map(str::to_string)),
+                _ => {
+                    kept.push_str(line);
+                    kept.push('\n');
+                }
+            }
+        }
+        if gone.is_empty() {
+            return Ok(0);
+        }
+        let tmp = index.with_extension("jsonl.tmp");
+        fs::write(&tmp, kept).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        fs::rename(&tmp, &index).map_err(|e| format!("{}: {e}", index.display()))?;
+        for rel in gone.iter().flatten() {
+            if rel.starts_with("audio/") && !rel.contains("..") {
+                let path = self.dir.join(rel);
+                let _ = fs::remove_file(&path);
+                // The day's folder goes when it is empty (fails harmlessly otherwise).
+                if let Some(day) = path.parent() {
+                    let _ = fs::remove_dir(day);
+                }
+            }
+        }
+        Ok(gone.len())
+    }
+
+    /// Runs [`History::prune`] when the last one is over an hour old (a dictation app runs for days).
+    pub fn prune_now_and_then(&self) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or_default();
+        let last = self.pruned_at.load(std::sync::atomic::Ordering::Relaxed);
+        if (now as u64).saturating_sub(last) >= PRUNE_EVERY_S {
+            let _ = self.prune(now);
+        }
+    }
+
     /// The last `n` dictations that typed something, newest first.
     pub fn recent(&self, n: usize) -> Vec<Item> {
         let index = fs::read_to_string(self.dir.join("history.jsonl")).unwrap_or_default();
@@ -257,6 +331,42 @@ fn local_now() -> Now {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prune_deletes_old_dictations_and_their_recordings() {
+        let dir = std::env::temp_dir().join(format!("sonicscript-prune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("audio/old")).unwrap();
+        fs::create_dir_all(dir.join("audio/new")).unwrap();
+        fs::write(dir.join("audio/old/a.ogg"), b"OggS").unwrap();
+        fs::write(dir.join("audio/new/b.ogg"), b"OggS").unwrap();
+        let day = 86_400.0;
+        let now = 100.0 * day;
+        let lines = [
+            format!(
+                r#"{{"at":{},"text":"old","audio":"audio/old/a.ogg"}}"#,
+                now - 31.0 * day
+            ),
+            r#"{"text":"no time"}"#.to_string(),
+            format!(
+                r#"{{"at":{},"text":"new","audio":"audio/new/b.ogg"}}"#,
+                now - 29.0 * day
+            ),
+        ];
+        fs::write(dir.join("history.jsonl"), lines.join("\n") + "\n").unwrap();
+        let forever = History::at(dir.clone()).unwrap();
+        assert_eq!(forever.prune(now).unwrap(), 0, "0 days keeps everything");
+        let h = History::at(dir.clone()).unwrap().with_keep_days(30);
+        assert_eq!(h.prune(now).unwrap(), 1);
+        assert!(
+            !dir.join("audio/old").exists(),
+            "the recording and its empty day folder"
+        );
+        assert!(dir.join("audio/new/b.ogg").exists());
+        let left = fs::read_to_string(dir.join("history.jsonl")).unwrap();
+        assert!(left.contains("no time") && left.contains("new") && !left.contains(r#""old""#));
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn recent_lists_newest_first_and_delete_removes_line_and_recording() {
