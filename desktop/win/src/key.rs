@@ -192,11 +192,23 @@ pub fn describe(engines: &Engines) -> String {
     out
 }
 
+/// A key: the process environment first (a developer's setup keeps working), then Windows Credential Manager
+/// (where the app saves keys, D-046), then the Windows user environment.
 fn read(var: &str) -> String {
-    std::env::var(var)
-        .ok()
-        .filter(|k| !k.trim().is_empty())
-        .or_else(|| user_env(var))
+    let env = |v: &str| std::env::var(v).ok();
+    let store = |v: &str| crate::keystore::get(v);
+    let user = |v: &str| user_env(v);
+    read_from(&[&env, &store, &user], var)
+}
+
+/// One place a key can come from.
+type Source<'a> = &'a dyn Fn(&str) -> Option<String>;
+
+/// The first non-blank value from `sources`, in order; "" when none has one.
+fn read_from(sources: &[Source], var: &str) -> String {
+    sources
+        .iter()
+        .find_map(|get| get(var).filter(|k| !k.trim().is_empty()))
         .unwrap_or_default()
 }
 
@@ -232,6 +244,25 @@ mod tests {
         );
         assert!(choose(None, false).unwrap().format.is_none());
         assert!(choose(Some("nope"), true).is_err());
+    }
+
+    #[test]
+    fn environment_beats_credential_manager() {
+        let env = |_: &str| Some("from-env".to_string());
+        let store = |_: &str| Some("from-store".to_string());
+        assert_eq!(read_from(&[&env, &store], "K"), "from-env");
+        let blank = |_: &str| Some("  ".to_string());
+        assert_eq!(read_from(&[&blank, &store], "K"), "from-store");
+    }
+
+    #[test]
+    fn credential_manager_beats_user_env() {
+        let none = |_: &str| None;
+        let store = |_: &str| Some("from-store".to_string());
+        let user = |_: &str| Some("from-user".to_string());
+        assert_eq!(read_from(&[&none, &store, &user], "K"), "from-store");
+        assert_eq!(read_from(&[&none, &none, &user], "K"), "from-user");
+        assert_eq!(read_from(&[&none, &none, &none], "K"), "");
     }
 
     use crate::settings::Settings;

@@ -290,7 +290,7 @@ M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR 
 
 1. **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
    (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Go-ahead
-   and the 5 decisions given 2026-11-06 (D-044). Phase 1 in progress: `config.toml` settings (D-045) and the main model + fallbacks from them done. Phase 2 (Tauri) needs ~10 GB free on C: (6.4 GB on 2026-11-06).
+   and the 5 decisions given 2026-11-06 (D-044). Phase 1 in progress: `config.toml` settings (D-045), the main model + fallbacks from them, and keys in Credential Manager (`--key`, D-046) done. Phase 2 (Tauri) needs ~10 GB free on C: (6.4 GB on 2026-11-06).
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.

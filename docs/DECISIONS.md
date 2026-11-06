@@ -524,3 +524,15 @@ through a temporary file. *Why:* M2's settings page saves many values; a line-by
 be fragile, and M1's one-line file is valid TOML, so it still loads. Cost: comments a user wrote by hand are
 not kept when the app saves (only its own header). *Where:* `desktop/win/src/settings.rs`, `setkey.rs`
 (`load`, `from_settings`, `save`).
+
+**D-046 API keys are kept in Windows Credential Manager; the environment still comes first.** (2026-11-06)
+Each key is a generic credential `SonicScript/<ENV_NAME>` (`GEMINI_API_KEY`, `GROQ_API_KEY`,
+`OPENAI_API_KEY`), persisted for this Windows user, written by `sonicscript --key <provider>` (typed without
+echo; only the last 4 characters are shown back) and later by the settings window. Read order: the process
+environment, then Credential Manager, then the Windows user environment (`HKCU\Environment`). *Why:*
+blueprint §5.2 (BYOK in the OS keystore): a friend should paste a key into the app, not set environment
+variables, and Credential Manager keeps it out of plain-text files. The environment stays first so a
+developer's setup (and `eval`, which reads the same variables) keeps working. Cost: a key in the environment
+silently wins over one saved in the app; `--key` says so when both exist. *Where:* `desktop/win/src/keystore.rs`
+(`get`, `set`, `delete`, `command`), `key.rs` (`read`, `read_from`), `main.rs`.
+

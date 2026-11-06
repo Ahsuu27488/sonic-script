@@ -16,6 +16,12 @@
   settings too, and `--format` / `--no-format` / `--no-sound` / `--no-history` override them for one run;
   `--bench` ignores the settings (comparable runs). Checked: 5 tests (red with the settings ignored), a real
   clip with `main_model = "gemini-3.5-flash-lite"` (Flash-Lite answered) and `main_model = "gemini-9"` (notice).
+- Keys in Windows Credential Manager (D-046, `keystore.rs`): `sonicscript --key gemini|groq|openai` asks for
+  the key without showing it and saves it as `SonicScript/<ENV_NAME>`; `--delete` removes it. Keys are read
+  from the process environment, then Credential Manager, then the Windows user environment. Checked: read-order
+  tests (red when reversed), the real Credential Manager round trip (`-- --ignored`), and a wrong Gemini key
+  saved with `--key` and the process variable cleared: HTTP 400 "API key not valid" (the saved key beat the
+  user environment); after `--delete` the same clip came back right.
 
 ## 2026-11-06 · docs/m2-plan (D-044)
 

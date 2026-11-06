@@ -17,6 +17,7 @@ mod hotkey;
 #[cfg(windows)]
 mod inject;
 mod key;
+mod keystore;
 mod models;
 #[cfg(windows)]
 mod mywords;
@@ -55,7 +56,8 @@ Your words (names and terms to always get right): %APPDATA%\\SonicScript\\words.
   sonicscript --words-add <file>...           add the words in text files (any list works)
   sonicscript --words-paste                   add the words on the clipboard (e.g. your AI assistant's answer)
   sonicscript --words-suggest                 pick names from your dictation history to add
-Keys come from GROQ_API_KEY / GEMINI_API_KEY (this console or your Windows user environment).";
+Keys: sonicscript --key gemini|groq|openai saves one in Windows Credential Manager (--delete removes it);
+GROQ_API_KEY / GEMINI_API_KEY in the environment are used first.";
 
 fn main() -> ExitCode {
     // Text and status symbols are UTF-8; the console's default code page would garble them.
@@ -92,6 +94,16 @@ fn main() -> ExitCode {
         cue::set_enabled(false);
     }
     if let Some(result) = setkey::command(&args) {
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        };
+    }
+    #[cfg(windows)]
+    if let Some(result) = keystore::command(&args) {
         return match result {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
