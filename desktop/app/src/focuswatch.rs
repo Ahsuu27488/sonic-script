@@ -58,9 +58,9 @@ fn read(e: &IUIAutomationElement) -> Option<Focus> {
 }
 
 /// Starts watching on a thread of its own; every focus change sends `Some(focus)`, or `None` when the element
-/// could not be read. Returns an error when UI Automation is not available.
-pub fn start(tx: Sender<Option<Focus>>) -> std::result::Result<(), String> {
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+/// could not be read. Never waits: registering the handler needs the app's main thread to be running (it
+/// hangs when the caller blocks the main thread waiting for it), so a failure is reported through `failed`.
+pub fn start(tx: Sender<Option<Focus>>, failed: impl FnOnce(String) + Send + 'static) {
     std::thread::spawn(move || {
         // SAFETY: COM is set up for this thread before any COM call; the automation object and the handler
         // live for the rest of the process (this thread parks forever).
@@ -78,18 +78,13 @@ pub fn start(tx: Sender<Option<Focus>>) -> std::result::Result<(), String> {
         };
         match started {
             Ok(keep) => {
-                let _ = ready_tx.send(Ok(()));
+                crate::popup::debug_log("focuswatch: started");
                 let _keep = keep;
                 loop {
                     std::thread::park();
                 }
             }
-            Err(e) => {
-                let _ = ready_tx.send(Err(format!("UI Automation is not available: {e}")));
-            }
+            Err(e) => failed(format!("UI Automation is not available: {e}")),
         }
     });
-    ready_rx
-        .recv()
-        .map_err(|_| "the focus watcher stopped".to_string())?
 }

@@ -2,6 +2,20 @@
 //! element gets the pill, and where the pill goes. `focuswatch.rs` reads the focused element; `popupwin.rs`
 //! shows the pill.
 
+/// Debug builds: appends a line to the file named by `SONICSCRIPT_DEBUG_LOG` (checks of the focus watcher).
+pub fn debug_log(line: &str) {
+    if cfg!(debug_assertions)
+        && let Some(path) = std::env::var_os("SONICSCRIPT_DEBUG_LOG")
+        && let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "{line}");
+    }
+}
+
 /// A screen rectangle in physical pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Rect {

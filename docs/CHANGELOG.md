@@ -3,11 +3,12 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
-## 2026-11-06 (feat/m2-popup-mic, in progress)
+## 2026-11-06 (feat/m2-popup-mic)
 
 - Pop-up mic (M2 phase 5) started: a click starts or stops a recording like a key tap (`Machine::click`,
   `hotkey::click`); the rules for which focused field gets the pill and where it goes (`popup.rs`); the UI
-  Automation focus watcher and the pill window, wired into the tray app (`--popup-preview` in debug builds).
+  Automation focus watcher and the pill window, wired into the tray app (`--popup-preview` in debug builds). The watcher no longer makes Tauri's setup
+  wait (it hung the registration). Checked on a test window: shown, hidden on a password box, focus kept on a click.
 
 ## 2026-11-06 (feat/m2-settings-ui)
 

@@ -211,7 +211,7 @@ fn redraw(app: &AppHandle) {
 }
 
 /// Shows a problem that is not a dictation event (a menu action failed).
-fn problem(app: &AppHandle, why: String) {
+pub(crate) fn problem(app: &AppHandle, why: String) {
     TraySink(app.clone()).send(Event::Warning(why));
 }
 

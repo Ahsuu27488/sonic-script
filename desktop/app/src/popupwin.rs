@@ -44,7 +44,11 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
     crate::hudwin::native::no_activate(&w);
     app.manage(PopupState::default());
     let (tx, rx) = mpsc::channel();
-    crate::focuswatch::start(tx)?;
+    let handle = app.clone();
+    crate::focuswatch::start(tx, move |e| {
+        crate::popup::debug_log(&e);
+        crate::problem(&handle, format!("The pop-up mic is off: {e}"));
+    });
     let app = app.clone();
     std::thread::spawn(move || follow(app, rx));
     Ok(())
@@ -62,6 +66,13 @@ fn follow(app: AppHandle, rx: mpsc::Receiver<Option<Focus>>) {
             continue;
         }
         let (s, _) = settings::load();
+        crate::popup::debug_log(&format!(
+            "popup: focus {:?} -> {}",
+            focus,
+            focus
+                .as_ref()
+                .is_some_and(|f| popup::shows(f, s.popup_mic, &s.popup_off_apps, own))
+        ));
         match focus.filter(|f| popup::shows(f, s.popup_mic, &s.popup_off_apps, own)) {
             Some(f) => {
                 if let Some(state) = app.try_state::<PopupState>()
@@ -116,7 +127,11 @@ pub fn popup_not_here(app: AppHandle) -> Result<String, String> {
         .ok_or("no app to turn it off for")?;
     let path = settings::path()?;
     let (mut s, _) = settings::Settings::read(&path)?;
-    if !s.popup_off_apps.iter().any(|a| a.eq_ignore_ascii_case(&exe)) {
+    if !s
+        .popup_off_apps
+        .iter()
+        .any(|a| a.eq_ignore_ascii_case(&exe))
+    {
         s.popup_off_apps.push(exe.clone());
     }
     s.save(&path).map_err(|e| e.to_string())?;
