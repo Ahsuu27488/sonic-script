@@ -38,6 +38,13 @@ checked, after a live paste of the whole format prompt.
 
 ## What works (verified)
 
+- **HUD Voice Ring (M2 phase 3, in progress on `feat/m2-hud`, not reviewed, no PR yet):** `desktop/app/src/hud.rs`
+  (what the pill shows per event, tested), `hudwin.rs` (hidden topmost no-activate click-through window, shown
+  bottom-centre of the foreground window's monitor), `ui/hud.{html,css,js}` + Geist fonts (OFL). Checked:
+  `sonicscript-tray --hud-demo` ran every state, the foreground window never changed (0 moves). Not yet:
+  screenshots of the states, a real dictation, reduced motion, two monitors, D-048 (solid pill instead of
+  acrylic: acrylic fills the whole rectangular window), docs, reviewer, PR.
+
 - **Tray app (M2 phase 2, D-047, branch `feat/m2-tray`):** `cd desktop && cargo run -p sonicscript-app`
   (debug: with a console showing M1's lines) or `target\release\sonicscript-tray.exe` (no console). Runs
   dictation with the user's settings; tray icon = the Voice Ring per state; tooltip / first menu line say the

@@ -251,6 +251,48 @@ ui/settings.html, src/main.rs, src/tray.rs, src/autostart.rs}`; add `app` to the
   paste lands in Notepad, Chrome, Windows Terminal with the HUD up (focus never moves: checked with
   `GetForegroundWindow` before and after); reduced motion; two monitors.
 
+Detailed tasks (written 2026-11-06 when the phase started; C: 35 GB free).
+
+### Task 3.1: what the HUD shows, pure (`desktop/app/src/hud.rs`)
+
+**Interfaces:** `hud::Kind` (`Listening`, `Writing`, `Inserted`, `Copied`, `Problem`), `hud::Tone` (`Accent`,
+`Ok`, `Warn`, `Danger`), `hud::View { kind, tone, label: String, hide_after_ms: Option<u64> }` (serialised to
+the web view), `hud::Hud::apply(&mut self, &Event) -> Change` with `Change::{None, Show(View), Hide}`.
+- Listening → Listening (accent, no timeout); Processing → Writing "Writing…"; Text pasted → Inserted
+  (ok, 600 ms); copied → Copied "Copied: press Ctrl+V" (2.5 s); paste failed → Problem (danger, 5 s);
+  NoSpeech / HintOnly → Problem (warn, "No speech heard" / "Nothing to type", 1.8 s); Failed → Problem
+  (danger, the first line, 6 s); Cancelled → Hide; a Notice starting "! " (limit notes) → Problem (warn, its
+  first sentence, 4 s) unless recording; Ready / Warning / other Notices / CapReached → None (the tray shows them).
+- A job's end while the next recording runs (a slow answer) never replaces Listening (as the tray, D-047).
+- Never puts dictated text in a view (the label is ours).
+- [ ] Failing tests: `a_dictation_shows_listening_writing_inserted`, `copied_and_failed_paste`,
+  `failures_show_their_first_line_not_the_text`, `cancel_hides`, `slow_answer_keeps_listening`,
+  `limit_notice_warns`, `startup_notices_do_not_show`. → FAIL → implement → PASS.
+
+### Task 3.2: the HUD window (`desktop/app/src/hudwin.rs`, `ui/hud.{html,css,js}`, fonts)
+
+- One window `hud`, built hidden at start (shown instantly later): transparent, no decorations, always on
+  top, skip taskbar, not focusable, click-through (`set_ignore_cursor_events`); after build its style gets
+  `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`. Shown with `ShowWindow(SW_SHOWNOACTIVATE)` and
+  placed with `SetWindowPos(.., SWP_NOACTIVATE)`: bottom-centre of the work area of the monitor holding the
+  foreground window, its bottom 12% up; size in that monitor's DPI.
+- The window is wider than the widest pill (420 x 72 logical, transparent): the pill's width animates in
+  CSS with no window resize. Glass: DESIGN.md's solid `--surface-2` form (see D-048).
+- `ui/hud.js`: listens for `hud` / `hud-hide` events (`withGlobalTauri`), polls the `level` command each
+  frame while listening (smoothing: attack 40 ms, release 180 ms), runs the timer (Geist Mono), plays one
+  shimmer while writing, the tick on inserted; the label in an `aria-live="polite"` region;
+  `prefers-reduced-motion`: static ring whose opacity follows the level, no shimmer.
+- Geist + Geist Mono (OFL) bundled as woff2 in `ui/fonts/` with their licence.
+- `HudSink` = the tray sink + the HUD: hide timers carry a generation number, so an old timer never hides a
+  newer view.
+- `--hud-demo` (debug aid): runs every state with made-up events and prints `GetForegroundWindow` before and
+  after each show (the focus check without a real key press).
+
+### Task 3.3: the real check, docs, PR
+- [ ] `--hud-demo` over Notepad: the foreground window is the same before and after every state; screenshots of
+  each state (dark; light; reduced motion). A real dictation through the tray (owner: real key).
+- [ ] fmt, clippy `-D warnings`, tests; docs (STATUS, CHANGELOG, ARCHITECTURE, D-048); PR; Auto-fix on.
+
 ## Phase 4: the settings window (T2: stores keys; `feat/m2-settings-ui`)
 
 DESIGN.md "Settings window", 760 x 540, sidebar → tabs under 560 px, light and dark:

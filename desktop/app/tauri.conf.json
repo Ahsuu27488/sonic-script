@@ -7,9 +7,10 @@
     "frontendDist": "ui"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; style-src 'self'"
+      "csp": "default-src 'self'; style-src 'self'; font-src 'self'"
     }
   },
   "bundle": {

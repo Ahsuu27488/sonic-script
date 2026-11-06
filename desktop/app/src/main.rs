@@ -5,6 +5,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod autostart;
+mod hud;
+mod hudwin;
 mod tray;
 
 use std::sync::{Arc, Mutex};
@@ -42,18 +44,31 @@ impl Sink for TraySink {
         if changed {
             redraw(&self.0);
         }
+        hudwin::apply(&self.0, &e);
     }
 }
 
 fn main() {
-    tauri::Builder::default()
-        // A second start opens the first one's settings instead of a second dictation (Review Focus 4).
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+    // `--hud-demo`: shows every HUD state with made-up events instead of dictating (task 3.2's focus check).
+    let demo = std::env::args().any(|a| a == "--hud-demo");
+    let mut builder = tauri::Builder::default();
+    // A second start opens the first one's settings instead of a second dictation (Review Focus 4). The demo
+    // never dictates (no key hook), so it may run next to the real app.
+    if !demo {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
             open_settings(app)
-        }))
-        .setup(|app| {
+        }));
+    }
+    builder
+        .invoke_handler(tauri::generate_handler![hudwin::level])
+        .setup(move |app| {
             build_tray(app.handle())?;
-            start_dictation(app.handle().clone());
+            hudwin::build(app.handle())?;
+            if demo {
+                hud_demo(app.handle().clone());
+            } else {
+                start_dictation(app.handle().clone());
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -230,5 +245,69 @@ fn start_dictation(app: AppHandle) {
                 lines: vec![format!("Dictation stopped: {e}")],
             });
         }
+    });
+}
+
+/// Runs every HUD state with made-up events and prints whether the window in front stayed the same (it must:
+/// the paste goes there). Put Notepad in front within 3 s of starting it.
+fn hud_demo(app: AppHandle) {
+    use sonicscript::events::Paste;
+    std::thread::spawn(move || {
+        let sink = TraySink(app.clone());
+        let listening = || Event::Listening {
+            device: "demo".into(),
+            rate: 48000,
+            mic_ms: 2,
+            prepared: true,
+        };
+        let text = |paste| Event::Text {
+            text: String::new(),
+            paste,
+            details: String::new(),
+        };
+        let steps: Vec<(Event, u64)> = vec![
+            (listening(), 2500),
+            (Event::Processing, 1500),
+            (text(Paste::Pasted(300)), 1500),
+            (listening(), 1200),
+            (Event::Processing, 800),
+            (text(Paste::Copied("administrator window".into())), 3200),
+            (listening(), 1000),
+            (Event::Processing, 500),
+            (Event::NoSpeech { seconds: 1.0 }, 2500),
+            (
+                Event::Failed {
+                    lines: vec!["! Nothing typed: no model answered.".into()],
+                },
+                3000,
+            ),
+            (
+                Event::Notice(
+                    "! gemini-3.5-transcribe+gptoss20b has used up today's free requests. More."
+                        .into(),
+                ),
+                3000,
+            ),
+            (listening(), 1500),
+            (Event::Cancelled, 1000),
+        ];
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        let mut moved = 0;
+        for (e, wait) in steps {
+            let before = hudwin::native::foreground();
+            let name = format!("{e:?}");
+            sink.send(e);
+            std::thread::sleep(std::time::Duration::from_millis(wait));
+            let after = hudwin::native::foreground();
+            let same = before == after;
+            moved += usize::from(!same);
+            println!(
+                "hud-demo: {:<40} foreground {before:#x} -> {after:#x} {}",
+                name.chars().take(40).collect::<String>(),
+                if same { "same" } else { "MOVED" }
+            );
+        }
+        println!("hud-demo: done, focus moved {moved} times");
+        app.exit(0);
     });
 }
