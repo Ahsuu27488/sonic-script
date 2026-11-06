@@ -581,3 +581,24 @@ for a friend who only flips a switch. *Where:* `desktop/app/src/prefs.rs`, `desk
 (`source`), `history.rs` (`recent`, `delete`), `mywords.rs` (`preview`, `add`), `desktop/core/src/api.rs`
 (`test_key`), `spec.rs` (`provider`).
 
+**D-050 The pop-up mic: a click is a tap, terminals always off, the pill below the field's right end.**
+(2026-11-06) M2 phase 5 builds D-016. (1) A click on the pill does what a tap of the dictation key does
+(`Machine::click`): it starts a recording in toggle mode, and the key, Enter or another click stops it; Esc
+cancels. It never starts the mic by itself. (2) The pill shows on a focused element that UI Automation calls
+an Edit, Document or ComboBox with a Value pattern that is not read-only, never on a password field or a
+disabled one, never in Windows Terminal or a console window (by window class or by the host program:
+`WindowsTerminal.exe`, `OpenConsole.exe`, `conhost.exe`; no setting to turn terminals on yet), not over our own
+windows (our process, or our program in front: the settings page runs in WebView2's process), and not in an
+app on `popup_off_apps` (the pill's x adds the app; Settings → General lists them with "Turn on"). The app is
+the focused element's own process, so a UWP app is not "ApplicationFrameHost". (3) It goes just below the
+field's right end, or inside its bottom-right corner when there is no room below or the field is taller than
+160 px (editors). (4) Like the HUD it never takes the focus (`WS_EX_NOACTIVATE`): a click leaves the keyboard
+focus in the field. (5) The UI Automation handler is registered on its own thread without the caller waiting:
+waiting from Tauri's setup hung the registration (it needs the main thread running); its properties come in the
+event's cache (one call into the focused app per event). (6) The settings page never writes `popup_off_apps`
+back: the file's list wins (the pill's x writes it directly), and a `config.toml` that cannot be read keeps the
+pill's last good settings.
+*Why:* the plan's Phase 5 list; (5) was found in the first real run. *Where:* `desktop/core/src/keys.rs`
+(`click`), `desktop/win/src/hotkey.rs` (`click`), `inject.rs` (`is_terminal`), `desktop/app/src/popup.rs`,
+`focuswatch.rs`, `popupwin.rs`, `ui/popup.*`.
+

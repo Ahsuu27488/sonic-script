@@ -38,6 +38,15 @@ checked, after a live paste of the whole format prompt.
 
 ## What works (verified)
 
+- **Pop-up mic (M2 phase 5, D-016, D-050, branch `feat/m2-popup-mic`):** when a text field gets the focus, a
+  small Voice Ring shows just below its right end; a click starts a recording (as a tap of the key) and another
+  click, the key or Enter stops it. Never on password fields, in terminals, or in apps turned off with its x
+  (Settings → General switches it off everywhere and lists the apps turned off, with Turn on). Checked
+  2026-11-06, before and after the review fixes, on a test window of its own
+  (`--popup-preview`, scratch settings): shown under the text box, hidden on the password box, a click left the
+  focus in the text box, hidden when the window closed. Not checked: Chrome, VS Code, the Claude app, WhatsApp,
+  a dictation started by a click (the owner).
+
 - **Settings window (M2 phase 4, D-049, branch `feat/m2-settings-ui`):** tray menu → Settings…: General
   (dictation key: Change, then press it; formatting, sounds, start with Windows, pop-up mic switches), Models &
   keys (Gemini / Groq / OpenAI keys: save, test, remove, "Get a key"; main model + 2 fallbacks from the
@@ -238,7 +247,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-06, `feat/m2-settings-ui`):** `eval`: 42 offline tests, ruff clean; `desktop`: 94 core + 51 `win` + 25 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-06, `feat/m2-popup-mic`):** `eval`: 42 offline tests, ruff clean; `desktop`: 95 core + 53 `win` + 31 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -322,7 +331,7 @@ M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR 
 
 1. **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
    (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Go-ahead
-   and the 5 decisions given 2026-11-06 (D-044). Phase 1 done on `feat/m2-settings` (PR #36, base PR #35): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Phase 2 (tray) built on `feat/m2-tray` (PR based on `feat/m2-settings`): the tray app `sonicscript-tray.exe` (D-047). Not checked yet: a dictation by the real key through the tray, Start with Windows after a real sign-in (the owner). Phase 3 (HUD Voice Ring, D-048) built on `feat/m2-hud`; not checked yet: a real dictation with the HUD (the owner). Phase 4 (settings window, D-049) built on `feat/m2-settings-ui` (PR based on `feat/m2-hud`); not checked yet: a dictation after a settings change in the running tray app (the owner). Next: Phase 5 (pop-up mic). C: had 26 GB free after the Tauri builds (2026-11-06).
+   and the 5 decisions given 2026-11-06 (D-044). Phase 1 done on `feat/m2-settings` (PR #36, base PR #35): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Phase 2 (tray) built on `feat/m2-tray` (PR based on `feat/m2-settings`): the tray app `sonicscript-tray.exe` (D-047). Not checked yet: a dictation by the real key through the tray, Start with Windows after a real sign-in (the owner). Phase 3 (HUD Voice Ring, D-048) built on `feat/m2-hud`; not checked yet: a real dictation with the HUD (the owner). Phase 4 (settings window, D-049) built on `feat/m2-settings-ui` (PR based on `feat/m2-hud`); not checked yet: a dictation after a settings change in the running tray app (the owner). Phase 5 (pop-up mic, D-050) built on `feat/m2-popup-mic` (PR based on `feat/m2-settings-ui`); not checked yet: the pill in the owner's apps (Chrome, VS Code, Claude, WhatsApp) and a dictation started by a click. Next: Phase 6 (reliability). C: had 26 GB free after the Tauri builds (2026-11-06).
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.

@@ -382,8 +382,31 @@
     b.addEventListener("click", () => call("open_link", { url: b.dataset.link }).catch(fail));
   }
 
+  // The apps where the pill's x turned the pop-up mic off.
+  function renderOffApps() {
+    const apps = settings.popup_off_apps || [];
+    $("off-apps").hidden = apps.length === 0;
+    $("off-apps-list").replaceChildren(
+      ...apps.map((exe) => {
+        const on = el("button", { className: "btn ghost", textContent: "Turn on", type: "button" });
+        on.setAttribute("aria-label", "Turn the mic on in " + exe);
+        on.addEventListener("click", async () => {
+          try {
+            settings.popup_off_apps = await call("popup_app_on", { exe });
+            renderOffApps();
+            toast("Saved");
+          } catch (e) {
+            fail(e);
+          }
+        });
+        return el("li", {}, el("span", { className: "mono", textContent: exe }), on);
+      }),
+    );
+  }
+
   // ---- render ----
   function render() {
+    renderOffApps();
     for (const box of document.querySelectorAll("[data-setting]")) box.checked = !!settings[box.dataset.setting];
     $("history-days").value = settings.history_days;
     renderModels();

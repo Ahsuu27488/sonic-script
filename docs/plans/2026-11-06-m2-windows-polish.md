@@ -19,6 +19,8 @@
   the plan (D-048): the pill is solid `--surface-2`, no acrylic.
 - 2026-11-06: Phase 4 built on `feat/m2-settings-ui` (tasks 4.1-4.4; 4.5 checked in the real window over DevTools,
   14 of 14). Choices in D-049 (saves at once, Test key = model list).
+- 2026-11-06: Phase 5 built on `feat/m2-popup-mic` (tasks 5.1-5.3; 5.4 checked on a test window of its own).
+  Choices in D-050.
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").
@@ -360,6 +362,31 @@ the focus back.
 - **Check:** shows in Notepad, Chrome text box, VS Code editor, Claude app input, WhatsApp desktop; not on a
   password field (Chrome sign-in page), not in Windows Terminal; never steals focus; CPU while switching
   windows noted.
+
+Detailed tasks (written 2026-11-06; branch from `feat/m2-settings-ui`, PR #39 open).
+
+### Task 5.1: a click acts like a tap (`core`, `win`)
+- `keys::Machine::click()`: idle → recording in toggle mode (`Start`); toggled → `Stop`; ignored while the key is
+  held. `hotkey::click()` runs it on the live hook (nothing while paused). Tests on both.
+
+### Task 5.2: which field gets the pill, and where (`desktop/app/src/popup.rs`, pure)
+- `editable(Focus)`: Edit / Document / ComboBox with a Value pattern that is not read-only (an Edit without one
+  too); never a password or a disabled element. `shows(...)`: the setting on, not our own process, not a
+  terminal (`inject::is_terminal`), not in `popup_off_apps`. `place(field, work, size, gap)`: below the field's
+  right end, else inside its bottom-right corner (tall editors, the screen's bottom), kept on the work area.
+
+### Task 5.3: the watcher and the window (`focuswatch.rs`, `popupwin.rs`, `ui/popup.*`)
+- UI Automation `AddFocusChangedEventHandler` on a COM (MTA) thread of its own; the handler reads control type,
+  enabled, password, Value pattern read-only, bounding rectangle and process id, plus the app in front, and
+  sends them on. It never blocks the caller (registering needs the main thread running).
+- The pill: a hidden 64 x 40 window (`WS_EX_NOACTIVATE`, topmost, not click-through) shown with
+  `SW_SHOWNOACTIVATE` next to the field on the field's monitor, at its DPI; the ring calls `popup_click`, the
+  small x (on hover) `popup_not_here`. The ring fills while a recording runs.
+- `--popup-preview` (debug builds): the pill alone, no dictation.
+
+### Task 5.4: the real check, docs, PR
+- A test window of the check's own (a text box and a password box): pill shown near the text box, hidden on
+  the password box, a click on it leaves the focus in the text box, hidden when the window closes.
 
 ## Phase 6: reliability (T1, `feat/m2-reliability`)
 
