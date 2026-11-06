@@ -69,13 +69,20 @@ pub fn editable(f: &Focus) -> bool {
     }
 }
 
+/// Programs that host terminals, whatever their window's class (D-016: no pill there). A shell's own text
+/// lives in one of these, never in `cmd.exe` / `pwsh.exe` (which may also show ordinary windows).
+const TERMINALS: [&str; 3] = ["WindowsTerminal.exe", "OpenConsole.exe", "conhost.exe"];
+
 /// Whether this focus gets the pill: the setting is on, the field is editable and not a password, it is not
-/// in a terminal (off by default, D-016), not one of our own windows, and not in an app the user turned off.
-pub fn shows(f: &Focus, popup_mic: bool, off_apps: &[String], own_pid: u32) -> bool {
+/// in a terminal (off by default, D-016), not one of our own windows (the settings page runs in WebView2's
+/// own process, so the program in front is checked too), and not in an app the user turned off.
+pub fn shows(f: &Focus, popup_mic: bool, off_apps: &[String], own_pid: u32, own_exe: &str) -> bool {
     popup_mic
         && f.pid != own_pid
+        && !f.exe.eq_ignore_ascii_case(own_exe)
         && editable(f)
         && !sonicscript::inject::is_terminal(&f.class)
+        && !TERMINALS.iter().any(|t| t.eq_ignore_ascii_case(&f.exe))
         && !off_apps.iter().any(|a| a.eq_ignore_ascii_case(&f.exe))
         && f.rect.width() > 8
         && f.rect.height() > 8
@@ -122,12 +129,15 @@ mod tests {
 
     #[test]
     fn editable_fields_get_the_pill() {
-        assert!(shows(&notepad(), true, &[], 1));
+        assert!(shows(&notepad(), true, &[], 1, "sonicscript-tray.exe"));
         let doc = Focus {
             control_type: DOCUMENT,
             ..notepad()
         };
-        assert!(shows(&doc, true, &[], 1), "a contenteditable document");
+        assert!(
+            shows(&doc, true, &[], 1, "sonicscript-tray.exe"),
+            "a contenteditable document"
+        );
     }
 
     #[test]
@@ -135,7 +145,7 @@ mod tests {
         let f = |change: fn(&mut Focus)| {
             let mut x = notepad();
             change(&mut x);
-            shows(&x, true, &[], 1)
+            shows(&x, true, &[], 1, "sonicscript-tray.exe")
         };
         assert!(!f(|x| x.password = true));
         assert!(!f(|x| x.value_read_only = Some(true)));
@@ -156,10 +166,37 @@ mod tests {
             class: "CASCADIA_HOSTING_WINDOW_CLASS".into(),
             ..notepad()
         };
-        assert!(!shows(&term, true, &[], 1));
-        assert!(!shows(&notepad(), true, &[], 42), "our own window");
-        assert!(!shows(&notepad(), true, &["NOTEPAD.EXE".into()], 1));
-        assert!(!shows(&notepad(), false, &[], 1));
+        assert!(!shows(&term, true, &[], 1, "sonicscript-tray.exe"));
+        assert!(
+            !shows(&notepad(), true, &[], 42, "sonicscript-tray.exe"),
+            "our own window"
+        );
+        assert!(!shows(
+            &notepad(),
+            true,
+            &["NOTEPAD.EXE".into()],
+            1,
+            "sonicscript-tray.exe"
+        ));
+        assert!(!shows(&notepad(), false, &[], 1, "sonicscript-tray.exe"));
+        // The settings page: WebView2's process, our program in front.
+        let ours = Focus {
+            exe: "SonicScript-Tray.exe".into(),
+            ..notepad()
+        };
+        assert!(!shows(&ours, true, &[], 1, "sonicscript-tray.exe"));
+        // Windows Terminal, whatever class its window has.
+        let wt = Focus {
+            exe: "WindowsTerminal.exe".into(),
+            ..notepad()
+        };
+        assert!(!shows(&wt, true, &[], 1, "sonicscript-tray.exe"));
+        // A window a PowerShell script shows is an ordinary app.
+        let form = Focus {
+            exe: "pwsh.exe".into(),
+            ..notepad()
+        };
+        assert!(shows(&form, true, &[], 1, "sonicscript-tray.exe"));
     }
 
     #[test]

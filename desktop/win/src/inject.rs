@@ -141,11 +141,17 @@ pub fn app_in_front() -> Option<(String, String)> {
 
 fn exe_name(hwnd: HWND) -> Option<String> {
     let mut pid = 0u32;
+    // SAFETY: plain Win32 call.
+    unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+    exe_of_pid(pid)
+}
+
+/// A process's program file name (`WhatsApp.exe`), when it can be read.
+pub fn exe_of_pid(pid: u32) -> Option<String> {
     let mut buf = [0u16; 1024];
     let mut len = buf.len() as u32;
     // SAFETY: plain Win32 calls; `buf` is writable for `len` characters; the handle is closed below.
     let ok = unsafe {
-        GetWindowThreadProcessId(hwnd, &mut pid);
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if process.is_null() {
             return None;

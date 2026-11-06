@@ -41,7 +41,8 @@ checked, after a live paste of the whole format prompt.
 - **Pop-up mic (M2 phase 5, D-016, D-050, branch `feat/m2-popup-mic`):** when a text field gets the focus, a
   small Voice Ring shows just below its right end; a click starts a recording (as a tap of the key) and another
   click, the key or Enter stops it. Never on password fields, in terminals, or in apps turned off with its x
-  (Settings → General switches it off everywhere). Checked 2026-11-06 on a test window of its own
+  (Settings → General switches it off everywhere and lists the apps turned off, with Turn on). Checked
+  2026-11-06, before and after the review fixes, on a test window of its own
   (`--popup-preview`, scratch settings): shown under the text box, hidden on the password box, a click left the
   focus in the text box, hidden when the window closed. Not checked: Chrome, VS Code, the Claude app, WhatsApp,
   a dictation started by a click (the owner).
@@ -246,7 +247,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-06, `feat/m2-popup-mic`):** `eval`: 42 offline tests, ruff clean; `desktop`: 95 core + 53 `win` + 29 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-06, `feat/m2-popup-mic`):** `eval`: 42 offline tests, ruff clean; `desktop`: 95 core + 53 `win` + 31 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup

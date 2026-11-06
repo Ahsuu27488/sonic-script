@@ -13,7 +13,9 @@
 - Pop-up mic (M2 phase 5) started: a click starts or stops a recording like a key tap (`Machine::click`,
   `hotkey::click`); the rules for which focused field gets the pill and where it goes (`popup.rs`); the UI
   Automation focus watcher and the pill window, wired into the tray app (`--popup-preview` in debug builds). The watcher no longer makes Tauri's setup
-  wait (it hung the registration). Checked on a test window: shown, hidden on a password box, focus kept on a click.
+  wait (it hung the registration). Checked on a test window: shown, hidden on a password box, focus kept on a click. Review
+  fixes: properties read from the event's cache, the app from the focused element's own process, never over
+  our settings page, the settings page no longer undoes the pill's x (and lists those apps with Turn on).
 
 ## 2026-11-06 (feat/m2-settings-ui)
 

@@ -96,12 +96,17 @@ fn main() {
             prefs::open_link,
             popupwin::popup_click,
             popupwin::popup_not_here,
+            popupwin::popup_app_on,
         ])
         .setup(move |app| {
             build_tray(app.handle())?;
             hudwin::build(app.handle())?;
-            // Without UI Automation the pop-up mic never shows; dictation by the key still works.
-            if let Err(e) = popupwin::start(app.handle()) {
+            // Without UI Automation the pop-up mic never shows; dictation by the key still works. The other
+            // previews never show it (they may run next to the real app: two pills).
+            if !demo
+                && (!preview || popup_only)
+                && let Err(e) = popupwin::start(app.handle())
+            {
                 problem(app.handle(), format!("The pop-up mic is off: {e}"));
             }
             if demo {

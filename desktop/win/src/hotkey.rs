@@ -166,7 +166,7 @@ fn clicked(hook: &Hook) -> bool {
     let Ok(mut machine) = hook.machine.lock() else {
         return false;
     };
-    if hook.paused.load(Ordering::Relaxed) {
+    if idle(hook) {
         return false;
     }
     match (machine.click(), hook.live.lock()) {

@@ -57,6 +57,13 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
 /// Shows or hides the pill for each focus change (only the newest of a burst).
 fn follow(app: AppHandle, rx: mpsc::Receiver<Option<Focus>>) {
     let own = std::process::id();
+    let own_exe = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .unwrap_or_default();
+    // A config.toml that cannot be read keeps the last good settings (not the defaults: the pill on
+    // everywhere again).
+    let mut last = settings::load().0;
     while let Ok(mut focus) = rx.recv() {
         while let Ok(newer) = rx.try_recv() {
             focus = newer;
@@ -65,15 +72,24 @@ fn follow(app: AppHandle, rx: mpsc::Receiver<Option<Focus>>) {
         if focus.as_ref().is_some_and(|f| f.pid == own) {
             continue;
         }
-        let (s, _) = settings::load();
+        if let Ok(path) = settings::path()
+            && let Ok((s, _)) = settings::Settings::read(&path)
+        {
+            last = s;
+        }
+        let s = &last;
         crate::popup::debug_log(&format!(
             "popup: focus {:?} -> {}",
             focus,
-            focus
-                .as_ref()
-                .is_some_and(|f| popup::shows(f, s.popup_mic, &s.popup_off_apps, own))
+            focus.as_ref().is_some_and(|f| popup::shows(
+                f,
+                s.popup_mic,
+                &s.popup_off_apps,
+                own,
+                &own_exe
+            ))
         ));
-        match focus.filter(|f| popup::shows(f, s.popup_mic, &s.popup_off_apps, own)) {
+        match focus.filter(|f| popup::shows(f, s.popup_mic, &s.popup_off_apps, own, &own_exe)) {
             Some(f) => {
                 if let Some(state) = app.try_state::<PopupState>()
                     && let Ok(mut exe) = state.exe.lock()
@@ -115,6 +131,16 @@ fn on_main(app: &AppHandle, f: impl FnOnce(&WebviewWindow) + Send + 'static) {
 #[tauri::command]
 pub fn popup_click() -> bool {
     sonicscript::hotkey::click()
+}
+
+/// "Turn on again" in the settings window: takes a program off `popup_off_apps`; the list left.
+#[tauri::command]
+pub fn popup_app_on(exe: String) -> Result<Vec<String>, String> {
+    let path = settings::path()?;
+    let (mut s, _) = settings::Settings::read(&path)?;
+    s.popup_off_apps.retain(|a| !a.eq_ignore_ascii_case(&exe));
+    s.save(&path).map_err(|e| e.to_string())?;
+    Ok(s.popup_off_apps)
 }
 
 /// "Not in this app": adds the program to `popup_off_apps` and hides the pill.

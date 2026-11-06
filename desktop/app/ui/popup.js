@@ -11,8 +11,17 @@
   mic.addEventListener("mousedown", (e) => {
     if (e.button !== 0 || !invoke) return;
     e.preventDefault();
-    invoke("popup_click");
+    invoke("popup_click").then((started) => {
+      // Dictation is paused or not running: say so with a small shake instead of nothing.
+      if (!started) {
+        bar.classList.remove("nope");
+        void bar.offsetWidth;
+        bar.classList.add("nope");
+      }
+    });
   });
+  // The x must not take the focus either (its press would move it from the user's field).
+  off.addEventListener("mousedown", (e) => e.preventDefault());
   off.addEventListener("click", () => invoke && invoke("popup_not_here"));
 
   window.popupRecording = (on) => {
