@@ -5,9 +5,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod autostart;
+mod focuswatch;
 mod hud;
 mod hudwin;
 mod popup;
+mod popupwin;
 mod prefs;
 mod tray;
 
@@ -47,6 +49,7 @@ impl Sink for TraySink {
             redraw(&self.0);
         }
         hudwin::apply(&self.0, &e);
+        popupwin::apply(&self.0, &e);
     }
 }
 
@@ -56,6 +59,9 @@ fn main() {
     // `--settings-preview` (debug builds): only the settings window, no dictation (checks of the page with
     // `APPDATA` / `LOCALAPPDATA` pointed at a scratch folder).
     let preview = cfg!(debug_assertions) && std::env::args().any(|a| a == "--settings-preview");
+    // `--popup-preview` (debug builds): only the pop-up mic, no dictation (checks of where it shows).
+    let popup_only = cfg!(debug_assertions) && std::env::args().any(|a| a == "--popup-preview");
+    let preview = preview || popup_only;
     let mut builder = tauri::Builder::default();
     // A second start opens the first one's settings instead of a second dictation (Review Focus 4). The demo
     // and the preview never dictate (no key hook), so they may run next to the real app.
@@ -86,12 +92,20 @@ fn main() {
             prefs::history_reinsert,
             prefs::autostart_set,
             prefs::open_link,
+            popupwin::popup_click,
+            popupwin::popup_not_here,
         ])
         .setup(move |app| {
             build_tray(app.handle())?;
             hudwin::build(app.handle())?;
+            // Without UI Automation the pop-up mic never shows; dictation by the key still works.
+            if let Err(e) = popupwin::start(app.handle()) {
+                problem(app.handle(), format!("The pop-up mic is off: {e}"));
+            }
             if demo {
                 hud_demo(app.handle().clone());
+            } else if popup_only {
+                // Only the pill: no settings window, no dictation.
             } else if preview {
                 open_settings(app.handle());
             } else {

@@ -9,7 +9,7 @@ use sonicscript::events::Event;
 use sonicscript::settings;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::popup::{self, Focus, Rect};
+use crate::popup::{self, Focus};
 
 pub const LABEL: &str = "popup";
 /// The window in logical pixels: the 36 px ring, then the 20 px "Not in this app" button.
