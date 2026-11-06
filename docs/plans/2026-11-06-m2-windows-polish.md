@@ -311,6 +311,43 @@ DESIGN.md "Settings window", 760 x 540, sidebar → tabs under 560 px, light and
 - **Check:** each control changes the real behaviour (a dictation after each change); a wrong key shows the
   plain error; keyboard-only use; contrast 4.5:1.
 
+Detailed tasks (written 2026-11-06 when the phase started; branch from `feat/m2-hud`, PR #38 open; C: 34 GB).
+Choices the plan left open, taken here: every setting saves the moment it changes ("Saved" note), key fields
+save with their own button; "Test key" asks the provider's free model list (`GET {base}/models`), never a
+transcription, so it costs no daily request; "Re-insert" hides the window and pastes into the app that gets
+the focus back.
+
+### Task 4.1: reload without a restart (`win`)
+- `hotkey::spawn` called again switches the running hook to the new key and channel (`rebind`; the mouse hook
+  is added the first time a side button is chosen). Test `rebind_switches_the_key_and_the_channel`.
+- `dictate::request_reload()`: `run` returns `Ok` at the next idle moment (never during a recording); the
+  app's dictation thread loops: load settings → run. Test `a_reload_waits_for_the_recording`.
+
+### Task 4.2: what the window needs from the library (`core`, `win`)
+- `spec::provider(name)`, `api::check_key(&Provider, key)` (`GET {base}/models`, Gemini header or Bearer).
+- `key::source(env) -> Option<KeySource { from: Env | Store | UserEnv, last4 }>` (never the key itself).
+- `history::recent(dir, n) -> Vec<Item { at, time, text, app, audio }>` (newest first),
+  `history::delete(dir, at)` (its line and its recording). Tests on a temp folder.
+- `mywords::text()`, `save_text(t)`, `preview(t) -> Preview { found, new, more, already, skipped }`,
+  `add(t)`. Tests on the pure parts.
+
+### Task 4.3: the settings commands (`desktop/app/src/prefs.rs`)
+- Pure, tested: `key_name(js_code)` (KeyboardEvent.code / mouse button → a `setkey` name),
+  `check(Settings) -> Result<Settings, String>` (key allowed, model ids known, ≤ 2 fallbacks, no duplicates,
+  `history_days` 1-365).
+- Commands: `prefs_state`, `prefs_save`, `prefs_check_key_name`, `prefs_pause` (dictation paused while the
+  user picks a key), `key_save` / `key_delete` / `key_test`, `words_*`, `history_*`, `autostart_set`,
+  `open_link` (https links of a fixed list only). Every save that changes dictation calls `request_reload`.
+
+### Task 4.4: the page (`ui/settings.{html,css,js}`)
+- DESIGN.md "Settings window": 760 x 540, sidebar (General, Models & keys, Words, History, About) that becomes
+  a tab row under 560 px; light and dark from the system; Geist; focus ring; every control has a label.
+
+### Task 4.5: the real check, docs, PR
+- Run the app: each control changes the real thing (config.toml, Credential Manager, words.txt, history,
+  `Run` value); a wrong key shows the plain error; keyboard only; screenshots light / dark / narrow (no key in
+  any of them). Docs, `shipshape-reviewer`, PR (base `feat/m2-hud`), Auto-fix, reminder.
+
 ## Phase 5: the pop-up mic on text fields (T1, `feat/m2-popup-mic`, D-016)
 
 - UI Automation focus-changed events on a thread; editable = Edit control type, or Value pattern not read-only,

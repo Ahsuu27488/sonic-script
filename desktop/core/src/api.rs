@@ -134,6 +134,40 @@ pub fn client() -> Result<Client, ApiError> {
         .map_err(|e| ApiError::Network(e.to_string()))
 }
 
+/// "Test key" in the settings window (M2 task 4.2): asks the provider for its model list, which needs a valid
+/// key and costs no daily request. `Ok` = the key works.
+pub fn test_key(provider: &crate::spec::Provider, key: &str) -> Result<(), ApiError> {
+    let key = check_key(key, &provider.key_env)?;
+    let http = client()?;
+    let url = format!("{}/models", provider.base_url.trim_end_matches('/'));
+    let (name, value) = auth_header(&provider.key_env, &key);
+    send(
+        || Ok(http.get(&url).header(name, value.clone())),
+        &provider.key_env,
+    )
+    .map(|_| ())
+    .map_err(|e| key_refused(e, &provider.key_env))
+}
+
+/// Gemini takes the key in its own header; Groq and OpenAI as a bearer token.
+fn auth_header(key_env: &str, key: &str) -> (&'static str, String) {
+    if key_env.starts_with("GEMINI") {
+        ("x-goog-api-key", key.to_string())
+    } else {
+        ("authorization", format!("Bearer {key}"))
+    }
+}
+
+/// Google answers a wrong key with 400 "API key not valid", not 401.
+fn key_refused(e: ApiError, key_env: &str) -> ApiError {
+    match e {
+        ApiError::Http(400, msg) if msg.to_lowercase().contains("api key") => {
+            ApiError::BadKey(key_env.to_string())
+        }
+        other => other,
+    }
+}
+
 /// Refuses an empty key before any request is made.
 pub fn check_key(key: &str, key_env: &str) -> Result<String, ApiError> {
     match key.trim() {
@@ -292,5 +326,52 @@ pub(crate) mod test_server {
             }
         });
         (url, rx)
+    }
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+
+    #[test]
+    fn key_test_headers_and_googles_400() {
+        assert_eq!(auth_header("GEMINI_API_KEY", "k").0, "x-goog-api-key");
+        assert_eq!(
+            auth_header("GROQ_API_KEY", "k"),
+            ("authorization", "Bearer k".to_string())
+        );
+        let bad = key_refused(
+            ApiError::Http(
+                400,
+                "API key not valid. Please pass a valid API key.".into(),
+            ),
+            "GEMINI_API_KEY",
+        );
+        assert_eq!(bad, ApiError::BadKey("GEMINI_API_KEY".into()));
+        let other = key_refused(ApiError::Http(400, "bad request".into()), "GEMINI_API_KEY");
+        assert!(matches!(other, ApiError::Http(400, _)));
+        let p = crate::spec::provider("groq").unwrap();
+        assert_eq!(
+            test_key(&p, " "),
+            Err(ApiError::MissingKey("GROQ_API_KEY".into()))
+        );
+    }
+
+    #[test]
+    fn a_key_test_asks_for_the_model_list() {
+        let (url, rx) = test_server::server(vec![
+            (200, "", r#"{"data":[]}"#),
+            (400, "", r#"{"error":{"message":"API key not valid."}}"#),
+        ]);
+        let mut p = crate::spec::provider("gemini").unwrap();
+        p.base_url = url;
+        assert_eq!(test_key(&p, "good-key"), Ok(()));
+        let request = rx.recv().unwrap();
+        assert!(request.starts_with("GET /models "), "{request}");
+        assert!(request.to_lowercase().contains("x-goog-api-key: good-key"));
+        assert_eq!(
+            test_key(&p, "bad"),
+            Err(ApiError::BadKey("GEMINI_API_KEY".into()))
+        );
     }
 }

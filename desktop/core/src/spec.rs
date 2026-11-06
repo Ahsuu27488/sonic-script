@@ -212,6 +212,11 @@ pub fn chain() -> Vec<Link> {
         .collect()
 }
 
+/// A provider by its name in `spec/providers.json` (`gemini`, `groq`, `openai`).
+pub fn provider(name: &str) -> Option<Provider> {
+    parse().providers.get(name).cloned()
+}
+
 /// The first engine of the chain.
 pub fn default_engine() -> Engine {
     chain().remove(0).engine

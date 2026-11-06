@@ -230,22 +230,37 @@ fn start_dictation(app: AppHandle) {
             }
             redraw(&app);
         }
-        let (settings, notes) = settings::load();
-        cue::set_enabled(settings.sound);
-        let result =
-            key::choose_from(&settings, None, settings.format).and_then(|(mut choice, more)| {
-                for note in notes.into_iter().chain(more) {
-                    sink.send(Event::Warning(note));
+        // Each turn runs dictation with the settings as they are now; a change in the settings window ends
+        // the turn (`dictate::request_reload`) and the next one picks it up (M2 task 4.1).
+        loop {
+            let (settings, notes) = settings::load();
+            cue::set_enabled(settings.sound);
+            let result = key::choose_from(&settings, None, settings.format).and_then(
+                |(mut choice, more)| {
+                    for note in notes.into_iter().chain(more) {
+                        sink.send(Event::Warning(note));
+                    }
+                    choice.words = Some(Arc::new(mywords::load()));
+                    dictate::run(choice, settings.history, sink.clone())
+                },
+            );
+            if let Err(e) = result {
+                // No recording or answer is coming any more: the HUD must not wait for one.
+                hudwin::reset(&app);
+                sink.send(Event::Failed {
+                    lines: vec![format!("Dictation stopped: {e}")],
+                });
+                // A missing or wrong key is fixed in the settings window: wait for its next change.
+                while !dictate::take_reload() {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
                 }
-                choice.words = Some(Arc::new(mywords::load()));
-                dictate::run(choice, settings.history, sink.clone())
-            });
-        if let Err(e) = result {
-            // No recording or answer is coming any more: the HUD must not wait for one.
-            hudwin::reset(&app);
-            sink.send(Event::Failed {
-                lines: vec![format!("Dictation stopped: {e}")],
-            });
+                if let Some(t) = app.try_state::<Tray>() {
+                    if let Ok(mut s) = t.status.lock() {
+                        s.clear_problem();
+                    }
+                    redraw(&app);
+                }
+            }
         }
     });
 }

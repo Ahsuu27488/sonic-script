@@ -23,14 +23,21 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use crate::setkey::{DictationKey, PassOn, Trigger};
 
-struct Hook {
+/// What a settings change replaces (M2 phase 4: a new key or a new dictation loop, without a restart).
+struct Live {
     key: DictationKey,
-    machine: Mutex<Machine>,
     tx: Sender<Action>,
-    /// The dictation key is down (to tell a new press from auto-repeat).
-    held: AtomicBool,
     /// Asks the mask thread to send the masking keystroke (Alt / Win, D-037).
     mask: Option<Sender<()>>,
+}
+
+struct Hook {
+    live: Mutex<Live>,
+    machine: Mutex<Machine>,
+    /// The dictation key is down (to tell a new press from auto-repeat).
+    held: AtomicBool,
+    /// The mouse hook is in place (installed once, the first time a side button is the key).
+    mouse: AtomicBool,
     /// Dictation is paused (the tray's "Pause dictation", M2 task 2.2): every key and button passes on
     /// untouched and the rules do not run.
     paused: AtomicBool,
@@ -38,9 +45,44 @@ struct Hook {
 
 static HOOK: OnceLock<Hook> = OnceLock::new();
 
-/// Installs the hooks on a new thread that pumps their messages for the life of the process. Call once.
+/// Installs the hooks on a new thread that pumps their messages for the life of the process. Called again
+/// (a settings change, M2 phase 4), it switches the running hook to the new key and channel instead.
 pub fn spawn(key: DictationKey, tx: Sender<Action>) -> Result<(), String> {
-    let mask = (key.pass_on == PassOn::Masked).then(|| {
+    let mask = mask_thread(key);
+    let mouse = matches!(key.trigger, Trigger::Mouse(_));
+    if let Some(hook) = HOOK.get() {
+        rebind(hook, Live { key, tx, mask });
+        if mouse && !hook.mouse.swap(true, Ordering::SeqCst) {
+            install(None, Some(mouse_proc))?;
+        }
+        return Ok(());
+    }
+    HOOK.set(Hook {
+        live: Mutex::new(Live { key, tx, mask }),
+        machine: Mutex::new(Machine::new()),
+        held: AtomicBool::new(false),
+        mouse: AtomicBool::new(mouse),
+        paused: AtomicBool::new(false),
+    })
+    .map_err(|_| "the key hook is already installed".to_string())?;
+    install(Some(keyboard), mouse.then_some(mouse_proc as _))
+}
+
+/// Puts a new key and channel on the hook; a press the old rules were in the middle of is forgotten.
+fn rebind(hook: &Hook, live: Live) {
+    let Ok(mut machine) = hook.machine.lock() else {
+        return;
+    };
+    *machine = Machine::new();
+    hook.held.store(false, Ordering::Relaxed);
+    if let Ok(mut l) = hook.live.lock() {
+        *l = live;
+    }
+}
+
+/// The thread that sends the masking keystroke for an Alt / Win key (D-037); it ends with its sender.
+fn mask_thread(key: DictationKey) -> Option<Sender<()>> {
+    (key.pass_on == PassOn::Masked).then(|| {
         let (mask_tx, mask_rx) = std::sync::mpsc::channel::<()>();
         // Sent from here, not from inside the hook, so it lands after the key-down it masks.
         std::thread::spawn(move || {
@@ -49,18 +91,7 @@ pub fn spawn(key: DictationKey, tx: Sender<Action>) -> Result<(), String> {
             }
         });
         mask_tx
-    });
-    HOOK.set(Hook {
-        key,
-        machine: Mutex::new(Machine::new()),
-        tx,
-        held: AtomicBool::new(false),
-        mask,
-        paused: AtomicBool::new(false),
     })
-    .map_err(|_| "the key hook is already installed".to_string())?;
-    let mouse = matches!(key.trigger, Trigger::Mouse(_));
-    install(Some(keyboard), mouse.then_some(mouse_proc as _))
 }
 
 /// Installs the given hooks on their own thread and waits until they are in place.
@@ -80,7 +111,11 @@ fn install(keyboard_proc: HOOKPROC, mouse_proc: HOOKPROC) -> Result<(), String> 
                 Ok(())
             }
         };
-        let result = set(WH_KEYBOARD_LL, keyboard_proc).and_then(|()| match mouse_proc {
+        let result = match keyboard_proc {
+            Some(_) => set(WH_KEYBOARD_LL, keyboard_proc),
+            None => Ok(()),
+        }
+        .and_then(|()| match mouse_proc {
             Some(_) => set(WH_MOUSE_LL, mouse_proc),
             None => Ok(()),
         });
@@ -122,8 +157,11 @@ fn pause(hook: &Hook, paused: bool) {
         return;
     };
     hook.paused.store(paused, Ordering::Relaxed);
-    if paused && machine.force_stop().is_some() {
-        let _ = hook.tx.send(Action::Cancel);
+    if paused
+        && machine.force_stop().is_some()
+        && let Ok(live) = hook.live.lock()
+    {
+        let _ = live.tx.send(Action::Cancel);
     }
     // Starts clean either way: a key held across the switch must not finish a press the rules never saw.
     *machine = Machine::new();
@@ -136,11 +174,14 @@ fn handle(hook: &Hook, key: Key, down: bool, time: u32) -> bool {
         return false;
     }
     let dictation = key == Key::Dictation;
+    let Ok(live) = hook.live.lock() else {
+        return false;
+    };
     if dictation {
         let was_held = hook.held.swap(down, Ordering::Relaxed);
         if down
             && !was_held
-            && let Some(mask) = &hook.mask
+            && let Some(mask) = &live.mask
         {
             let _ = mask.send(());
         }
@@ -153,9 +194,9 @@ fn handle(hook: &Hook, key: Key, down: bool, time: u32) -> bool {
         Err(_) => Default::default(),
     };
     if let Some(action) = reply.action {
-        let _ = hook.tx.send(action);
+        let _ = live.tx.send(action);
     }
-    reply.swallow || (dictation && hook.key.pass_on == PassOn::Never)
+    reply.swallow || (dictation && live.key.pass_on == PassOn::Never)
 }
 
 unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -166,8 +207,9 @@ unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) ->
         let event = unsafe { &*(lparam as *const KBDLLHOOKSTRUCT) };
         // Keys sent by a program (our own Ctrl+V and mask key) are not the user's: they never reach the rules.
         if event.flags & LLKHF_INJECTED == 0 {
+            let trigger = hook.live.lock().map(|l| l.key.trigger).ok();
             let key = match event.vkCode {
-                vk if hook.key.trigger == Trigger::Key(vk as u16) => Key::Dictation,
+                vk if trigger == Some(Trigger::Key(vk as u16)) => Key::Dictation,
                 vk if vk == u32::from(VK_RETURN) => Key::Enter,
                 vk if vk == u32::from(VK_ESCAPE) => Key::Esc,
                 _ => Key::Other,
@@ -200,7 +242,10 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
         let event = unsafe { &*(lparam as *const MSLLHOOKSTRUCT) };
         if event.flags & LLMHF_INJECTED == 0
             && let Some((button, down)) = x_button(wparam, event)
-            && hook.key.trigger == Trigger::Mouse(button)
+            && hook
+                .live
+                .lock()
+                .is_ok_and(|l| l.key.trigger == Trigger::Mouse(button))
             && handle(hook, Key::Dictation, down, event.time)
         {
             return 1;
@@ -270,11 +315,14 @@ mod tests {
         let (tx, rx) = channel();
         let key = crate::setkey::by_name(name).unwrap();
         let hook = Hook {
-            key,
+            live: Mutex::new(Live {
+                key,
+                tx,
+                mask: None,
+            }),
             machine: Mutex::new(Machine::new()),
-            tx,
             held: AtomicBool::new(false),
-            mask: None,
+            mouse: AtomicBool::new(false),
             paused: AtomicBool::new(false),
         };
         (hook, rx)
@@ -310,5 +358,33 @@ mod tests {
         pause(&hook, false);
         pause(&hook, true);
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn rebind_switches_the_key_and_the_channel() {
+        // F9 (kept from the app) running; the user picks Right Ctrl in the settings window.
+        let (hook, old_rx) = hook("F9");
+        handle(&hook, Key::Dictation, true, 0);
+        assert_eq!(
+            old_rx.try_recv().ok(),
+            Some(Action::Start),
+            "a key-down starts at once"
+        );
+        let (tx, rx) = channel();
+        let key = crate::setkey::by_name("RightCtrl").unwrap();
+        rebind(
+            &hook,
+            Live {
+                key,
+                tx,
+                mask: None,
+            },
+        );
+        // The half-done F9 press is forgotten; the new key reaches the app and its actions go to the new loop.
+        assert!(!handle(&hook, Key::Dictation, false, 50));
+        assert!(!handle(&hook, Key::Dictation, true, 1000));
+        assert!(!handle(&hook, Key::Dictation, false, 1050));
+        assert_eq!(rx.try_recv().ok(), Some(Action::Start));
+        assert!(old_rx.try_recv().is_err(), "nothing more for the old loop");
     }
 }

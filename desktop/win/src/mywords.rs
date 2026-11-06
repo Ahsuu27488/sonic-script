@@ -57,6 +57,58 @@ pub fn summary(list: &WordList) -> String {
     }
 }
 
+/// The words file as text for the settings window (created with its guide when missing).
+pub fn text() -> Result<String, String> {
+    let p = ensure()?;
+    std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))
+}
+
+/// Replaces the words file with what the user edited in the settings window.
+pub fn save_text(text: &str) -> Result<(), String> {
+    let p = ensure()?;
+    let tmp = p.with_extension("txt.tmp");
+    std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, &p).map_err(|e| format!("{}: {e}", p.display()))
+}
+
+/// The prompt for the user's own AI assistant (`spec/prompts/words-assistant-v1.md`).
+pub fn assistant_prompt() -> &'static str {
+    ASSISTANT_PROMPT.trim()
+}
+
+/// What pasting `text` (an assistant's answer, any list) would add to `mine`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Preview {
+    pub found: usize,
+    /// The lines that would be added (`Word = mishearing, ...`).
+    pub new: Vec<String>,
+    pub more_heard_as: Vec<String>,
+    pub already: usize,
+    /// Lines not taken as words (sentences, headings).
+    pub skipped: Vec<String>,
+}
+
+pub fn preview(text: &str, mine: &WordList) -> Preview {
+    let parsed = words::parse(text);
+    let merge = mine.merge(&parsed.list);
+    Preview {
+        found: parsed.list.len(),
+        new: merge.new.iter().map(|e| e.line()).collect(),
+        more_heard_as: merge.more_heard_as.iter().map(|e| e.line()).collect(),
+        already: merge.already,
+        skipped: parsed.skipped,
+    }
+}
+
+/// Adds what `text` holds to the user's list (the settings window's "Add"); the list's new size.
+pub fn add(text: &str) -> Result<usize, String> {
+    let merge = load().merge(&words::parse(text).list);
+    if !merge.is_empty() {
+        append_quietly(&merge)?;
+    }
+    Ok(load().len())
+}
+
 /// Runs a `--words*` command; `None` when `args` is not one.
 pub fn command(args: &[String]) -> Option<Result<(), String>> {
     // No arguments (plain dictation) is not a words command.
@@ -156,24 +208,29 @@ fn show(merge: &Merge) {
 }
 
 fn append(merge: &Merge) -> Result<(), String> {
+    append_quietly(merge)?;
+    println!(
+        "Added. Your list now has {} words ({}). Restart SonicScript to use them.",
+        load().len(),
+        path()?.display()
+    );
+    Ok(())
+}
+
+/// Appends the new entries to the words file.
+fn append_quietly(merge: &Merge) -> Result<(), String> {
     let p = ensure()?;
+    let old = std::fs::read_to_string(&p).unwrap_or_default();
     let mut f = std::fs::OpenOptions::new()
         .append(true)
         .open(&p)
         .map_err(|e| format!("{}: {e}", p.display()))?;
-    let old = std::fs::read_to_string(&p).unwrap_or_default();
     let sep = if old.ends_with('\n') || old.is_empty() {
         ""
     } else {
         "\n"
     };
-    write!(f, "{sep}{}", merge.lines()).map_err(|e| format!("{}: {e}", p.display()))?;
-    println!(
-        "Added. Your list now has {} words ({}). Restart SonicScript to use them.",
-        load().len(),
-        p.display()
-    );
-    Ok(())
+    write!(f, "{sep}{}", merge.lines()).map_err(|e| format!("{}: {e}", p.display()))
 }
 
 fn ask(question: &str) -> Result<String, String> {
@@ -281,6 +338,21 @@ fn names(texts: &[String], mine: &WordList) -> Vec<(String, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_shows_what_a_paste_adds() {
+        let mine = WordList::from_text("Groq\nGemini = Jaminai\n");
+        let p = preview(
+            "Here is your list:\n- Groq\n- Taskvane\n- Gemini = Jemini\n",
+            &mine,
+        );
+        assert_eq!(p.new, ["Taskvane"]);
+        assert_eq!(p.more_heard_as.len(), 1);
+        assert!(p.more_heard_as[0].starts_with("Gemini"));
+        assert_eq!(p.already, 1);
+        assert_eq!(p.found, 3);
+        assert_eq!(p.skipped, ["Here is your list:"]);
+    }
 
     #[test]
     fn names_skip_sentence_starts_common_words_and_the_list() {
