@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>SonicScript</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="hud.css">
+<script src="hud.js" defer></script>
+</head>
+<body>
+<div class="pill" id="pill" data-kind="listening" data-tone="accent" hidden>
+  <div class="mark" aria-hidden="true">
+    <div class="ring"><span class="glow"></span><span class="shimmer"></span></div>
+    <svg class="tick" viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>
+    <span class="dot"></span>
+  </div>
+  <span class="timer" id="timer" aria-hidden="true">0:00</span>
+  <span class="label" id="label" role="status" aria-live="polite"></span>
+</div>
+</body>
+</html>

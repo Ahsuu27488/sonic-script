@@ -552,3 +552,15 @@ a `target\` path at sign-in by itself. (4) Pause lives in the hook (`hotkey::set
 untouched, so a paused F9 or side button does its normal job again. *Why:* the plan's Phase 2 list; the exe name
 from the collision found while checking it. *Where:* `desktop/app/` (`Cargo.toml` `[[bin]]`, `src/main.rs`,
 `src/autostart.rs`), `desktop/win/src/instance.rs`, `hotkey.rs` (`set_paused`), `dictate.rs`.
+
+**D-048 The HUD pill is solid `--surface-2`, not Windows acrylic; its window is a fixed transparent rectangle.**
+(2026-11-06) The HUD window (420 x 72 logical px, transparent, click-through, `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+| WS_EX_TOPMOST`) is wider than the widest pill, and the pill (DESIGN.md "HUD pill") is drawn in CSS with
+DESIGN.md's solid fallback (`--surface-2`, hairline, soft shadow); its width animates in CSS. Acrylic
+(`window-vibrancy`) is not used. *Why:* acrylic fills the whole rectangular window, so it would show square
+glass corners around a round pill, or force a window resize and a region on every state change (the pill's
+width changes per state); WebView2's `backdrop-filter` cannot blur the desktop behind a transparent window.
+DESIGN.md already names the solid form for "transparency off", and the pill is always dark (it floats over every
+app). Cost: no frosted glass. *Where:* `desktop/app/src/hudwin.rs` (`WIDTH`, `HEIGHT`, `native::show`),
+`desktop/app/ui/hud.css`.
+

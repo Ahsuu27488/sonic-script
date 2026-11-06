@@ -54,7 +54,7 @@ Android keyboard and the settings window when the system is light.
   concentric (inner = outer - padding).
 - Shadows: dark theme uses light (1 px top highlight + soft ambient), not heavy drop shadows.
 - **Glass only on the floating layer:** the HUD pill (Windows acrylic via Tauri `window-vibrancy`, CSS
-  `backdrop-filter` fallback) and modal sheets. Never glass-on-glass, never behind long text. Solid `--surface-2`
+  `backdrop-filter` fallback) and modal sheets. *(The Windows HUD uses the solid form only: D-048.)* Never glass-on-glass, never behind long text. Solid `--surface-2`
   when Windows "Transparency effects" is off or `prefers-reduced-transparency`.
 
 ## Motion
