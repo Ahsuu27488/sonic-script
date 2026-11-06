@@ -216,11 +216,16 @@ fn transcribe(
     let key_up_to_text = stopped.elapsed().as_millis();
     let typeable = out.error.is_none() && out.sent && !out.text.is_empty();
     let mut app = None;
+    // Timed for every attempt (pasted, only copied, failed): the history is also the latency log (D-032).
+    let mut paste_ms = None;
     let pasted = if paste && typeable {
         app = inject::app_in_front();
         let t = Instant::now();
-        match inject::paste(&out.text) {
-            Ok(Pasted::Pasted) => Paste::Pasted(t.elapsed().as_millis()),
+        let result = inject::paste(&out.text);
+        let ms = t.elapsed().as_millis();
+        paste_ms = Some(ms);
+        match result {
+            Ok(Pasted::Pasted) => Paste::Pasted(ms),
             Ok(Pasted::Copied(why)) => Paste::Copied(why.to_string()),
             Err(e) => Paste::Failed(e.to_string()),
         }
@@ -232,12 +237,12 @@ fn transcribe(
     }
     // After the paste, so keeping the history adds nothing to the wait.
     if let Some(history) = history {
-        let (paste_result, paste_ms) = match &pasted {
-            Paste::Off if paste => ("not pasted".to_string(), None),
-            Paste::Off => ("off".to_string(), None),
-            Paste::Pasted(ms) => ("pasted".to_string(), Some(*ms)),
-            Paste::Copied(why) => (format!("copied: {why}"), None),
-            Paste::Failed(e) => (format!("failed: {e}"), None),
+        let paste_result = match &pasted {
+            Paste::Off if paste => "not pasted".to_string(),
+            Paste::Off => "off".to_string(),
+            Paste::Pasted(_) => "pasted".to_string(),
+            Paste::Copied(why) => format!("copied: {why}"),
+            Paste::Failed(e) => format!("failed: {e}"),
         };
         let clip = Clip {
             audio: stream

@@ -521,8 +521,9 @@ Supersedes the file format in D-037 (its key rules stay). `desktop/win/src/setti
 `sound`, `history`, `history_days` (30, D-044), `popup_mic`, `popup_off_apps`. Read with `serde` + `toml`;
 a missing file gives the defaults, a broken one the defaults and a notice; written with a header comment
 through a temporary file. *Why:* M2's settings page saves many values; a line-by-line reader for each would
-be fragile, and M1's one-line file is valid TOML, so it still loads. Cost: comments a user wrote by hand are
-not kept when the app saves (only its own header). *Where:* `desktop/win/src/settings.rs`, `setkey.rs`
+be fragile, and M1's one-line file is valid TOML, so it still loads. Settings this version does not know are reported and kept
+when it saves; a file that cannot be read is never overwritten (the save is refused). Cost: comments a user
+wrote by hand are not kept when the app saves (only its own header). *Where:* `desktop/win/src/settings.rs`, `setkey.rs`
 (`load`, `from_settings`, `save`).
 
 **D-046 API keys are kept in Windows Credential Manager; the environment still comes first.** (2026-11-06)

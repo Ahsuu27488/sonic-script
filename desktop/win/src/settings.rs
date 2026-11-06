@@ -11,6 +11,19 @@ use serde::{Deserialize, Serialize};
 /// At most this many fallbacks after the main model (blueprint §4.2).
 pub const MAX_FALLBACKS: usize = 2;
 
+/// The fields of `Settings`, as written in the file.
+const KNOWN: [&str; 9] = [
+    "hotkey",
+    "main_model",
+    "fallbacks",
+    "format",
+    "sound",
+    "history",
+    "history_days",
+    "popup_mic",
+    "popup_off_apps",
+];
+
 const HEADER: &str = "# SonicScript settings (written by the app; you may edit it).\n\
                       # Change the dictation key with: sonicscript --set-key\n";
 
@@ -57,21 +70,37 @@ impl Settings {
     /// The settings in `path`, and notices for the user (a broken file, too many fallbacks). A missing file
     /// gives the defaults without a notice; a broken one gives the defaults and says so.
     pub fn load(path: &Path) -> (Settings, Vec<String>) {
-        let Ok(text) = std::fs::read_to_string(path) else {
-            return (Settings::default(), Vec::new());
-        };
-        let mut notes = Vec::new();
-        let mut s: Settings = match toml::from_str(&text) {
-            Ok(s) => s,
-            Err(e) => {
-                let why = e.message().to_string();
-                notes.push(format!(
+        match Self::read(path) {
+            Ok(loaded) => loaded,
+            Err(why) => (
+                Settings::default(),
+                vec![format!(
                     "{} could not be read ({why}): using the default settings.",
                     path.display()
-                ));
-                return (Settings::default(), notes);
-            }
+                )],
+            ),
+        }
+    }
+
+    /// Like `load`, but a file that is there and cannot be read is an error (so nothing overwrites it).
+    pub fn read(path: &Path) -> Result<(Settings, Vec<String>), String> {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return Ok((Settings::default(), Vec::new()));
         };
+        let table: toml::Table = toml::from_str(&text).map_err(|e| e.message().to_string())?;
+        let mut notes: Vec<String> = table
+            .keys()
+            .filter(|k| !KNOWN.contains(&k.as_str()))
+            .map(|k| {
+                format!(
+                    "{}: `{k}` is not a setting this version knows (ignored, kept in the file).",
+                    path.display()
+                )
+            })
+            .collect();
+        let mut s: Settings = table
+            .try_into()
+            .map_err(|e: toml::de::Error| e.message().to_string())?;
         if s.fallbacks.len() > MAX_FALLBACKS {
             notes.push(format!(
                 "{}: only {MAX_FALLBACKS} fallbacks are used ({} kept).",
@@ -80,16 +109,31 @@ impl Settings {
             ));
             s.fallbacks.truncate(MAX_FALLBACKS);
         }
-        (s, notes)
+        Ok((s, notes))
     }
 
     /// Writes the settings (a header comment, then the values) through a temporary file, so a crash never
-    /// leaves half a file.
+    /// leaves half a file. Settings this version does not know (a newer version's, a typo) are kept. A file
+    /// that is there and cannot be read is never overwritten: the user's other values would be lost.
     pub fn save(&self, path: &Path) -> io::Result<()> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let body = toml::to_string(self).map_err(io::Error::other)?;
+        let mut table = toml::Table::try_from(self).map_err(io::Error::other)?;
+        if let Ok(text) = std::fs::read_to_string(path) {
+            let old: toml::Table = toml::from_str(&text).map_err(|e| {
+                io::Error::other(format!(
+                    "it could not be read ({}); fix or delete it first, nothing was changed",
+                    e.message()
+                ))
+            })?;
+            for (k, v) in old {
+                if !KNOWN.contains(&k.as_str()) {
+                    table.insert(k, v);
+                }
+            }
+        }
+        let body = toml::to_string(&table).map_err(io::Error::other)?;
         let tmp = path.with_extension("toml.tmp");
         std::fs::write(&tmp, format!("{HEADER}{body}"))?;
         std::fs::rename(&tmp, path)
@@ -179,6 +223,33 @@ mod tests {
         let text = std::fs::read_to_string(&p).unwrap();
         assert!(text.starts_with("# SonicScript settings"), "{text}");
         assert_eq!(Settings::load(&p), (s, Vec::new()));
+    }
+
+    #[test]
+    fn saving_over_a_broken_file_refuses_and_keeps_it() {
+        let p = scratch("keep-broken");
+        let text = "hotkey = F9\nmain_model = \"gemini-3.5-flash\"\n";
+        std::fs::write(&p, text).unwrap();
+        let err = Settings::default().save(&p).unwrap_err().to_string();
+        assert!(err.contains("nothing was changed"), "{err}");
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), text);
+        assert!(Settings::read(&p).is_err());
+    }
+
+    #[test]
+    fn unknown_settings_are_reported_and_kept() {
+        let p = scratch("unknown");
+        std::fs::write(&p, "main-model = \"x\"\nformat = true\n").unwrap();
+        let (s, notes) = Settings::load(&p);
+        assert!(s.format);
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("`main-model`"), "{notes:?}");
+        Settings { sound: false, ..s }.save(&p).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        assert!(
+            text.contains("main-model = \"x\"") && text.contains("sound = false"),
+            "{text}"
+        );
     }
 
     #[test]

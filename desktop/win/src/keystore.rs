@@ -27,13 +27,37 @@ pub fn get(env_name: &str) -> Option<String> {
             return None;
         }
         let c = &*cred;
-        let bytes =
-            std::slice::from_raw_parts(c.CredentialBlob, c.CredentialBlobSize as usize).to_vec();
+        // An empty secret may come with a null blob pointer, which `from_raw_parts` must never get.
+        let bytes = if c.CredentialBlob.is_null() || c.CredentialBlobSize == 0 {
+            Vec::new()
+        } else {
+            std::slice::from_raw_parts(c.CredentialBlob, c.CredentialBlobSize as usize).to_vec()
+        };
         CredFree(cred.cast());
-        String::from_utf8(bytes)
-            .ok()
-            .filter(|k| !k.trim().is_empty())
+        decode_secret(&bytes)
     }
+}
+
+/// The key in a credential's blob. `--key` writes UTF-8; Windows' own tools (Credential Manager's "Add a
+/// generic credential", `cmdkey /pass`) write UTF-16LE, which would read as "A\0I\0z\0a..." as UTF-8. A
+/// blank or NUL-holding result is no key.
+fn decode_secret(bytes: &[u8]) -> Option<String> {
+    let utf16 = bytes.len().is_multiple_of(2)
+        && bytes.len() >= 2
+        && bytes.iter().skip(1).step_by(2).all(|&b| b == 0);
+    let text = if utf16 {
+        let units: Vec<u16> = bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&p| u16::from_le_bytes(p))
+            .collect();
+        String::from_utf16(&units).ok()?
+    } else {
+        String::from_utf8(bytes.to_vec()).ok()?
+    };
+    let text = text.trim().to_string();
+    (!text.is_empty() && !text.contains('\0')).then_some(text)
 }
 
 #[cfg(windows)]
@@ -171,6 +195,19 @@ mod tests {
         assert_eq!(env_name("mistral"), None);
     }
 
+    #[test]
+    fn secrets_written_by_windows_tools_are_read_too() {
+        assert_eq!(decode_secret(b"AIza-123").as_deref(), Some("AIza-123"));
+        let utf16: Vec<u8> = "AIza-123"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        assert_eq!(decode_secret(&utf16).as_deref(), Some("AIza-123"));
+        assert_eq!(decode_secret(b""), None);
+        assert_eq!(decode_secret(b"  "), None);
+        assert_eq!(decode_secret(b"ab\0cd"), None);
+    }
+
     /// Manual: writes, reads and deletes `SonicScript/SONICSCRIPT_TEST_KEY` in the real Credential Manager.
     #[cfg(windows)]
     #[test]
@@ -186,5 +223,27 @@ mod tests {
         delete(var).unwrap();
         assert_eq!(get(var), None);
         assert!(delete(var).is_err());
+    }
+
+    /// Manual: a secret stored by Windows' own `cmdkey` (UTF-16LE) reads back as the same text.
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn real_cmdkey_secret_reads() {
+        let var = "SONICSCRIPT_U16_TEST";
+        let run = |args: &[&str]| {
+            std::process::Command::new("cmdkey")
+                .args(args)
+                .output()
+                .unwrap()
+        };
+        run(&[
+            &format!("/generic:SonicScript/{var}"),
+            "/user:x",
+            "/pass:AIza-test-9",
+        ]);
+        let got = get(var);
+        run(&[&format!("/delete:SonicScript/{var}")]);
+        assert_eq!(got.as_deref(), Some("AIza-test-9"));
     }
 }
