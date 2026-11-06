@@ -280,7 +280,8 @@ the web view), `hud::Hud::apply(&mut self, &Event) -> Change` with `Change::{Non
   foreground window, its bottom 12% up; size in that monitor's DPI.
 - The window is wider than the widest pill (420 x 72 logical, transparent): the pill's width animates in
   CSS with no window resize. Glass: DESIGN.md's solid `--surface-2` form (see D-048).
-- `ui/hud.js`: listens for `hud` / `hud-hide` events (`withGlobalTauri`), polls the `level` command each
+- `ui/hud.js`: Rust calls `window.hudShow(view)` / `hudHide()` by `eval` (a view sent before the page loaded
+  waits in `__hudPending`); `withGlobalTauri` gives `invoke` for the `level` command, polled the `level` command each
   frame while listening (smoothing: attack 40 ms, release 180 ms), runs the timer (Geist Mono), plays one
   shimmer while writing, the tick on inserted; the label in an `aria-live="polite"` region;
   `prefers-reduced-motion`: static ring whose opacity follows the level, no shimmer.

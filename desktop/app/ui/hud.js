@@ -82,4 +82,10 @@
     kind = null;
     pill.classList.remove("in");
   };
+
+  // A view sent before this script ran (a fast start-up failure) waits here.
+  if (window.__hudPending) {
+    window.hudShow(window.__hudPending);
+    window.__hudPending = null;
+  }
 })();

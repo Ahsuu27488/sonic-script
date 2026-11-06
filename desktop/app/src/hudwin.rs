@@ -55,55 +55,89 @@ pub fn apply(app: &AppHandle, e: &Event) {
     let Some(state) = app.try_state::<HudState>() else {
         return;
     };
-    let change = match state.hud.lock() {
-        Ok(mut h) => h.apply(e),
-        Err(_) => return,
+    let Ok(mut hud) = state.hud.lock() else {
+        return;
     };
-    let generation = match change {
-        Change::None => return,
-        _ => state.generation.fetch_add(1, Ordering::SeqCst) + 1,
-    };
+    let change = hud.apply(e);
+    // Queued while the lock is held: shows and hides reach the main thread in the order of their generations.
+    put(app, &state, change);
+}
+
+/// Forgets the recording and answers in flight (dictation stopped), so its failure can show.
+pub fn reset(app: &AppHandle) {
+    if let Some(state) = app.try_state::<HudState>()
+        && let Ok(mut hud) = state.hud.lock()
+    {
+        hud.reset();
+    }
+}
+
+/// Puts one change on the window. Call with the `Hud` lock held.
+fn put(app: &AppHandle, state: &HudState, change: Change) {
+    if change == Change::None {
+        return;
+    }
+    let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     match change {
         Change::None => {}
         Change::Show(view) => {
             let json = serde_json::to_string(&view).unwrap_or_default();
-            on_main(app, move |w| {
-                let _ = w.eval(format!("window.hudShow({json})"));
+            // Before the page has loaded, the view waits for it (`hud.js` shows `__hudPending`).
+            let js = format!(
+                "(v => window.hudShow ? window.hudShow(v) : (window.__hudPending = v))({json})"
+            );
+            on_main(app, generation, move |w| {
+                let _ = w.eval(js);
                 native::show(w);
             });
             if let Some(ms) = view.hide_after_ms {
-                hide_later(app.clone(), generation, ms);
+                expire_later(app.clone(), generation, ms);
             }
         }
-        Change::Hide => hide_later(app.clone(), generation, 0),
+        Change::Hide => {
+            on_main(app, generation, |w| {
+                let _ = w.eval("window.hudHide && window.hudHide()");
+            });
+            let app = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(EXIT_MS));
+                on_main(&app, generation, native::hide);
+            });
+        }
     }
 }
 
-/// After `ms`, plays the exit and hides the window, unless another view came meanwhile.
-fn hide_later(app: AppHandle, generation: u64, ms: u64) {
+/// After `ms`, a passing view gives way to what comes next (a waiting note, "Writing…") or the pill leaves,
+/// unless another view came meanwhile.
+fn expire_later(app: AppHandle, generation: u64, ms: u64) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(ms));
-        let current = |app: &AppHandle| {
-            app.try_state::<HudState>()
-                .is_some_and(|s| s.generation.load(Ordering::SeqCst) == generation)
+        let Some(state) = app.try_state::<HudState>() else {
+            return;
         };
-        if !current(&app) {
+        let Ok(mut hud) = state.hud.lock() else {
+            return;
+        };
+        if state.generation.load(Ordering::SeqCst) != generation {
             return;
         }
-        on_main(&app, |w| {
-            let _ = w.eval("window.hudHide()");
-        });
-        std::thread::sleep(Duration::from_millis(EXIT_MS));
-        if current(&app) {
-            on_main(&app, native::hide);
-        }
+        let change = match hud.next() {
+            Some(v) => Change::Show(v),
+            None => Change::Hide,
+        };
+        put(&app, &state, change);
     });
 }
 
-fn on_main(app: &AppHandle, f: impl FnOnce(&WebviewWindow) + Send + 'static) {
+/// Runs `f` on the main thread if no newer change came before it got there (the main thread runs the
+/// queued closures in order, so the check and the window call cannot be split by another change).
+fn on_main(app: &AppHandle, generation: u64, f: impl FnOnce(&WebviewWindow) + Send + 'static) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if let Some(w) = handle.get_webview_window(LABEL) {
+        let current = handle
+            .try_state::<HudState>()
+            .is_some_and(|s| s.generation.load(Ordering::SeqCst) == generation);
+        if current && let Some(w) = handle.get_webview_window(LABEL) {
             f(&w);
         }
     });

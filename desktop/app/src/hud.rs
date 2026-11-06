@@ -2,6 +2,8 @@
 //! Pure, so it is tested without a window; `hudwin.rs` puts the result on the real window.
 //! A view never holds dictated text: the pill floats over every app and anyone can read it.
 
+use std::collections::VecDeque;
+
 use serde::Serialize;
 use sonicscript::events::{Event, Paste};
 
@@ -57,15 +59,25 @@ pub const LABEL_MAX: usize = 72;
 #[derive(Debug, Default)]
 pub struct Hud {
     recording: bool,
+    /// Recordings sent and not answered yet (a slow answer can still run when the next clip is sent).
+    jobs: u32,
+    /// The pill shows a passing view (one with `hide_after_ms`): a limit note waits behind it.
+    passing: bool,
+    /// Views waiting for the passing one to end (limit notes after "Copied" or "Not pasted").
+    queue: VecDeque<View>,
 }
 
-fn view(kind: Kind, tone: Tone, label: &str, hide_after_ms: Option<u64>) -> Change {
-    Change::Show(View {
+fn view(kind: Kind, tone: Tone, label: &str, hide_after_ms: Option<u64>) -> View {
+    View {
         kind,
         tone,
         label: short(label),
         hide_after_ms,
-    })
+    }
+}
+
+fn writing() -> View {
+    view(Kind::Writing, Tone::Accent, "Writing…", None)
 }
 
 /// The first sentence of a console line, without its "! " mark, cut to `LABEL_MAX`.
@@ -87,26 +99,81 @@ impl Hud {
         match e {
             Event::Listening { .. } => {
                 self.recording = true;
-                view(Kind::Listening, Tone::Accent, "Listening", None)
+                self.queue.clear();
+                self.show(view(Kind::Listening, Tone::Accent, "Listening", None))
             }
             Event::Processing => {
                 self.recording = false;
-                view(Kind::Writing, Tone::Accent, "Writing…", None)
+                self.jobs += 1;
+                self.show(writing())
             }
             Event::Cancelled => {
                 self.recording = false;
-                Change::Hide
+                match self.next() {
+                    Some(v) => self.show(v),
+                    None => self.hide(),
+                }
             }
-            // A job's end while the next recording runs (a slow answer): the recording keeps the pill.
             Event::Text { .. }
             | Event::NoSpeech { .. }
             | Event::HintOnly
-            | Event::Failed { .. }
-            | Event::Notice(_)
-                if self.recording =>
-            {
+            | Event::Failed { .. } => {
+                self.jobs = self.jobs.saturating_sub(1);
+                // A job's end while the next recording runs (a slow answer): the recording keeps the pill.
+                if self.recording {
+                    return Change::None;
+                }
+                self.show(Self::result(e))
+            }
+            // Limit notes ("! <model> has used up today's free requests. ...") come right after a text: they
+            // wait for its "Done" / "Copied" to end.
+            Event::Notice(n) if n.starts_with("! ") => {
+                let v = view(Kind::Problem, Tone::Warn, n, Some(LIMIT_MS));
+                if self.recording {
+                    Change::None
+                } else if self.passing {
+                    self.queue.push_back(v);
+                    Change::None
+                } else {
+                    self.show(v)
+                }
+            }
+            // Start-up lines, timing notes and setting problems belong on the tray, not over the user's app.
+            Event::Ready { .. } | Event::Notice(_) | Event::Warning(_) | Event::CapReached => {
                 Change::None
             }
+        }
+    }
+
+    /// What follows a passing view when its time is up: a waiting note, "Writing…" while another clip is
+    /// still on its way, or nothing (the pill leaves).
+    pub fn next(&mut self) -> Option<View> {
+        let v = self
+            .queue
+            .pop_front()
+            .or_else(|| (!self.recording && self.jobs > 0).then(writing));
+        self.passing = v.as_ref().is_some_and(|v| v.hide_after_ms.is_some());
+        v
+    }
+
+    /// Forgets everything (dictation stopped: no recording or answer is coming any more).
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    fn show(&mut self, v: View) -> Change {
+        self.passing = v.hide_after_ms.is_some();
+        Change::Show(v)
+    }
+
+    fn hide(&mut self) -> Change {
+        self.passing = false;
+        Change::Hide
+    }
+
+    /// The view for a finished job.
+    fn result(e: &Event) -> View {
+        match e {
             Event::Text { paste, .. } => match paste {
                 Paste::Pasted(_) | Paste::Off => {
                     view(Kind::Inserted, Tone::Ok, "Done", Some(INSERTED_MS))
@@ -140,14 +207,12 @@ impl Hud {
                 let first = lines.first().map(String::as_str).unwrap_or("Nothing typed");
                 view(Kind::Problem, Tone::Danger, first, Some(FAILED_MS))
             }
-            // Limit notes ("! <model> has used up today's free requests. ...") come right after a text.
-            Event::Notice(n) if n.starts_with("! ") => {
-                view(Kind::Problem, Tone::Warn, n, Some(LIMIT_MS))
-            }
-            // Start-up lines, timing notes and setting problems belong on the tray, not over the user's app.
-            Event::Ready { .. } | Event::Notice(_) | Event::Warning(_) | Event::CapReached => {
-                Change::None
-            }
+            _ => view(
+                Kind::Problem,
+                Tone::Danger,
+                "Nothing typed",
+                Some(FAILED_MS),
+            ),
         }
     }
 }
@@ -300,5 +365,58 @@ mod tests {
             json,
             r#"{"kind":"inserted","tone":"ok","label":"Done","hide_after_ms":600}"#
         );
+    }
+
+    #[test]
+    fn a_limit_note_waits_for_copied() {
+        let mut h = Hud::default();
+        h.apply(&listening());
+        h.apply(&Event::Processing);
+        let v = shown(h.apply(&text(Paste::Copied("admin".into()))));
+        assert_eq!(v.kind, Kind::Copied);
+        let note =
+            Event::Notice("! gemini-3.5-flash has used up today's free requests. More.".into());
+        assert_eq!(h.apply(&note), Change::None, "Copied stays on screen");
+        let next = h.next().expect("the note after Copied");
+        assert_eq!(
+            next.label,
+            "gemini-3.5-flash has used up today's free requests."
+        );
+        assert_eq!(h.next(), None, "then the pill leaves");
+    }
+
+    #[test]
+    fn a_late_answer_keeps_writing_for_the_next_clip() {
+        // Clip 1 is slow; clip 2 is recorded and sent; clip 1's answer must not end clip 2's "Writing…".
+        let mut h = Hud::default();
+        h.apply(&listening());
+        h.apply(&Event::Processing);
+        h.apply(&listening());
+        h.apply(&Event::Processing);
+        assert_eq!(shown(h.apply(&text(Paste::Pasted(1)))).kind, Kind::Inserted);
+        assert_eq!(h.next().map(|v| v.kind), Some(Kind::Writing));
+        assert_eq!(shown(h.apply(&text(Paste::Pasted(1)))).kind, Kind::Inserted);
+        assert_eq!(h.next(), None);
+    }
+
+    #[test]
+    fn cancel_while_an_answer_is_pending_keeps_writing() {
+        let mut h = Hud::default();
+        h.apply(&listening());
+        h.apply(&Event::Processing);
+        h.apply(&listening());
+        assert_eq!(shown(h.apply(&Event::Cancelled)).kind, Kind::Writing);
+    }
+
+    #[test]
+    fn reset_lets_a_stop_show_during_a_recording() {
+        // Dictation stopped while recording (the key hook died): its failure must show, not a stuck timer.
+        let mut h = Hud::default();
+        h.apply(&listening());
+        h.reset();
+        let v = shown(h.apply(&Event::Failed {
+            lines: vec!["Dictation stopped: the key hook stopped".into()],
+        }));
+        assert_eq!(v.tone, Tone::Danger);
     }
 }

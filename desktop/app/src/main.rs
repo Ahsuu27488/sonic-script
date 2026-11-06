@@ -241,6 +241,8 @@ fn start_dictation(app: AppHandle) {
                 dictate::run(choice, settings.history, sink.clone())
             });
         if let Err(e) = result {
+            // No recording or answer is coming any more: the HUD must not wait for one.
+            hudwin::reset(&app);
             sink.send(Event::Failed {
                 lines: vec![format!("Dictation stopped: {e}")],
             });
