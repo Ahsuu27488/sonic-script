@@ -39,6 +39,10 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .off svg { width: 10px; height: 10px; stroke: var(--text-2); stroke-width: 1.6; stroke-linecap: round; }
 .off:hover svg { stroke: var(--text-1); }
 
+.nope .mic { animation: nope 300ms var(--ease-in-out); }
+@keyframes nope { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
 @media (prefers-reduced-motion: reduce) {
   .mic:active { transform: none; }
+  .nope .mic { animation: none; opacity: 0.6; }
 }

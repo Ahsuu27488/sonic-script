@@ -201,6 +201,15 @@ pub fn check(mut s: Settings) -> Result<Settings, String> {
     Ok(s)
 }
 
+/// The page's copy of `popup_off_apps` may be older than the file: the pill's x writes the file directly
+/// (`popupwin::popup_not_here`). The file's list wins; a missing or broken file keeps the page's.
+fn keep_off_apps(mut s: Settings, path: &std::path::Path) -> Settings {
+    if let Ok((disk, _)) = Settings::read(path) {
+        s.popup_off_apps = disk.popup_off_apps;
+    }
+    s
+}
+
 #[tauri::command]
 pub fn prefs_state() -> State {
     let (settings, notices) = settings::load();
@@ -219,8 +228,8 @@ pub fn prefs_state() -> State {
 /// Saves the settings and tells dictation to reload them. Returns what was saved (cleaned up by `check`).
 #[tauri::command]
 pub fn prefs_save(settings: Settings) -> Result<Settings, String> {
-    let s = check(settings)?;
     let path = settings::path()?;
+    let s = keep_off_apps(check(settings)?, &path);
     s.save(&path)
         .map_err(|e| format!("Not saved: {} {e}", path.display()))?;
     dictate::request_reload();
@@ -475,6 +484,23 @@ mod tests {
             m.iter()
                 .all(|x| sonicscript_core::spec::engine(&x.id).is_some())
         );
+    }
+
+    #[test]
+    fn the_pills_off_list_on_disk_wins_over_the_pages_copy() {
+        let dir = std::env::temp_dir().join(format!("sonicscript-offapps-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        // The pill's x added chrome.exe while the page had the old, empty list.
+        std::fs::write(&path, "popup_off_apps = [\"chrome.exe\"]\n").unwrap();
+        let page = Settings {
+            sound: false,
+            ..Settings::default()
+        };
+        let saved = keep_off_apps(page, &path);
+        assert_eq!(saved.popup_off_apps, ["chrome.exe"]);
+        assert!(!saved.sound, "the page's own change stays");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
