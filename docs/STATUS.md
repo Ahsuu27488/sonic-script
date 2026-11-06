@@ -27,7 +27,7 @@ checked, after a live paste of the whole format prompt.
 3. **Work in this checkout, not a git worktree:** drive C: is nearly full (13 GB free on 2026-11-04, 3.4 GB on
    2026-11-03, when a worktree needing ~5.4 GB failed; 11 GB on the evening of 2026-11-05). `desktop/target` alone is 3.2 GB. Ask the owner before
    deleting anything.
-4. Keys: `GROQ_API_KEY` and `GEMINI_API_KEY` are in the owner's Windows user environment; `OPENAI_API_KEY` only
+4. Keys: `GROQ_API_KEY` and `GEMINI_API_KEY` are in the owner's Windows user environment (the app also reads Windows Credential Manager, `sonicscript --key`, D-046); `OPENAI_API_KEY` only
    in `eval/.env` (paid: benchmark only, spend sparingly). Never print, log or commit a key. CMake is on the
    user PATH.
 5. Gemini free limits per model, per day (owner's key): Transcribe 25, Flash 20, Flash-Lite ~500; they reset at
@@ -290,7 +290,7 @@ M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR 
 
 1. **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
    (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Go-ahead
-   and the 5 decisions given 2026-11-06 (D-044). Phase 1 in progress: `config.toml` settings (D-045), the main model + fallbacks from them, and keys in Credential Manager (`--key`, D-046) done. Phase 2 (Tauri) needs ~10 GB free on C: (6.4 GB on 2026-11-06).
+   and the 5 decisions given 2026-11-06 (D-044). Phase 1 in progress: done on `feat/m2-settings` (PR to open): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`). Next: Phase 2 (tray), after freeing space on C:. Phase 2 (Tauri) needs ~10 GB free on C: (6.4 GB on 2026-11-06).
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.

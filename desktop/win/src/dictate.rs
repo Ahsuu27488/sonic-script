@@ -14,6 +14,7 @@ use sonicscript_core::pipeline::{self, Outcome, PipelineError, Transcribe};
 
 use crate::audio::{Ready, Recorder, Recording};
 use crate::cue::{self, Cue};
+use crate::events::{Console, Event, Paste, Sink};
 use crate::history::{Clip, History};
 use crate::inject::{self, Pasted};
 use crate::key::{Choice, Engines};
@@ -32,7 +33,7 @@ struct Job {
     paste: bool,
 }
 
-pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
+pub fn run(choice: Choice, keep_history: bool, sink: Arc<dyn Sink>) -> Result<(), String> {
     let normalizer = Arc::new(key::normalizer(&choice));
     let words = choice.words.as_ref().map(|w| crate::mywords::summary(w));
     let client = Arc::new(key::engines(choice)?);
@@ -40,9 +41,9 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
     if !client.first().formats() {
         id += "; no formatting";
     }
-    let history = open_history(keep_history).map(Arc::new);
+    let history = open_history(keep_history, &*sink).map(Arc::new);
     if let Some(words) = words {
-        println!("{words}");
+        sink.send(Event::Notice(words));
     }
     // Sets up the mic stream now, so the key-down only starts it (D-036).
     let ready = Ready::new();
@@ -50,17 +51,13 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
     // The user's key (D-018, `sonicscript --set-key`); Right Ctrl by default (D-015).
     let (dictation_key, notice) = setkey::load();
     if let Some(notice) = notice {
-        eprintln!("  ! {notice}");
+        sink.send(Event::Warning(notice));
     }
     hotkey::spawn(dictation_key, tx)?;
-    let k = dictation_key.label;
-    println!(
-        "SonicScript is listening ({id}).\n  \
-         Tap {k}, speak, tap it again or press Enter: the text is typed where your cursor is\n  \
-         (and shown here).\n  \
-         Or hold {k} while you speak. Esc cancels. Close this window or press Ctrl+C to quit.\n  \
-         Another key: sonicscript --set-key"
-    );
+    sink.send(Event::Ready {
+        engines: id,
+        key: dictation_key.label.to_string(),
+    });
 
     let mut recording: Option<(Recorder, Instant, u128)> = None;
     loop {
@@ -68,7 +65,7 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
             Ok(action) => action,
             Err(RecvTimeoutError::Timeout) => match &recording {
                 Some((_, since, _)) if since.elapsed() >= MAX_RECORDING => {
-                    println!("  5-minute limit reached: stopping.");
+                    sink.send(Event::CapReached);
                     hotkey::force_stop();
                     Action::Stop
                 }
@@ -87,18 +84,21 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
                 match ready.start() {
                     Ok(r) => {
                         let mic_open_ms = t.elapsed().as_millis();
-                        let how = if r.prepared { "ready" } else { "opened" };
-                        println!(
-                            "● Recording ({}, {} Hz, mic {how} in {mic_open_ms} ms)",
-                            r.device, r.rate,
-                        );
+                        sink.send(Event::Listening {
+                            device: r.device.clone(),
+                            rate: r.rate,
+                            mic_ms: mic_open_ms,
+                            prepared: r.prepared,
+                        });
                         recording = Some((r, Instant::now(), mic_open_ms));
                     }
                     Err(e) => {
                         ready.refill();
                         hotkey::force_stop();
                         cue::play(Cue::Cancel);
-                        eprintln!("  Could not open the microphone: {e}");
+                        sink.send(Event::Failed {
+                            lines: vec![format!("Could not open the microphone: {e}")],
+                        });
                     }
                 }
             }
@@ -107,7 +107,7 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
                     drop(r.stop());
                     ready.refill();
                     cue::play(Cue::Cancel);
-                    println!("  Cancelled.");
+                    sink.send(Event::Cancelled);
                 }
             }
             Action::Stop => {
@@ -123,10 +123,15 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
                 ready.refill();
                 // After the mic is closed, so the chime is not recorded.
                 cue::play(Cue::Stop);
-                let (client, normalizer, history) =
-                    (client.clone(), normalizer.clone(), history.clone());
+                sink.send(Event::Processing);
+                let (client, normalizer, history, sink) = (
+                    client.clone(),
+                    normalizer.clone(),
+                    history.clone(),
+                    sink.clone(),
+                );
                 std::thread::spawn(move || {
-                    transcribe(job, &client, &normalizer, history.as_deref());
+                    transcribe(job, &client, &normalizer, history.as_deref(), &*sink);
                 });
             }
         }
@@ -136,9 +141,10 @@ pub fn run(choice: Choice, keep_history: bool) -> Result<(), String> {
 /// `--record <seconds>`: the same mic → pipeline path without the key, to check the microphone (and to test
 /// it where no key can be pressed, e.g. a locked PC).
 pub fn record_for(seconds: f64, choice: Choice, keep_history: bool) -> Result<(), String> {
+    let sink = Console;
     let normalizer = key::normalizer(&choice);
     let client = key::engines(choice)?;
-    let history = open_history(keep_history);
+    let history = open_history(keep_history, &sink);
     let warm = std::thread::spawn(move || {
         client.warm();
         client
@@ -155,32 +161,42 @@ pub fn record_for(seconds: f64, choice: Choice, keep_history: bool) -> Result<()
         paste: false,
     };
     let client = warm.join().map_err(|_| "warm-up thread panicked")?;
-    transcribe(job, &client, &normalizer, history.as_ref());
+    transcribe(job, &client, &normalizer, history.as_ref(), &sink);
     Ok(())
 }
 
 /// The history folder, or `None` with a notice when it is turned off or cannot be made (dictation goes on).
-fn open_history(keep: bool) -> Option<History> {
+fn open_history(keep: bool, sink: &dyn Sink) -> Option<History> {
     if !keep {
-        println!("History is off (--no-history): recordings and text are not kept.");
+        sink.send(Event::Notice(
+            "History is off: recordings and text are not kept.".into(),
+        ));
         return None;
     }
     match History::open() {
         Ok(h) => {
-            println!(
+            sink.send(Event::Notice(format!(
                 "Each recording and its text are kept in {} (--no-history to turn off).",
                 h.dir().display()
-            );
+            )));
             Some(h)
         }
         Err(e) => {
-            eprintln!("  ! History is off: could not create its folder: {e}");
+            sink.send(Event::Warning(format!(
+                "History is off: could not create its folder: {e}"
+            )));
             None
         }
     }
 }
 
-fn transcribe(job: Job, client: &Engines, normalizer: &Normalizer, history: Option<&History>) {
+fn transcribe(
+    job: Job,
+    client: &Engines,
+    normalizer: &Normalizer,
+    history: Option<&History>,
+    sink: &dyn Sink,
+) {
     let Job {
         rec,
         stopped,
@@ -190,79 +206,39 @@ fn transcribe(job: Job, client: &Engines, normalizer: &Normalizer, history: Opti
     let mut stream = match rec.stream {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("  {e}");
+            sink.send(Event::Failed {
+                lines: vec![e.to_string()],
+            });
             return;
         }
     };
     let out = pipeline::run_streamed(&rec.samples, &mut stream, client, normalizer);
     let key_up_to_text = stopped.elapsed().as_millis();
+    let typeable = out.error.is_none() && out.sent && !out.text.is_empty();
     let mut app = None;
-    let mut paste_result = if paste { "not pasted" } else { "off" }.to_string();
-    let mut paste_ms = None;
-    let seconds = f64::from(out.audio_ms) / 1000.0;
-    if let Some(e) = &out.error {
-        for line in failure_notes(e) {
-            eprintln!("  {line}");
+    let pasted = if paste && typeable {
+        app = inject::app_in_front();
+        let t = Instant::now();
+        match inject::paste(&out.text) {
+            Ok(Pasted::Pasted) => Paste::Pasted(t.elapsed().as_millis()),
+            Ok(Pasted::Copied(why)) => Paste::Copied(why.to_string()),
+            Err(e) => Paste::Failed(e.to_string()),
         }
-    } else if !out.sent {
-        println!("  No speech heard ({seconds:.1} s recorded): nothing sent.");
-    } else if out.text.is_empty() {
-        println!("  Nothing to type (the engine only heard its own hint).");
     } else {
-        println!("→ {}", out.text.trim_end().replace('\n', "\n  "));
-        let pasted = if paste {
-            app = inject::app_in_front();
-            let t = Instant::now();
-            let result = inject::paste(&out.text);
-            paste_ms = Some(t.elapsed().as_millis());
-            match result {
-                Ok(Pasted::Pasted) => {
-                    paste_result = "pasted".into();
-                    format!(" · pasted in {} ms", t.elapsed().as_millis())
-                }
-                Ok(Pasted::Copied(why)) => {
-                    paste_result = format!("copied: {why}");
-                    println!(
-                        "  ! Copied, not pasted ({why}): press Ctrl+V where you want the text."
-                    );
-                    String::new()
-                }
-                Err(e) => {
-                    paste_result = format!("failed: {e}");
-                    eprintln!("  ! Not pasted: {e}");
-                    String::new()
-                }
-            }
-        } else {
-            String::new()
-        };
-        let note = if out.needs_llm {
-            " · mostly Urdu script, rough romanization"
-        } else {
-            ""
-        };
-        let refine = if out.stages.refine > 0.0 {
-            format!(" + refine {:.0} ms", out.stages.refine)
-        } else {
-            String::new()
-        };
-        println!(
-            "  {seconds:.1} s recorded, {:.1} s sent · key-up → text {key_up_to_text} ms (speech {:.0} ms{refine}){pasted}{note}",
-            f64::from(out.sent_ms) / 1000.0,
-            out.stages.request
-        );
-        if let Some(note) = fallback_note(&out, client.first().id()) {
-            println!("  {note}");
-        }
-        if let Some(why) = &out.unformatted {
-            println!("  Not formatted (exact words): the formatting step failed: {why}");
-        }
-    }
-    for note in limit_notes(&out) {
-        println!("  {note}");
+        Paste::Off
+    };
+    for e in outcome_events(&out, pasted.clone(), key_up_to_text, client.first().id()) {
+        sink.send(e);
     }
     // After the paste, so keeping the history adds nothing to the wait.
     if let Some(history) = history {
+        let (paste_result, paste_ms) = match &pasted {
+            Paste::Off if paste => ("not pasted".to_string(), None),
+            Paste::Off => ("off".to_string(), None),
+            Paste::Pasted(ms) => ("pasted".to_string(), Some(*ms)),
+            Paste::Copied(why) => (format!("copied: {why}"), None),
+            Paste::Failed(e) => (format!("failed: {e}"), None),
+        };
         let clip = Clip {
             audio: stream
                 .finish(0..stream.len())
@@ -278,9 +254,59 @@ fn transcribe(job: Job, client: &Engines, normalizer: &Normalizer, history: Opti
             paste_ms,
         };
         if let Err(e) = history.save(&out, clip) {
-            eprintln!("  ! Not kept in the history: {e}");
+            sink.send(Event::Warning(format!("Not kept in the history: {e}")));
         }
     }
+}
+
+/// What the user is told about one finished recording, in order (M1's console lines, now events).
+fn outcome_events(out: &Outcome, paste: Paste, key_up_ms: u128, first: &str) -> Vec<Event> {
+    let mut events = Vec::new();
+    let seconds = f64::from(out.audio_ms) / 1000.0;
+    if let Some(e) = &out.error {
+        events.push(Event::Failed {
+            lines: failure_notes(e),
+        });
+    } else if !out.sent {
+        events.push(Event::NoSpeech { seconds });
+    } else if out.text.is_empty() {
+        events.push(Event::HintOnly);
+    } else {
+        let pasted = match &paste {
+            Paste::Pasted(ms) => format!(" · pasted in {ms} ms"),
+            _ => String::new(),
+        };
+        let note = if out.needs_llm {
+            " · mostly Urdu script, rough romanization"
+        } else {
+            ""
+        };
+        let refine = if out.stages.refine > 0.0 {
+            format!(" + refine {:.0} ms", out.stages.refine)
+        } else {
+            String::new()
+        };
+        let details = format!(
+            "{seconds:.1} s recorded, {:.1} s sent · key-up → text {key_up_ms} ms (speech {:.0} ms{refine}){pasted}{note}",
+            f64::from(out.sent_ms) / 1000.0,
+            out.stages.request
+        );
+        events.push(Event::Text {
+            text: out.text.clone(),
+            paste,
+            details,
+        });
+        if let Some(note) = fallback_note(out, first) {
+            events.push(Event::Notice(note));
+        }
+        if let Some(why) = &out.unformatted {
+            events.push(Event::Notice(format!(
+                "Not formatted (exact words): the formatting step failed: {why}"
+            )));
+        }
+    }
+    events.extend(limit_notes(out).into_iter().map(Event::Notice));
+    events
 }
 
 /// What to tell the user when no text came back: nothing was typed, why each model failed, and what to do
@@ -359,6 +385,82 @@ mod tests {
             retry_after_s: None,
             daily: true,
         }
+    }
+
+    fn spoken(text: &str) -> Outcome {
+        Outcome {
+            text: text.into(),
+            sent: true,
+            audio_ms: 2000,
+            sent_ms: 1500,
+            engine: "transcribe".into(),
+            ..Outcome::default()
+        }
+    }
+
+    #[test]
+    fn a_pasted_text_is_one_text_event_with_its_timing() {
+        let ev = outcome_events(&spoken("Haan bhai"), Paste::Pasted(310), 2100, "transcribe");
+        let [
+            Event::Text {
+                text,
+                paste,
+                details,
+            },
+        ] = &ev[..]
+        else {
+            panic!("{ev:?}");
+        };
+        assert_eq!(text, "Haan bhai");
+        assert_eq!(paste, &Paste::Pasted(310));
+        assert!(
+            details.starts_with("2.0 s recorded, 1.5 s sent · key-up → text 2100 ms")
+                && details.ends_with(" · pasted in 310 ms"),
+            "{details}"
+        );
+    }
+
+    #[test]
+    fn copied_no_speech_and_failures_become_their_events() {
+        let ev = outcome_events(&spoken("x"), Paste::Copied("admin".into()), 1, "transcribe");
+        assert!(matches!(&ev[0], Event::Text { paste: Paste::Copied(w), .. } if w == "admin"));
+        let quiet = Outcome {
+            audio_ms: 3000,
+            ..Outcome::default()
+        };
+        assert_eq!(
+            outcome_events(&quiet, Paste::Off, 1, "t"),
+            [Event::NoSpeech { seconds: 3.0 }]
+        );
+        let failed = Outcome {
+            error: Some(all(vec![daily(), daily(), daily()])),
+            ..Outcome::default()
+        };
+        let ev = outcome_events(&failed, Paste::Off, 1, "t");
+        let [Event::Failed { lines }] = &ev[..] else {
+            panic!("{ev:?}");
+        };
+        assert_eq!(lines, &failure_notes(&all(vec![daily(), daily(), daily()])));
+    }
+
+    #[test]
+    fn a_used_up_model_and_a_fallback_are_notices_after_the_text() {
+        let mut out = spoken("ok");
+        out.engine = "flash".into();
+        out.passed = vec![sonicscript_core::api::Passed {
+            engine: "transcribe".into(),
+            why: Skip::Failed(daily()),
+        }];
+        let ev = outcome_events(&out, Paste::Pasted(1), 1, "transcribe");
+        assert!(matches!(ev[0], Event::Text { .. }));
+        assert!(
+            matches!(&ev[1], Event::Notice(n) if n.starts_with("Used flash:")),
+            "{ev:?}"
+        );
+        assert!(
+            matches!(&ev[2], Event::Notice(n) if n.contains("used up today's free requests")),
+            "{ev:?}"
+        );
     }
 
     #[test]

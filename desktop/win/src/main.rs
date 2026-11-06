@@ -10,6 +10,7 @@ mod bench;
 mod cue;
 #[cfg(windows)]
 mod dictate;
+mod events;
 #[cfg(windows)]
 mod history;
 #[cfg(windows)]
@@ -155,7 +156,7 @@ fn main() -> ExitCode {
             _ => return usage(),
         },
         #[cfg(windows)]
-        None => dictate::run(choice, keep_history),
+        None => dictate::run(choice, keep_history, std::sync::Arc::new(events::Console)),
         #[cfg(windows)]
         Some("--record") => match args.get(1).and_then(|s| s.parse::<f64>().ok()) {
             Some(s) if args.len() == 2 && (0.5..=300.0).contains(&s) => {

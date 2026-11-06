@@ -22,6 +22,15 @@
   tests (red when reversed), the real Credential Manager round trip (`-- --ignored`), and a wrong Gemini key
   saved with `--key` and the process variable cleared: HTTP 400 "API key not valid" (the saved key beat the
   user environment); after `--delete` the same clip came back right.
+- Dictation tells the user through events (`events.rs`: `Event`, `Sink`, `Console`): the loop and the
+  transcription threads send `Ready`, `Listening`, `Processing`, `Text` (with how it was pasted), `NoSpeech`,
+  `HintOnly`, `Failed`, `Notice`, ...; the console sink prints M1's lines, the M2 app will drive the tray and
+  the HUD with the same events. `dictate::outcome_events` (pure) turns a finished recording into them. The mic
+  level for the Voice Ring is `audio::level()` (0-1 from the last chunk's RMS, -60 to 0 dBFS), read by the HUD
+  at its own frame rate rather than sent as events. The text is now printed after the paste (M1 printed it just
+  before). Checked: 5 tests (red with the paste timing removed); a real `--record` (room noise came back as the
+  hint only: `HintOnly` printed) and the dictation start-up lines unchanged. A live paste needs real key presses
+  (the owner's next dictation).
 
 ## 2026-11-06 · docs/m2-plan (D-044)
 
