@@ -4,11 +4,10 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-05 night (M1 declared done, D-043; PRs #30, #31 merged; #32 D-041 formatting off by default, #33 D-042 cut-answer guard and this branch `docs/m1-done` wait for CI) · **Code at:** `main` = PRs
-#3-#28 (#24 Gemini-only chain, #25 mic ready on key-down, #26 changeable key, #28 format-step guard D-038;
-merged 2026-11-05 on the owner's word after CI passed).
+**Last updated:** 2026-11-06 (M2 plan written, waiting for the owner's go-ahead) · **Code at:** `main` = PRs
+#3-#34 (#32 D-041 formatting off by default, #33 D-042 cut-answer guard, #34 M1 done; merged 2026-11-05).
 **M1 is done (D-043, the owner's call on 2026-11-05):** every step is built and used live; the owner's own checks
-(Next) continue alongside M2. Next big step: the M2 plan (Next 1).
+(Next) continue alongside M2. Next big step: M2, plan `docs/plans/2026-11-06-m2-windows-polish.md` (Next 1).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
 **engine chain** (D-029, D-035): Gemini 3.5 Transcribe + Roman cleanup → Gemini 3.5 Flash → Flash-Lite, Gemini
 only (when all three fail nothing is typed and the console says why),
@@ -85,7 +84,7 @@ checked, after a live paste of the whole format prompt.
   commands in PowerShell after it quits); old console windows get line breaks as spaces. `--record` never
   pastes. The key hook ignores injected keys. Checked: unit tests (keys per window class, line breaks, saved
   formats) and a manual round-trip on the real clipboard (`cargo test -p sonicscript inject -- --ignored`).
-- **Cut-answer guard (D-042, branch `feat/m1-cut-guard`):** when the main model's answer has under 4 words a
+- **Cut-answer guard (D-042, PR #33):** when the main model's answer has under 4 words a
   second of speech (3+ s of speech; `Encoded.speech_ms` from the voice gate), the next model is asked too and
   the fuller answer is pasted. Checked: unit tests; both live cut clips of 2026-11-05 (17:08, 17:11) through
   the real pipeline with the saved cut answer as the main model and the real Flash-Lite as the fallback: both
@@ -289,10 +288,10 @@ checked, after a live paste of the whole format prompt.
 
 M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR per item.
 
-1. **Agent: the M2 plan** (`docs/plans/<date>-m2-windows-polish.md`, blueprint §8 M2: tray, settings page with
-   the model catalog / keys in Credential Manager / main model + 2 fallbacks / formatting switch / key picker /
-   word list, the HUD Voice Ring, the pop-up mic on text fields (D-016), learned-deadline fallback (D-017), a
-   release a friend can install). Write it, then ask the owner's go-ahead; build nothing of M2 before that go-ahead.
+1. **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
+   (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Waits
+   for the owner's go-ahead and 5 decisions (UI stack, output modes, history default, unsigned release, keys a
+   friend needs). Phase 2 (Tauri) needs ~10 GB free on C: (6.4 GB on 2026-11-06).
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.
