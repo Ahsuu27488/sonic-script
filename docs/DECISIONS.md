@@ -501,3 +501,16 @@ paste checks, punctuation examples, the chain benchmark `m1-chain3` after Google
 and run alongside M2; a problem they find is fixed as usual. *Why:* the owner's words: "Mark M1 done now",
 after being asked whether to keep the 3-day check; he has dictated with it daily since 2026-11-03. *Where:*
 `docs/STATUS.md`, the M1 plan's Progress.
+
+**D-044 M2's shape: Tauri 2, Roman output only, history kept 30 days, an unsigned friend release, Gemini key
+required and Groq optional.** (2026-11-06)
+The owner's answers to the five questions of `docs/plans/2026-11-06-m2-windows-polish.md`: (1) the tray, the HUD
+Voice Ring and the settings window are a Tauri 2 app over plain HTML using `design/tokens.css` (as D-005
+planned), linking the M1 code as a library; the CLI stays. (2) No output modes besides Roman Urdu / Hinglish in
+M2 (each needs a prompt and a benchmark). (3) History (D-032) is on for new users, with an off switch, and
+recordings older than 30 days are deleted (the number is a setting). (4) The M2 friend test uses an unsigned
+installer (SmartScreen "Run anyway"); signing stays M4. (5) First run asks for a Gemini key (required) and a
+Groq key (optional: without it the chain starts at Gemini Flash, since Transcribe needs Groq's Roman step).
+*Why:* the owner chose the recommended option for each, 2026-11-06. Cost: Tauri needs ~3 GB more build space on
+a nearly full C: (6.4 GB free on 2026-11-06) and ~60 MB of RAM for WebView2 while a window shows. *Where:* the
+M2 plan; built phase by phase.
