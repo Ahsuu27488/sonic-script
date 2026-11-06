@@ -86,7 +86,14 @@ fn put(app: &AppHandle, state: &HudState, change: Change) {
             let js = format!(
                 "(v => window.hudShow ? window.hudShow(v) : (window.__hudPending = v))({json})"
             );
+            let clickable = view.action.is_some();
             on_main(app, generation, move |w| {
+                // Click-through, except while the pill has a button ("Try again"); then only the pill takes
+                // clicks (the page sends its area: `hud_hit_area`), the rest of the window passes them on.
+                if !clickable {
+                    native::hit_area(w, None);
+                }
+                let _ = w.set_ignore_cursor_events(!clickable);
                 let _ = w.eval(js);
                 native::show(w);
             });
@@ -101,7 +108,11 @@ fn put(app: &AppHandle, state: &HudState, change: Change) {
             let app = app.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_millis(EXIT_MS));
-                on_main(&app, generation, native::hide);
+                on_main(&app, generation, |w| {
+                    native::hide(w);
+                    native::hit_area(w, None);
+                    let _ = w.set_ignore_cursor_events(true);
+                });
             });
         }
     }
@@ -143,6 +154,20 @@ fn on_main(app: &AppHandle, generation: u64, f: impl FnOnce(&WebviewWindow) + Se
     });
 }
 
+/// The HUD's "Try again": sends the kept recording again and pastes it (the HUD never took the focus).
+#[tauri::command]
+pub fn retry_last() -> bool {
+    sonicscript::dictate::retry(false)
+}
+
+/// The pill's area in the window's physical pixels, while it has a button: only it takes clicks.
+#[tauri::command]
+pub fn hud_hit_area(app: AppHandle, x: i32, y: i32, w: i32, h: i32) {
+    if let Some(win) = app.get_webview_window(LABEL) {
+        native::hit_area(&win, Some((x, y, w, h)));
+    }
+}
+
 /// The mic level for the ring, 0.0-1.0 (the page asks once a frame while listening).
 #[tauri::command]
 pub fn level() -> f32 {
@@ -154,7 +179,8 @@ pub mod native {
     use tauri::WebviewWindow;
     use windows_sys::Win32::Foundation::{HWND, RECT};
     use windows_sys::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromWindow,
+        CreateRectRgn, GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromWindow,
+        SetWindowRgn,
     };
     use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -233,6 +259,20 @@ pub mod native {
         }
     }
 
+    /// Limits the window (drawing and clicks) to a rectangle with a little room for the pill's shadow, or
+    /// gives it its whole area back (`None`).
+    pub fn hit_area(w: &WebviewWindow, area: Option<(i32, i32, i32, i32)>) {
+        let Some(h) = hwnd(w) else { return };
+        // SAFETY: our own window; Windows owns the region after SetWindowRgn succeeds.
+        unsafe {
+            let region = match area {
+                Some((x, y, cx, cy)) => CreateRectRgn(x - 8, y - 8, x + cx + 8, y + cy + 8),
+                None => std::ptr::null_mut(),
+            };
+            SetWindowRgn(h, region, 1);
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -271,6 +311,7 @@ pub mod native {
     pub fn hide(w: &WebviewWindow) {
         let _ = w.hide();
     }
+    pub fn hit_area(_: &WebviewWindow, _: Option<(i32, i32, i32, i32)>) {}
     pub fn foreground() -> isize {
         0
     }

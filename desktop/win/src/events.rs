@@ -53,6 +53,9 @@ pub enum Event {
     Failed {
         lines: Vec<String>,
     },
+    /// The failed recording is kept and can be sent again (`dictate::retry`): no answer came, but a key or the
+    /// day's free requests were not the reason (M2 phase 6).
+    CanRetry,
 }
 
 /// Where events go. Called from the dictation thread and the transcription threads.
@@ -129,6 +132,7 @@ pub fn console_lines(e: &Event) -> Vec<(bool, String)> {
         )),
         Event::HintOnly => out("  Nothing to type (the engine only heard its own hint).".into()),
         Event::Failed { lines } => lines.iter().map(|l| (true, format!("  {l}"))).collect(),
+        Event::CanRetry => Vec::new(),
     }
 }
 

@@ -3,6 +3,16 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-06 (feat/m2-reliability)
+
+- History older than the kept days is deleted (at start, then at most hourly). The chain learns each engine's
+  wait from its last 50 answers (D-017), kept in `timings.json`.
+  Clips over 2 minutes go in parts cut at the longest pause near every 90 s, sent in order and joined.
+  Try again (tray item, HUD button) sends the last recording nothing answered again (D-051).
+  Review fixes: the wait is learned from answer times, never sooner than the spec's (a per-second wait asked
+  Flash too early on short clips); the tray's Try again copies; only newer results change the kept recording;
+  the HUD takes clicks only on the pill; per-part speech time; lists joined by line breaks; `--bench` fixed waits.
+
 ## 2026-11-06 (feat/m2-popup-mic)
 
 - Pop-up mic (M2 phase 5) started: a click starts or stops a recording like a key tap (`Machine::click`,

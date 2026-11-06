@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod client;
+pub mod deadline;
 pub mod encode;
 pub mod gemini;
 pub mod groq;

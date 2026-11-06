@@ -36,6 +36,8 @@ pub struct View {
     pub label: String,
     /// The pill leaves by itself after this long; `None` = until the next event.
     pub hide_after_ms: Option<u64>,
+    /// A button on the pill ("Try again"); the window takes clicks only while there is one.
+    pub action: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +54,9 @@ pub const NO_SPEECH_MS: u64 = 1800;
 pub const LIMIT_MS: u64 = 4000;
 pub const NOT_PASTED_MS: u64 = 5000;
 pub const FAILED_MS: u64 = 6000;
+/// The failure with its "Try again" button stays longer: the user has to reach it.
+pub const RETRY_MS: u64 = 12_000;
+pub const TRY_AGAIN: &str = "Try again";
 /// The longest label the pill shows; longer ones are cut with "…".
 pub const LABEL_MAX: usize = 72;
 
@@ -59,6 +64,8 @@ pub const LABEL_MAX: usize = 72;
 #[derive(Debug, Default)]
 pub struct Hud {
     recording: bool,
+    /// The last failure's line, for the "Try again" view that follows it.
+    last_failure: Option<String>,
     /// Recordings sent and not answered yet (a slow answer can still run when the next clip is sent).
     jobs: u32,
     /// The pill shows a passing view (one with `hide_after_ms`): a limit note waits behind it.
@@ -73,6 +80,7 @@ fn view(kind: Kind, tone: Tone, label: &str, hide_after_ms: Option<u64>) -> View
         tone,
         label: short(label),
         hide_after_ms,
+        action: None,
     }
 }
 
@@ -119,6 +127,9 @@ impl Hud {
             | Event::HintOnly
             | Event::Failed { .. } => {
                 self.jobs = self.jobs.saturating_sub(1);
+                if let Event::Failed { lines } = e {
+                    self.last_failure = lines.first().cloned();
+                }
                 // A job's end while the next recording runs (a slow answer): the recording keeps the pill.
                 if self.recording {
                     return Change::None;
@@ -139,6 +150,17 @@ impl Hud {
                 }
             }
             // Start-up lines, timing notes and setting problems belong on the tray, not over the user's app.
+            // The failed recording is kept: the failure's pill gets a "Try again" button, for longer.
+            Event::CanRetry if !self.recording => {
+                let label = self
+                    .last_failure
+                    .clone()
+                    .unwrap_or_else(|| "Nothing typed".into());
+                let mut v = view(Kind::Problem, Tone::Danger, &label, Some(RETRY_MS));
+                v.action = Some(TRY_AGAIN);
+                self.show(v)
+            }
+            Event::CanRetry => Change::None,
             Event::Ready { .. } | Event::Notice(_) | Event::Warning(_) | Event::CapReached => {
                 Change::None
             }
@@ -359,12 +381,30 @@ mod tests {
             tone: Tone::Ok,
             label: "Done".into(),
             hide_after_ms: Some(600),
+            action: None,
         };
         let json = serde_json::to_string(&v).unwrap();
         assert_eq!(
             json,
-            r#"{"kind":"inserted","tone":"ok","label":"Done","hide_after_ms":600}"#
+            r#"{"kind":"inserted","tone":"ok","label":"Done","hide_after_ms":600,"action":null}"#
         );
+    }
+
+    #[test]
+    fn a_kept_failure_offers_try_again() {
+        let mut h = Hud::default();
+        h.apply(&listening());
+        h.apply(&Event::Processing);
+        h.apply(&Event::Failed {
+            lines: vec!["! Nothing typed: no model answered.".into()],
+        });
+        let v = shown(h.apply(&Event::CanRetry));
+        assert_eq!(v.action, Some(TRY_AGAIN));
+        assert_eq!(v.label, "Nothing typed: no model answered.");
+        assert_eq!(v.hide_after_ms, Some(RETRY_MS));
+        // Never over a recording.
+        h.apply(&listening());
+        assert_eq!(h.apply(&Event::CanRetry), Change::None);
     }
 
     #[test]

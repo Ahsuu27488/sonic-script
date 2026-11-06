@@ -29,6 +29,61 @@ pub fn request_reload() {
     RELOAD.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// The last recording nothing answered, kept for "Try again" (M2 phase 6).
+struct Pending {
+    samples: Vec<f32>,
+    stream: sonicscript_core::encode::Stream,
+    mic_open_ms: u128,
+    seq: u64,
+}
+
+static PENDING: std::sync::Mutex<Option<Pending>> = std::sync::Mutex::new(None);
+/// 0: no retry asked; [`RETRY_PASTE`] or [`RETRY_COPY`]: send the kept recording at the next idle moment.
+static RETRY: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+const RETRY_PASTE: u8 = 1;
+const RETRY_COPY: u8 = 2;
+
+/// "Try again" (the tray, the HUD): the kept recording is sent again at the next idle moment. `copy_only`:
+/// the text goes on the clipboard (the tray menu has the focus, a paste would miss the user's app). False
+/// when no recording is kept. A recording started before it runs cancels it.
+pub fn retry(copy_only: bool) -> bool {
+    let kept = PENDING.lock().is_ok_and(|p| p.is_some());
+    if kept {
+        let how = if copy_only { RETRY_COPY } else { RETRY_PASTE };
+        RETRY.store(how, std::sync::atomic::Ordering::SeqCst);
+    }
+    kept
+}
+
+/// What a finished job means for the kept recording: a newer failure replaces it, a newer text that came
+/// through forgets it, anything older changes nothing. `Some(true)` = keep this job's, `Some(false)` = forget.
+fn keep_decision(
+    kept: Option<u64>,
+    job: u64,
+    retryable_failure: bool,
+    typed: bool,
+) -> Option<bool> {
+    let newer = kept.is_none_or(|k| job > k);
+    match (newer, retryable_failure, typed) {
+        (true, true, _) => Some(true),
+        (true, false, true) if kept.is_some() => Some(false),
+        _ => None,
+    }
+}
+
+/// Whether sending the same recording again could work: no answer came, but not because of a key or because
+/// every model's free requests for the day are used up (those need the user, or tomorrow).
+fn retryable(e: &PipelineError) -> bool {
+    let PipelineError::Api(e) = e else {
+        return false;
+    };
+    let daily = |e: &ApiError| matches!(e, ApiError::RateLimited { daily: true, .. });
+    match e {
+        ApiError::AllFailed(all) => !e.is_key_error() && !all.iter().all(|(_, e)| daily(e)),
+        other => !other.is_key_error() && !daily(other),
+    }
+}
+
 /// True once when a reload was asked for and nothing is recording (a recording finishes first).
 fn reload_now(recording: bool) -> bool {
     !recording && take_reload()
@@ -50,6 +105,18 @@ struct Job {
     /// False for `--record`: a mic check only prints (its window is in front, and text pasted into a console
     /// could run as commands).
     paste: bool,
+    /// Put the text on the clipboard instead of pasting it (Try again from the tray menu: the menu took the
+    /// focus from the user's app).
+    copy_only: bool,
+    /// The order the recordings were made in (a retry keeps its first one): only a newer result decides
+    /// what Try again keeps.
+    seq: u64,
+}
+
+static NEXT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn next_seq() -> u64 {
+    NEXT_SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Dictates until the key hook stops (an error) or a reload is asked for (`Ok`, see [`request_reload`]).
@@ -92,12 +159,42 @@ pub fn run(choice: Choice, keep_history: bool, sink: Arc<dyn Sink>) -> Result<()
                     Action::Stop
                 }
                 _ if reload_now(recording.is_some()) => return Ok(()),
+                None if RETRY.load(std::sync::atomic::Ordering::SeqCst) != 0 => {
+                    let how = RETRY.swap(0, std::sync::atomic::Ordering::SeqCst);
+                    let Some(p) = PENDING.lock().ok().and_then(|mut p| p.take()) else {
+                        continue;
+                    };
+                    let job = Job {
+                        stopped: Instant::now(),
+                        rec: Recording {
+                            samples: p.samples,
+                            stream: Ok(p.stream),
+                        },
+                        mic_open_ms: p.mic_open_ms,
+                        paste: true,
+                        copy_only: how == RETRY_COPY,
+                        seq: p.seq,
+                    };
+                    sink.send(Event::Processing);
+                    let (client, normalizer, history, sink) = (
+                        client.clone(),
+                        normalizer.clone(),
+                        history.clone(),
+                        sink.clone(),
+                    );
+                    std::thread::spawn(move || {
+                        transcribe(job, &client, &normalizer, history.as_deref(), &*sink);
+                    });
+                    continue;
+                }
                 _ => continue,
             },
             Err(RecvTimeoutError::Disconnected) => return Err("the key hook stopped".into()),
         };
         match action {
             Action::Start => {
+                // A Try again asked before this recording is dropped: it would paste in the middle of it.
+                RETRY.store(0, std::sync::atomic::Ordering::SeqCst);
                 // The chime starts first; the mic starts ~15 ms later, so with speakers (not headphones) its
                 // start may be in the recording, quietly.
                 cue::play(Cue::Start);
@@ -142,6 +239,8 @@ pub fn run(choice: Choice, keep_history: bool, sink: Arc<dyn Sink>) -> Result<()
                     rec: r.stop(),
                     mic_open_ms,
                     paste: true,
+                    copy_only: false,
+                    seq: next_seq(),
                 };
                 ready.refill();
                 // After the mic is closed, so the chime is not recorded.
@@ -182,6 +281,8 @@ pub fn record_for(seconds: f64, choice: Choice, keep_history: bool) -> Result<()
         rec: r.stop(),
         mic_open_ms,
         paste: false,
+        copy_only: false,
+        seq: next_seq(),
     };
     let client = warm.join().map_err(|_| "warm-up thread panicked")?;
     transcribe(job, &client, &normalizer, history.as_ref(), &sink);
@@ -198,8 +299,17 @@ fn open_history(keep: bool, sink: &dyn Sink) -> Option<History> {
     }
     match History::open() {
         Ok(h) => {
+            // Recordings older than the kept days go (D-044, Settings → History); 0 keeps them forever.
+            let days = crate::settings::load().0.history_days;
+            let h = h.with_keep_days(days);
+            h.prune_now_and_then();
+            let kept = match days {
+                0 => String::new(),
+                1 => " for 1 day".into(),
+                n => format!(" for {n} days"),
+            };
             sink.send(Event::Notice(format!(
-                "Each recording and its text are kept in {} (--no-history to turn off).",
+                "Each recording and its text are kept{kept} in {} (--no-history to turn off).",
                 h.dir().display()
             )));
             Some(h)
@@ -225,6 +335,8 @@ fn transcribe(
         stopped,
         mic_open_ms,
         paste,
+        copy_only,
+        seq,
     } = job;
     let mut stream = match rec.stream {
         Ok(s) => s,
@@ -241,7 +353,12 @@ fn transcribe(
     let mut app = None;
     // Timed for every attempt (pasted, only copied, failed): the history is also the latency log (D-032).
     let mut paste_ms = None;
-    let pasted = if paste && typeable {
+    let pasted = if paste && typeable && copy_only {
+        match inject::copy(out.text.trim_end()) {
+            Ok(()) => Paste::Copied("Try again from the tray menu".into()),
+            Err(e) => Paste::Failed(e),
+        }
+    } else if paste && typeable {
         app = inject::app_in_front();
         let t = Instant::now();
         let result = inject::paste(&out.text);
@@ -283,6 +400,26 @@ fn transcribe(
         };
         if let Err(e) = history.save(&out, clip) {
             sink.send(Event::Warning(format!("Not kept in the history: {e}")));
+        }
+        history.prune_now_and_then();
+    }
+    // "Try again" keeps the last recording nothing answered (dictation only; a text that came through
+    // forgets it).
+    if paste && let Ok(mut pending) = PENDING.lock() {
+        let failed = out.error.as_ref().is_some_and(retryable);
+        match keep_decision(pending.as_ref().map(|p| p.seq), seq, failed, typeable) {
+            Some(true) => {
+                *pending = Some(Pending {
+                    samples: rec.samples,
+                    stream,
+                    mic_open_ms,
+                    seq,
+                });
+                drop(pending);
+                sink.send(Event::CanRetry);
+            }
+            Some(false) => *pending = None,
+            None => {}
         }
     }
 }
@@ -400,6 +537,41 @@ fn limit_notes(out: &Outcome) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_failures_a_second_try_could_fix_are_kept() {
+        let api = |e| PipelineError::Api(e);
+        assert!(retryable(&api(ApiError::Network("dns".into()))));
+        assert!(retryable(&api(ApiError::Timeout)));
+        assert!(retryable(&all(vec![
+            ApiError::Timeout,
+            daily(),
+            ApiError::Timeout
+        ])));
+        assert!(
+            !retryable(&all(vec![daily(), daily(), daily()])),
+            "tomorrow, not now"
+        );
+        assert!(!retryable(&api(ApiError::BadKey("GEMINI_API_KEY".into()))));
+        assert!(!retryable(&api(ApiError::MissingKey(
+            "GEMINI_API_KEY".into()
+        ))));
+        assert!(!retry(false), "nothing kept: nothing to send again");
+    }
+
+    #[test]
+    fn only_a_newer_result_changes_what_try_again_keeps() {
+        // Nothing kept: a failure is kept, a text changes nothing.
+        assert_eq!(keep_decision(None, 5, true, false), Some(true));
+        assert_eq!(keep_decision(None, 5, false, true), None);
+        // Clip 7 failed and is kept; clip 6 (older, slow) then comes through: 7 stays kept.
+        assert_eq!(keep_decision(Some(7), 6, false, true), None);
+        // Clip 8 (newer) comes through: forget 7.
+        assert_eq!(keep_decision(Some(7), 8, false, true), Some(false));
+        // An older failure never replaces a newer kept one; a newer one does.
+        assert_eq!(keep_decision(Some(7), 6, true, false), None);
+        assert_eq!(keep_decision(Some(7), 9, true, false), Some(true));
+    }
 
     #[test]
     fn a_reload_waits_for_the_recording() {

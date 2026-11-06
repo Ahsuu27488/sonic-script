@@ -106,6 +106,16 @@ body { display: grid; place-items: center; font-family: var(--font-ui); -webkit-
   text-overflow: ellipsis; min-width: 0; }
 .pill[data-kind="writing"] .label { color: var(--text-2); }
 
+/* "Try again": the only control on the pill (the window takes clicks only while it shows). */
+.pill { max-width: 400px; }
+.action {
+  flex: none; margin-left: 4px; border: 0; border-radius: var(--radius-pill); cursor: pointer;
+  background: var(--accent); color: var(--on-accent); font: 500 var(--text-sm) / 1 var(--font-ui);
+  padding: 7px 12px; transition: transform var(--dur-fast) var(--ease-out);
+}
+.action:active { transform: scale(0.97); }
+.action[hidden] { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   /* A static ring whose glow only fades with the level; no shimmer, no tick drawing. */
   .glow { transform: scale(0.8); }

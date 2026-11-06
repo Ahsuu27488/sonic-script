@@ -116,6 +116,15 @@ pub fn normalizer(choice: &Choice) -> Normalizer {
 /// notice (stderr); only when none is left is it an error. Without the format step's key the text comes out
 /// unformatted, with a notice.
 pub fn engines(choice: Choice) -> Result<Engines, String> {
+    engines_with(choice, true)
+}
+
+/// The engines for `--bench`: the spec's fixed waits, nothing learned or written (comparable runs, D-051).
+pub fn engines_fixed(choice: Choice) -> Result<Engines, String> {
+    engines_with(choice, false)
+}
+
+fn engines_with(choice: Choice, learn: bool) -> Result<Engines, String> {
     let many = choice.links.len() > 1;
     let format = choice.format.filter(|f| {
         let ok = !read(&f.provider.key_env).is_empty();
@@ -161,19 +170,23 @@ pub fn engines(choice: Choice) -> Result<Engines, String> {
     if links.is_empty() {
         return Err(first_error.unwrap_or_default());
     }
-    let chain = Chain::with_last_resort(links);
-    Ok(match rest_file() {
-        Some(path) => chain.with_rest_file(path),
-        None => chain,
-    })
+    let mut chain = Chain::with_last_resort(links);
+    if let Some(path) = data_file("resting.json") {
+        chain = chain.with_rest_file(path);
+    }
+    // Each engine's wait is learned from its answers (D-017, D-051): `answer-times.json`.
+    if learn && let Some(path) = data_file("answer-times.json") {
+        chain = chain.with_timing_file(path);
+    }
+    Ok(chain)
 }
 
-/// `%LOCALAPPDATA%\SonicScript\resting.json`: models out of free requests stay skipped after a restart
-/// (D-040).
-fn rest_file() -> Option<std::path::PathBuf> {
+/// A file in `%LOCALAPPDATA%\SonicScript`: `resting.json` (models out of free requests stay skipped after a
+/// restart, D-040), `answer-times.json` (each engine's recent answer times, D-051).
+fn data_file(name: &str) -> Option<std::path::PathBuf> {
     let dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("SonicScript");
     std::fs::create_dir_all(&dir).ok()?;
-    Some(dir.join("resting.json"))
+    Some(dir.join(name))
 }
 
 /// "a, then b after 4 s, then c after 3 s more, then d if all of them fail" for the console.

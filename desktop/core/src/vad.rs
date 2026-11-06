@@ -22,6 +22,12 @@ pub const MIN_SPEECH_MS: u32 = 300;
 /// sentences into English (D-022).
 pub const PAD: usize = RATE / 2;
 const FLOOR_PERCENTILE: usize = 10;
+/// Clips longer than this are sent in parts (M2 phase 6): one long request is slower, more likely to time out
+/// and, for Gemini Transcribe, more likely to come back cut (D-042).
+pub const SPLIT_OVER: usize = 120 * RATE;
+/// Each part is about this long: the cut goes at the longest pause within [`SPLIT_WINDOW`] of the mark.
+pub const SPLIT_EVERY: usize = 90 * RATE;
+pub const SPLIT_WINDOW: usize = 15 * RATE;
 
 /// What the gate found in a clip.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,26 +46,10 @@ impl Detection {
 
 /// Mono samples in [-1, 1] at [`RATE`].
 pub fn detect(samples: &[f32]) -> Detection {
-    let frames: Vec<(f64, f64)> = samples
-        .as_chunks::<FRAME>()
-        .0
-        .iter()
-        .map(|f| frame_stats(f))
-        .collect();
-    if frames.is_empty() {
-        return Detection {
-            speech_ms: 0,
-            keep: 0..0,
-        };
-    }
-    let mut levels: Vec<f64> = frames.iter().map(|(db, _)| *db).collect();
-    levels.sort_by(f64::total_cmp);
-    let floor = levels[(levels.len() - 1) * FLOOR_PERCENTILE / 100];
-    let threshold = (floor + MARGIN_DB).max(MIN_DB);
-    let speech: Vec<usize> = frames
+    let speech: Vec<usize> = speech_frames(samples)
         .iter()
         .enumerate()
-        .filter(|(_, (db, zcr))| *db > threshold && *zcr < MAX_ZCR)
+        .filter(|(_, s)| **s)
         .map(|(i, _)| i)
         .collect();
     let (Some(&first), Some(&last)) = (speech.first(), speech.last()) else {
@@ -71,6 +61,64 @@ pub fn detect(samples: &[f32]) -> Detection {
     let speech_ms = u32::try_from(speech.len() * 20).unwrap_or(u32::MAX);
     let keep = (first * FRAME).saturating_sub(PAD)..((last + 1) * FRAME + PAD).min(samples.len());
     Detection { speech_ms, keep }
+}
+
+/// Per 20 ms frame: whether it is speech (the gate's rule).
+pub fn speech_frames(samples: &[f32]) -> Vec<bool> {
+    let frames: Vec<(f64, f64)> = samples
+        .as_chunks::<FRAME>()
+        .0
+        .iter()
+        .map(|f| frame_stats(f))
+        .collect();
+    if frames.is_empty() {
+        return Vec::new();
+    }
+    let mut levels: Vec<f64> = frames.iter().map(|(db, _)| *db).collect();
+    levels.sort_by(f64::total_cmp);
+    let floor = levels[(levels.len() - 1) * FLOOR_PERCENTILE / 100];
+    let threshold = (floor + MARGIN_DB).max(MIN_DB);
+    frames
+        .iter()
+        .map(|(db, zcr)| *db > threshold && *zcr < MAX_ZCR)
+        .collect()
+}
+
+/// The parts a long clip is sent in: `keep` whole when it is at most `over` samples, else cut about every
+/// `every` samples, each cut in the middle of the longest pause (non-speech frames) within [`SPLIT_WINDOW`] of
+/// the mark, or at the mark when there is none. The last part may be up to `over` long.
+pub fn split(speech: &[bool], keep: Range<usize>, every: usize, over: usize) -> Vec<Range<usize>> {
+    let mut parts = Vec::new();
+    let mut start = keep.start;
+    while keep.end - start > over {
+        let mark = start + every;
+        let lo = mark.saturating_sub(SPLIT_WINDOW).max(start + FRAME) / FRAME;
+        let hi = ((mark + SPLIT_WINDOW).min(keep.end - FRAME) / FRAME).min(speech.len());
+        // The longest run of silent frames in [lo, hi): (first frame, length).
+        let (mut best, mut run_start, mut run) = ((0, 0), 0, 0);
+        for (f, &is_speech) in speech.iter().enumerate().take(hi).skip(lo) {
+            if is_speech {
+                run = 0;
+                continue;
+            }
+            if run == 0 {
+                run_start = f;
+            }
+            run += 1;
+            if run > best.1 {
+                best = (run_start, run);
+            }
+        }
+        let cut = if best.1 > 0 {
+            (best.0 * 2 + best.1) * FRAME / 2
+        } else {
+            mark
+        };
+        parts.push(start..cut);
+        start = cut;
+    }
+    parts.push(start..keep.end);
+    parts
 }
 
 /// Level in dBFS and zero-crossing rate (share of neighbouring samples with a different sign).
@@ -93,6 +141,36 @@ mod tests {
     use super::*;
     use std::f32::consts::PI;
     use std::path::Path;
+
+    #[test]
+    fn long_clips_are_cut_in_the_longest_pause_near_each_mark() {
+        let frames_per_s = RATE / FRAME;
+        // 200 s of speech with a short pause at 80 s and a longer one at 95 s.
+        let mut speech = vec![true; 200 * frames_per_s];
+        speech[80 * frames_per_s..80 * frames_per_s + 20].fill(false);
+        speech[95 * frames_per_s..95 * frames_per_s + 50].fill(false);
+        let parts = split(&speech, 0..200 * RATE, SPLIT_EVERY, SPLIT_OVER);
+        assert_eq!(parts.len(), 2);
+        // The middle of the 1 s pause at 95 s.
+        assert_eq!(parts[0], 0..(95 * RATE + 25 * FRAME));
+        assert_eq!(parts[1].end, 200 * RATE);
+        assert_eq!(parts[0].end, parts[1].start, "nothing lost between parts");
+    }
+
+    #[test]
+    fn short_clips_stay_whole_and_no_pause_cuts_at_the_mark() {
+        let speech = vec![true; 100 * 50];
+        let whole = split(&speech, 0..100 * RATE, SPLIT_EVERY, SPLIT_OVER);
+        assert_eq!(whole.len(), 1);
+        assert_eq!(whole[0], 0..100 * RATE);
+        // 300 s with no pause at all: cuts at 90 s and 180 s, the rest (120 s) whole.
+        let speech = vec![true; 300 * 50];
+        let parts = split(&speech, 0..300 * RATE, SPLIT_EVERY, SPLIT_OVER);
+        assert_eq!(
+            parts,
+            [0..90 * RATE, 90 * RATE..180 * RATE, 180 * RATE..300 * RATE]
+        );
+    }
 
     /// Deterministic white noise at roughly `rms`.
     fn noise(len: usize, rms: f32, seed: u32) -> Vec<f32> {

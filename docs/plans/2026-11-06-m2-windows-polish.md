@@ -21,6 +21,8 @@
   14 of 14). Choices in D-049 (saves at once, Test key = model list).
 - 2026-11-06: Phase 5 built on `feat/m2-popup-mic` (tasks 5.1-5.3; 5.4 checked on a test window of its own).
   Choices in D-050.
+- 2026-11-06: Phase 6 built on `feat/m2-reliability` (tasks 6.1-6.4; 6.5: the long clip came back whole; Try
+  again with the network off is the owner's check). Choices in D-051. Phase 7 (release) not started.
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").
@@ -399,6 +401,36 @@ Detailed tasks (written 2026-11-06; branch from `feat/m2-settings-ui`, PR #39 op
 - **Clips over 2 minutes:** split at the longest pause near each 90 s mark, sent in order, joined.
 - **Check:** unit tests; network off → message, network on → Try again types the text; a 3-minute clip comes
   back whole.
+
+Detailed tasks (written 2026-11-06; branch from `feat/m2-popup-mic`, PR #40 open). The plan's fourth item
+(history older than `history_days` deleted) was added to this phase by the owner's brief.
+
+### Task 6.1: history clean-up (`win/src/history.rs`)
+- `History::with_keep_days(days)`, `prune(now)` (lines older than the kept days and their recordings; 0 =
+  forever; lines without a time kept), `prune_now_and_then()` (at dictation start, then at most hourly).
+
+### Task 6.2: the learned deadline (`core/src/deadline.rs`, `client.rs`)
+- `Timings`: per engine, the time of its last 50 good answers; `wait(id, spec)` = 2 x median, never under
+  the spec's wait nor over 8 s, once 10 answers exist, else the spec's wait; kept in
+  `%LOCALAPPDATA%\SonicScript\answer-times.json`. `Chain::with_timing_file`, `wait_for`; every good answer
+  (also a losing one) is recorded; `--bench` uses the fixed waits. (A per-second-of-audio version was built
+  first and dropped after review: D-051.)
+
+### Task 6.3: clips over 2 minutes (`core/src/vad.rs`, `pipeline.rs`)
+- `vad::speech_frames`, `vad::split(speech, keep, every, over)`: over 120 s, cut in the middle of the longest
+  pause within 15 s of every 90 s mark (at the mark when there is none). `run_streamed` sends the parts in
+  order and joins their texts; a part that fails fails the clip.
+
+### Task 6.4: Try again (`win/src/dictate.rs`, `events.rs`, the app)
+- After a failure a second try could fix (not a key, not every model's daily quota), dictation keeps the
+  recording and sends `Event::CanRetry`; `dictate::retry()` sends it again at the next idle moment (a new
+  history line). The tray's "Try again" item and a "Try again" button on the HUD pill (the HUD takes clicks only
+  while it shows) call it. A text that came through forgets the kept recording.
+
+### Task 6.5: the real check, docs, PR
+- A 164 s clip of 31 test sentences through `sonicscript --file` and the real chain: came back whole, first to
+  last sentence, in two parts. Network off / on with Try again: the owner (an agent must not switch the
+  network off).
 
 ## Phase 7: release and first run (T2, `feat/m2-release`)
 
