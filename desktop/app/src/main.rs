@@ -31,6 +31,8 @@ pub(crate) struct Tray {
     pub(crate) status: Mutex<Status>,
     headline: MenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
+    /// "Start with Windows": the settings window changes it too (`prefs::autostart_set`).
+    pub(crate) autostart: CheckMenuItem<Wry>,
 }
 
 /// Dictation's events, on the tray (and on stderr, seen in a debug build).
@@ -163,11 +165,14 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             "settings" => open_settings(app),
             "history" => open_history(app),
             "autostart" => {
-                let on = start.is_checked().unwrap_or(false);
+                let Some(t) = app.try_state::<Tray>() else {
+                    return;
+                };
+                let on = t.autostart.is_checked().unwrap_or(false);
                 if let Err(e) = autostart::set(on) {
                     problem(app, e);
                 }
-                let _ = start.set_checked(autostart::enabled());
+                let _ = t.autostart.set_checked(autostart::enabled());
             }
             "quit" => app.exit(0),
             _ => {}
@@ -177,6 +182,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         status: Mutex::new(status),
         headline,
         pause,
+        autostart: start,
     });
     Ok(())
 }
@@ -235,8 +241,17 @@ fn open_settings(app: &AppHandle) {
         .min_inner_size(400.0, 420.0)
         .resizable(true)
         .build();
-    if let Err(e) = built {
-        problem(app, format!("could not open the settings window: {e}"));
+    match built {
+        // Closed while a new key was being picked: dictation must not stay paused.
+        Ok(w) => {
+            let handle = app.clone();
+            w.on_window_event(move |e| {
+                if matches!(e, tauri::WindowEvent::Destroyed) {
+                    prefs::prefs_pause(handle.clone(), false);
+                }
+            });
+        }
+        Err(e) => problem(app, format!("could not open the settings window: {e}")),
     }
 }
 
@@ -288,6 +303,8 @@ fn start_dictation(app: AppHandle) {
                 },
             );
             if let Err(e) = result {
+                // The hook of an earlier turn may still be in place: it must not take the user's keys.
+                hotkey::stop_listening();
                 // No recording or answer is coming any more: the HUD must not wait for one.
                 hudwin::reset(&app);
                 sink.send(Event::Failed {

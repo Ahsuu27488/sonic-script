@@ -354,9 +354,9 @@
           sure.append(
             btn("Delete for good", async () => {
               try {
-                await call("history_delete", { at: it.at });
+                const gone = await call("history_delete", { at: it.at });
                 li.remove();
-                toast("Deleted");
+                toast(gone ? "Deleted" : "Already deleted");
               } catch (e) {
                 fail(e);
               }

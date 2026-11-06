@@ -351,7 +351,8 @@ pub fn history_play(audio: String) -> Result<(), String> {
     if !audio.starts_with("audio/") || audio.contains("..") {
         return Err("not a recording of the history".into());
     }
-    let path = History::open()?.dir().join(&audio);
+    // Explorer reads a "/" as a switch: the path gets Windows separators.
+    let path = History::open()?.dir().join(audio.replace('/', "\\"));
     if !path.exists() {
         return Err("The recording is no longer there.".into());
     }
@@ -380,9 +381,14 @@ pub async fn history_reinsert(app: AppHandle, text: String) -> Result<String, St
 }
 
 #[tauri::command]
-pub fn autostart_set(on: bool) -> Result<bool, String> {
+pub fn autostart_set(app: AppHandle, on: bool) -> Result<bool, String> {
     crate::autostart::set(on)?;
-    Ok(crate::autostart::enabled())
+    let now = crate::autostart::enabled();
+    // The tray's tick says the same.
+    if let Some(t) = app.try_state::<crate::Tray>() {
+        let _ = t.autostart.set_checked(now);
+    }
+    Ok(now)
 }
 
 #[tauri::command]

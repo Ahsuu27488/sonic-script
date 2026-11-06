@@ -326,7 +326,7 @@ the focus back.
   app's dictation thread loops: load settings → run. Test `a_reload_waits_for_the_recording`.
 
 ### Task 4.2: what the window needs from the library (`core`, `win`)
-- `spec::provider(name)`, `api::check_key(&Provider, key)` (`GET {base}/models`, Gemini header or Bearer).
+- `spec::provider(name)`, `api::test_key(&Provider, key)` (`GET {base}/models`, Gemini header or Bearer).
 - `key::source(env) -> Option<KeySource { from: Env | Store | UserEnv, last4 }>` (never the key itself).
 - `history::recent(dir, n) -> Vec<Item { at, time, text, app, audio }>` (newest first),
   `history::delete(dir, at)` (its line and its recording). Tests on a temp folder.
@@ -336,8 +336,8 @@ the focus back.
 ### Task 4.3: the settings commands (`desktop/app/src/prefs.rs`)
 - Pure, tested: `key_name(js_code)` (KeyboardEvent.code / mouse button → a `setkey` name),
   `check(Settings) -> Result<Settings, String>` (key allowed, model ids known, ≤ 2 fallbacks, no duplicates,
-  `history_days` 1-365).
-- Commands: `prefs_state`, `prefs_save`, `prefs_check_key_name`, `prefs_pause` (dictation paused while the
+  `history_days` 0-365, 0 = forever).
+- Commands: `prefs_state`, `prefs_save`, `prefs_key_name`, `prefs_pause` (dictation paused while the
   user picks a key), `key_save` / `key_delete` / `key_test`, `words_*`, `history_*`, `autostart_set`,
   `open_link` (https links of a fixed list only). Every save that changes dictation calls `request_reload`.
 

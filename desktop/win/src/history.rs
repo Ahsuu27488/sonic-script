@@ -147,13 +147,23 @@ impl History {
         let Some(audio) = audio else {
             return Ok(false);
         };
+        // The recording first: when it is open in a player, the line stays and the user is told, so nothing
+        // is left behind that the list no longer shows. Only a recording inside the history folder: a
+        // hand-edited line must not delete anything else.
+        if let Some(rel) = audio.filter(|r| r.starts_with("audio/") && !r.contains("..")) {
+            match fs::remove_file(self.dir.join(rel)) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    return Err(format!(
+                        "The recording could not be deleted (is it playing?): {e}"
+                    ));
+                }
+            }
+        }
         let tmp = index.with_extension("jsonl.tmp");
         fs::write(&tmp, kept).map_err(|e| format!("{}: {e}", tmp.display()))?;
         fs::rename(&tmp, &index).map_err(|e| format!("{}: {e}", index.display()))?;
-        // Only a recording inside the history folder: a hand-edited line must not delete anything else.
-        if let Some(rel) = audio.filter(|r| r.starts_with("audio/") && !r.contains("..")) {
-            let _ = fs::remove_file(self.dir.join(rel));
-        }
         Ok(true)
     }
 }
