@@ -23,6 +23,7 @@
   Choices in D-050.
 - 2026-11-06: Phase 6 built on `feat/m2-reliability` (tasks 6.1-6.4; 6.5: the long clip came back whole; Try
   again with the network off is the owner's check). Choices in D-051. Phase 7 (release) not started.
+- 2026-11-07: Phase 7 started on `feat/m2-release`; tasks 7.1-7.4 written below.
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").
@@ -444,6 +445,59 @@ Detailed tasks (written 2026-11-06; branch from `feat/m2-popup-mic`, PR #40 open
   minutes (timed, the owner watching). Before that: a clean Windows user account on the owner's PC as the
   dry run.
 - **Rollback:** delete the release; the installer's uninstaller.
+
+Detailed tasks (written 2026-11-07 when the phase started; the owner's go-ahead: "start phase 7 and lets
+complete m2"; branch `feat/m2-release` from `main` with PRs #35-#41 merged; C: 33 GB free). Tier T2 (an
+installer that writes the `Run` value, deletes data on request, a release workflow).
+
+### Task 7.1: the installer (`desktop/app/tauri.conf.json`, `desktop/app/installer.nsh`)
+- `bundle.active` true, `targets: ["nsis"]`, `windows.nsis.installMode: "currentUser"` (no admin), the Voice Ring
+  icon as installer icon, `webviewInstallMode` the default (download bootstrapper when WebView2 is missing).
+- Installed as `%LOCALAPPDATA%\SonicScript\sonicscript-tray.exe` (Tauri's per-user default folder, next to the
+  history; the exe keeps its cargo name: `mainBinaryName = "SonicScript"` would copy it to
+  `targetelease\SonicScript.exe`, the same file as the CLI's `sonicscript.exe`, D-047). Start menu shortcut
+  "SonicScript" (Tauri's, named after `productName`).
+- Hooks (`installerHooks`): POSTINSTALL writes HKCU `Run` `SonicScript` = `"$INSTDIR\sonicscript-tray.exe"`
+  (the exact string `autostart::command_line` gives, so the tray's tick shows it), not in `/UPDATE` mode.
+  Uninstall: Tauri already deletes the `Run` value; POSTUNINSTALL asks (default No, silent = No, never in
+  update mode) "Delete your history, settings and word list?" (`%LOCALAPPDATA%\SonicScript`,
+  `%APPDATA%\SonicScript`) and "Delete the API keys SonicScript saved?" (`cmdkey /delete:SonicScript/<VAR>`
+  for the three keys).
+- Version 0.2.0 in `tauri.conf.json` and the crate (the tag `v0.2.0`).
+
+### Task 7.2: first run (`desktop/app/src/welcome.rs`, `ui/welcome.{html,css,js}`)
+- Pure: `welcome::needed(gemini: Option<KeySource>) -> bool` (no Gemini key from any source, D-046).
+- At start (not in the previews / demo) the app opens the `welcome` window when `needed`; dictation starts as
+  now (it fails without a key and waits for the settings change `key_save` sends).
+- Page: "Bolo, hum likh denge." → step 1 Gemini key (paste, "Get a free key" opens Google AI Studio, Save &
+  test: `key_save` then `key_test`), optional Groq key ("makes it better"), step 2 "Tap Right Ctrl and speak"
+  (the current key's label from `prefs_state`) with a try box (a textarea that takes the paste) and Done.
+  Keys never come back to the page (only "saved, ends in 1a2b"). DESIGN.md tokens, Geist, focus ring,
+  reduced motion, 400 px wide works.
+- [ ] Failing tests: `welcome_when_no_gemini_key`, `no_welcome_with_a_key`. → FAIL → implement → PASS.
+
+### Task 7.3: release workflow (`.github/workflows/release.yml`)
+- On `push: tags: ["v*"]` (and `workflow_dispatch` for a dry build without a release): `windows-latest`,
+  Rust stable, `cargo install tauri-cli --version ^2 --locked`, `cargo tauri build` in `desktop/app`, then
+  `gh release create <tag> --draft --title ... <setup.exe>` (the owner publishes). Permissions:
+  `contents: write` only in that job. No tag is pushed by an agent; the repo stays private.
+
+### Task 7.4: the check (real paths)
+- `cargo fmt --check`, `clippy --all-targets -D warnings`, `cargo test`.
+- `cargo tauri build` locally → `target/release/bundle/nsis/SonicScript_0.2.0_x64-setup.exe`.
+- The owner's tray app is quit first (the installer refuses while `sonicscript-tray.exe` runs from the same
+  folder? it runs from `target\`, a different path: checked) and started again at the end.
+- Install silently (`/S`) into this user: shortcut in the Start menu, exe in `%LOCALAPPDATA%\SonicScript`,
+  `Run` value written, the app starts; first run checked with a scratch environment where no Gemini key is found
+  (`APPDATA` / `LOCALAPPDATA` / the key variables pointed away; Credential Manager not touched): the
+  welcome window shows; with the real environment it does not.
+- Uninstall silently: exe, shortcut and `Run` value gone, history and keys kept (silent = No). The two
+  questions checked on a scratch copy only (`cmdkey` on a test credential), never on the owner's keys.
+- **Risks:** the owner's `Run` value (if he ticked Start with Windows for the dev build) is overwritten by the
+  install and removed by the uninstall → noted before, put back after. History lives next to the program
+  files: Tauri's uninstaller deletes only its own files and a non-recursive `RMDir` (read in the template).
+- **Rollback:** uninstall from Settings → Apps (or `uninstall.exe`); revert the PR; a draft release is deleted
+  by the owner.
 
 ## Out of scope (M2)
 
