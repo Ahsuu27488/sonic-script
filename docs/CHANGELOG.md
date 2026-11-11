@@ -3,6 +3,17 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-11 (feat/m2-release)
+
+- M2 phase 7 (D-052): a per-user Windows installer (Tauri NSIS, `SonicScript_0.2.0_x64-setup.exe`, 4.2 MB, no
+  admin) into `%LOCALAPPDATA%\SonicScript`: Start menu "SonicScript", start with Windows on; the uninstaller
+  asks (default No) before deleting the history, settings, word list and saved keys. A first-run window
+  ("Bolo, hum likh denge.") when no Gemini key is found: Gemini key (tested before it is saved), optional
+  Groq key, then a try box. `release.yml` builds the installer on a `v*` tag into a draft release. Version 0.2.0.
+  Review fixes: a reinstall (the old uninstaller run in place) no longer asks to delete data and keys and keeps
+  the user's Start with Windows choice; the release pins tauri-cli 2.12.4 and checks the tag against the
+  version; `DECISIONS.md` back to LF line endings.
+
 ## 2026-11-06 (feat/m2-reliability)
 
 - History older than the kept days is deleted (at start, then at most hourly). The chain learns each engine's

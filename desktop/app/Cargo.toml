@@ -1,6 +1,6 @@
 [package]
 name = "sonicscript-app"
-version = "0.1.0"
+version = "0.2.0"
 description = "SonicScript for Windows: the tray app (M2)"
 edition.workspace = true
 license.workspace = true

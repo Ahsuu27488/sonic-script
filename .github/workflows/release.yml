@@ -1,0 +1,56 @@
+# Release (M2 phase 7): on a v* tag, build the Windows installer and attach it to a DRAFT GitHub Release.
+# The owner pushes the tag and publishes the release; nothing here publishes. `workflow_dispatch` builds the
+# installer as a run artifact only (a dry build, no release).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    permissions:
+      contents: write # create the draft release
+    defaults:
+      run:
+        working-directory: desktop/app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = (Get-Content tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($env:TAG -ne "v$version") { throw "tag $env:TAG != v$version in tauri.conf.json" }
+      # The version the installer hooks (installer.nsh) were checked against: change it only after re-checking
+      # them against the new template.
+      - name: Tauri CLI
+        run: cargo install tauri-cli --version 2.12.4 --locked
+      - name: Build the installer
+        run: cargo tauri build --bundles nsis
+      - name: Find the installer
+        id: find
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem ../target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $exe) { throw "no installer was built" }
+          "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: ${{ steps.find.outputs.path }}
+      - name: Draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          SETUP: ${{ steps.find.outputs.path }}
+        run: |
+          gh release create $env:TAG $env:SETUP --draft --title "SonicScript $env:TAG" `
+            --notes "Windows installer (unsigned: SmartScreen shows 'More info' then 'Run anyway'). Needs a free Gemini key."
