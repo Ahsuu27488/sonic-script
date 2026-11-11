@@ -24,6 +24,9 @@
 - 2026-11-06: Phase 6 built on `feat/m2-reliability` (tasks 6.1-6.4; 6.5: the long clip came back whole; Try
   again with the network off is the owner's check). Choices in D-051. Phase 7 (release) not started.
 - 2026-11-07: Phase 7 started on `feat/m2-release`; tasks 7.1-7.4 written below.
+- 2026-11-11: Phase 7 built (tasks 7.1-7.3; 7.4 checked on the owner's account with his data kept). Choices in
+  D-052. Left for the owner: the dry run on a fresh Windows user (also the uninstall's Yes answers and the
+  first run with no key), the friend test (the M2 "done when"), the `v0.2.0` tag.
 
 **Goal:** turn the M1 console app into a Windows app a non-technical friend installs from a GitHub release and
 dictates with within 2 minutes (blueprint §8 M2 "done when").
@@ -455,7 +458,8 @@ installer that writes the `Run` value, deletes data on request, a release workfl
   icon as installer icon, `webviewInstallMode` the default (download bootstrapper when WebView2 is missing).
 - Installed as `%LOCALAPPDATA%\SonicScript\sonicscript-tray.exe` (Tauri's per-user default folder, next to the
   history; the exe keeps its cargo name: `mainBinaryName = "SonicScript"` would copy it to
-  `targetelease\SonicScript.exe`, the same file as the CLI's `sonicscript.exe`, D-047). Start menu shortcut
+  `target
+elease\SonicScript.exe`, the same file as the CLI's `sonicscript.exe`, D-047). Start menu shortcut
   "SonicScript" (Tauri's, named after `productName`).
 - Hooks (`installerHooks`): POSTINSTALL writes HKCU `Run` `SonicScript` = `"$INSTDIR\sonicscript-tray.exe"`
   (the exact string `autostart::command_line` gives, so the tray's tick shows it), not in `/UPDATE` mode.

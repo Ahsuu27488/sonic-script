@@ -12,6 +12,7 @@ mod popup;
 mod popupwin;
 mod prefs;
 mod tray;
+mod welcome;
 
 use std::sync::{Arc, Mutex};
 
@@ -65,7 +66,9 @@ fn main() {
     let preview = cfg!(debug_assertions) && std::env::args().any(|a| a == "--settings-preview");
     // `--popup-preview` (debug builds): only the pop-up mic, no dictation (checks of where it shows).
     let popup_only = cfg!(debug_assertions) && std::env::args().any(|a| a == "--popup-preview");
-    let preview = preview || popup_only;
+    // `--welcome-preview` (debug builds): only the first-run window, no dictation.
+    let welcome_only = cfg!(debug_assertions) && std::env::args().any(|a| a == "--welcome-preview");
+    let preview = preview || popup_only || welcome_only;
     let mut builder = tauri::Builder::default();
     // A second start opens the first one's settings instead of a second dictation (Review Focus 4). The demo
     // and the preview never dictate (no key hook), so they may run next to the real app.
@@ -101,6 +104,7 @@ fn main() {
             popupwin::popup_click,
             popupwin::popup_not_here,
             popupwin::popup_app_on,
+            welcome::welcome_done,
         ])
         .setup(move |app| {
             build_tray(app.handle())?;
@@ -115,12 +119,16 @@ fn main() {
             }
             if demo {
                 hud_demo(app.handle().clone());
+            } else if welcome_only {
+                welcome::open(app.handle());
             } else if popup_only {
                 // Only the pill: no settings window, no dictation.
             } else if preview {
                 open_settings(app.handle());
             } else {
                 start_dictation(app.handle().clone());
+                // First run: no Gemini key anywhere (D-044).
+                welcome::open_if_needed(app.handle());
             }
             Ok(())
         })

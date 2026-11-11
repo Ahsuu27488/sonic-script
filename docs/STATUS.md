@@ -4,8 +4,10 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-06 (M2 phase 1 in PR #36; phase 2, the tray app, on `feat/m2-tray`, D-047) · **Code at:** `main` = PRs
-#3-#34 (#32 D-041 formatting off by default, #33 D-042 cut-answer guard, #34 M1 done; merged 2026-11-05).
+**Last updated:** 2026-11-11 (M2 phase 7, the installer and first run, on `feat/m2-release`, D-052) · **Code at:**
+`main` = PRs #3-#41 (M2 phases 1-6 merged 2026-11-06).
+**M2 is built (phases 1-7); it is done when a friend installs it and dictates within 2 minutes:** the owner's
+steps are Next 1 (dry run on a fresh Windows user, the friend test, the `v0.2.0` tag).
 **M1 is done (D-043, the owner's call on 2026-11-05):** every step is built and used live; the owner's own checks
 (Next) continue alongside M2. Next big step: M2, plan `docs/plans/2026-11-06-m2-windows-polish.md` (Next 1).
 **In one line:** M1 (Windows dictation app in Rust): key, mic and pipeline work live; the default is an
@@ -37,6 +39,18 @@ checked, after a live paste of the whole format prompt.
    throttles console output. Keys and mic need the owner's unlocked PC.
 
 ## What works (verified)
+
+- **Installer and first run (M2 phase 7, D-052, branch `feat/m2-release`):** `cd desktop/app && cargo tauri
+  build --bundles nsis` gives `desktop/target/release/bundle/nsis/SonicScript_0.2.0_x64-setup.exe` (4.2 MB,
+  unsigned, per user, no admin). Checked 2026-11-11 on the owner's account: silent install → exe and
+  `uninstall.exe` in `%LOCALAPPDATA%\SonicScript` (history untouched), Start menu "SonicScript", Apps entry
+  0.2.0, `Run` value written; the installed app started from the shortcut, no welcome window (his key is set),
+  a second start opened Settings in the first one; silent uninstall → exe, shortcut, `Run` value and Apps entry
+  gone, history (92 lines) and keys kept. The welcome window (`--welcome-preview`, driven over DevTools): the
+  key label, "Key ready, ends in ..." for the owner's key, a wrong key refused and not saved, Done closes it
+  (the app stays); dark and light, 375 / 540 px. Not checked: the first run with no key at all and the
+  uninstall's Yes answers (the dry run on a fresh Windows user, Next 1), the release workflow (runs only on a
+  tag), SmartScreen on another PC.
 
 - **Reliability (M2 phase 6, D-051, branch `feat/m2-reliability`):** each engine's wait is learned from its
   last 50 answer times (`answer-times.json`: twice the median, never sooner than the spec's wait, at most 8 s;
@@ -257,7 +271,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-06, `feat/m2-reliability`):** `eval`: 42 offline tests, ruff clean; `desktop`: 103 core + 56 `win` + 32 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-11, `feat/m2-release`):** `eval`: 42 offline tests, ruff clean; `desktop`: 103 core + 56 `win` + 34 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -339,9 +353,15 @@ checked, after a live paste of the whole format prompt.
 
 M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR per item.
 
-1. **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
+1. **Owner: finish M2** (D-052): (a) dry run: make a new Windows user account, sign in, run the installer
+   (SmartScreen: More info → Run anyway), paste a Gemini key in the welcome window, dictate into the try box,
+   then uninstall from Settings → Apps and answer Yes to both questions (history and keys gone); (b) the friend
+   test: send `SonicScript_0.2.0_x64-setup.exe` directly (the repo is private), time install → first dictation
+   (target under 2 minutes); (c) when happy: `git tag v0.2.0 && git push origin v0.2.0` builds the draft
+   release, which the owner publishes. History of the M2 build:
+   **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
    (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Go-ahead
-   and the 5 decisions given 2026-11-06 (D-044). Phase 1 done on `feat/m2-settings` (PR #36, base PR #35): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Phase 2 (tray) built on `feat/m2-tray` (PR based on `feat/m2-settings`): the tray app `sonicscript-tray.exe` (D-047). Not checked yet: a dictation by the real key through the tray, Start with Windows after a real sign-in (the owner). Phase 3 (HUD Voice Ring, D-048) built on `feat/m2-hud`; not checked yet: a real dictation with the HUD (the owner). Phase 4 (settings window, D-049) built on `feat/m2-settings-ui` (PR based on `feat/m2-hud`); not checked yet: a dictation after a settings change in the running tray app (the owner). Phase 5 (pop-up mic, D-050) built on `feat/m2-popup-mic` (PR based on `feat/m2-settings-ui`); not checked yet: the pill in the owner's apps (Chrome, VS Code, Claude, WhatsApp) and a dictation started by a click. Phase 6 (reliability, D-051) built on `feat/m2-reliability` (PR based on `feat/m2-popup-mic`); not checked yet: Try again with the network off and on, history clean-up after N days in daily use (the owner). Next: Phase 7 (release and first run), waiting for the owner. C: had 26 GB free after the Tauri builds (2026-11-06).
+   and the 5 decisions given 2026-11-06 (D-044). Phase 1 done on `feat/m2-settings` (PR #36, base PR #35): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Phase 2 (tray) built on `feat/m2-tray` (PR based on `feat/m2-settings`): the tray app `sonicscript-tray.exe` (D-047). Not checked yet: a dictation by the real key through the tray, Start with Windows after a real sign-in (the owner). Phase 3 (HUD Voice Ring, D-048) built on `feat/m2-hud`; not checked yet: a real dictation with the HUD (the owner). Phase 4 (settings window, D-049) built on `feat/m2-settings-ui` (PR based on `feat/m2-hud`); not checked yet: a dictation after a settings change in the running tray app (the owner). Phase 5 (pop-up mic, D-050) built on `feat/m2-popup-mic` (PR based on `feat/m2-settings-ui`); not checked yet: the pill in the owner's apps (Chrome, VS Code, Claude, WhatsApp) and a dictation started by a click. Phase 6 (reliability, D-051) built on `feat/m2-reliability` (PR based on `feat/m2-popup-mic`); not checked yet: Try again with the network off and on, history clean-up after N days in daily use (the owner). Phase 7 (release and first run, D-052) built on `feat/m2-release`. C: had 26 GB free after the Tauri builds (2026-11-06).
 2. **Owner: the key (PR #26):** `--set-key`, press F9: tap and hold both work, F9 no longer reaches the app;
    a mouse side button (no Back in Chrome) and Right Alt (no menu bar on a lone tap); Space is refused;
    `--set-key RightCtrl` goes back.

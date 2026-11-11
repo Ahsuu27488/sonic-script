@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to SonicScript</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="welcome.css">
+<script src="welcome.js" defer></script>
+</head>
+<body>
+<main class="wrap">
+  <header class="hello">
+    <span class="ring" aria-hidden="true"><span class="core"></span></span>
+    <h1>Bolo, hum likh denge.</h1>
+    <p class="lead">Speak Urdu, Hindi or English, mixed as you like. SonicScript types it in Roman letters
+      wherever your cursor is. Two steps and you are ready.</p>
+  </header>
+
+  <section class="step" id="step-key" aria-labelledby="key-title">
+    <div class="step-head">
+      <span class="num" aria-hidden="true">1</span>
+      <div>
+        <h2 id="key-title">Add your free Gemini key</h2>
+        <p class="hint">Google gives it free. Sign in, press <b>Create API key</b>, copy it, paste it here.</p>
+      </div>
+    </div>
+    <button class="btn link get" id="gemini-get" type="button">Get a free key from Google AI Studio ↗</button>
+    <div class="entry">
+      <input id="gemini" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Gemini key"
+             aria-label="Gemini key" aria-describedby="gemini-result">
+      <button class="btn ghost" id="gemini-show" type="button" aria-controls="gemini">Show</button>
+      <button class="btn primary" id="gemini-save" type="button">Save</button>
+    </div>
+    <p class="result" id="gemini-result" role="status"></p>
+
+    <details class="optional" id="groq-box">
+      <summary>Groq key <span class="badge">Optional, makes it better</span></summary>
+      <p class="hint">With it, SonicScript uses its most accurate model first. Free at Groq.</p>
+      <button class="btn link get" id="groq-get" type="button">Get a free key from Groq ↗</button>
+      <div class="entry">
+        <input id="groq" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Groq key"
+               aria-label="Groq key" aria-describedby="groq-result">
+        <button class="btn ghost" id="groq-show" type="button" aria-controls="groq">Show</button>
+        <button class="btn" id="groq-save" type="button">Save</button>
+      </div>
+      <p class="result" id="groq-result" role="status"></p>
+    </details>
+  </section>
+
+  <section class="step" id="step-try" aria-labelledby="try-title" aria-disabled="true">
+    <div class="step-head">
+      <span class="num" aria-hidden="true">2</span>
+      <div>
+        <h2 id="try-title">Tap <kbd class="keycap" id="key-cap">Right Ctrl</kbd> and speak</h2>
+        <p class="hint">Click in the box, tap the key, say something, then tap it again (or press Enter).
+          Or hold the key while you speak.</p>
+      </div>
+    </div>
+    <textarea id="try" rows="4" placeholder="Your words appear here." aria-label="Try box" disabled></textarea>
+    <p class="result" id="try-result" role="status"></p>
+  </section>
+
+  <footer class="foot">
+    <p class="hint" id="foot-hint">SonicScript lives in the tray (by the clock). Change the key, models and words
+      in its Settings.</p>
+    <button class="btn primary" id="done" type="button">Done</button>
+  </footer>
+</main>
+</body>
+</html>
