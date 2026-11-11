@@ -19,8 +19,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - name: Tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = (Get-Content tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($env:TAG -ne "v$version") { throw "tag $env:TAG != v$version in tauri.conf.json" }
+      # The version the installer hooks (installer.nsh) were checked against: change it only after re-checking
+      # them against the new template.
       - name: Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        run: cargo install tauri-cli --version 2.12.4 --locked
       - name: Build the installer
         run: cargo tauri build --bundles nsis
       - name: Find the installer

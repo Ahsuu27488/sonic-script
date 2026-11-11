@@ -10,6 +10,9 @@
   asks (default No) before deleting the history, settings, word list and saved keys. A first-run window
   ("Bolo, hum likh denge.") when no Gemini key is found: Gemini key (tested before it is saved), optional
   Groq key, then a try box. `release.yml` builds the installer on a `v*` tag into a draft release. Version 0.2.0.
+  Review fixes: a reinstall (the old uninstaller run in place) no longer asks to delete data and keys and keeps
+  the user's Start with Windows choice; the release pins tauri-cli 2.12.4 and checks the tag against the
+  version; `DECISIONS.md` back to LF line endings.
 
 ## 2026-11-06 (feat/m2-reliability)
 

@@ -636,17 +636,22 @@ per-user folder is `%LOCALAPPDATA%\<productName>`, the same folder as the histor
 `answer-times.json`; kept, because Tauri's uninstaller deletes only its own files and the folder only when it is
 empty (read in its template), and moving it would need our own copy of the template. (2) The installed exe keeps
 its cargo name `sonicscript-tray.exe` (D-047 left it open): Tauri's `mainBinaryName = "SonicScript"` copies the
-build to `targetelease\SonicScript.exe`, the same file as the CLI's `sonicscript.exe`; the user sees the Start
+build to `target\release\SonicScript.exe`, the same file as the CLI's `sonicscript.exe`; the user sees the Start
 menu shortcut and the Apps entry "SonicScript". (3) `installer.nsh`: after install the HKCU `Run` value
 `SonicScript` = `"<folder>\sonicscript-tray.exe"` (as `autostart::command_line` writes it, so the tray's tick is
-on), not in update mode (D-047 (3)); Tauri's uninstaller already deletes that value. After uninstall two
-questions, both default No and No when silent (a reinstall runs the old uninstaller silently): delete
+on) on a first install (no Apps entry); a reinstall keeps the user's choice: Tauri runs the old uninstaller in
+place (`_?=<folder>`, not silent), which deletes the value, so the old uninstaller notes it first
+(`HKCU\Software\SonicScript\Installer` `StartWithWindows`, read and deleted by the new install); an install
+over the old one without uninstalling leaves it as it is. After a real uninstall (from Apps: a temp copy, not
+in place, not `/UPDATE`) two questions, both default No and No when silent: delete
 `%LOCALAPPDATA%\SonicScript` and `%APPDATA%\SonicScript` (history, settings, word list), and delete the keys
 (`cmdkey /delete:SonicScript/<VAR>` for the three keys; environment keys are never touched). (4) First run: the
 app opens a `welcome` window at start when no Gemini key is found (D-044 (5)); it tests a pasted key before
 saving it (a refused key is not saved; when the test cannot reach the provider the key is saved and the user is
 told) and reuses the settings window's commands. (5) `.github/workflows/release.yml`: on a `v*` tag,
-`cargo install tauri-cli` + `cargo tauri build --bundles nsis` on `windows-latest`, the installer attached to a
+`cargo install tauri-cli` 2.12.4 (pinned: the hooks were checked against its template) + `cargo tauri build
+--bundles nsis` on `windows-latest` (a tag that is not `v` + `tauri.conf.json`'s version stops the run), the
+installer attached to a
 **draft** release (the owner publishes; the repo stays private); `workflow_dispatch` builds it as a run artifact.
 *Why:* the plan's Phase 7 and the owner's go-ahead (2026-11-07). Cost: program files and data share a folder;
 an unsigned installer needs SmartScreen's "Run anyway". *Where:* `desktop/app/tauri.conf.json` (`bundle`),

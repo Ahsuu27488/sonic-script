@@ -458,8 +458,7 @@ installer that writes the `Run` value, deletes data on request, a release workfl
   icon as installer icon, `webviewInstallMode` the default (download bootstrapper when WebView2 is missing).
 - Installed as `%LOCALAPPDATA%\SonicScript\sonicscript-tray.exe` (Tauri's per-user default folder, next to the
   history; the exe keeps its cargo name: `mainBinaryName = "SonicScript"` would copy it to
-  `target
-elease\SonicScript.exe`, the same file as the CLI's `sonicscript.exe`, D-047). Start menu shortcut
+  `target\release\SonicScript.exe`, the same file as the CLI's `sonicscript.exe`, D-047). Start menu shortcut
   "SonicScript" (Tauri's, named after `productName`).
 - Hooks (`installerHooks`): POSTINSTALL writes HKCU `Run` `SonicScript` = `"$INSTDIR\sonicscript-tray.exe"`
   (the exact string `autostart::command_line` gives, so the tray's tick shows it), not in `/UPDATE` mode.

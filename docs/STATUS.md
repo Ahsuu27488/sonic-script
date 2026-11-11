@@ -46,7 +46,10 @@ checked, after a live paste of the whole format prompt.
   `uninstall.exe` in `%LOCALAPPDATA%\SonicScript` (history untouched), Start menu "SonicScript", Apps entry
   0.2.0, `Run` value written; the installed app started from the shortcut, no welcome window (his key is set),
   a second start opened Settings in the first one; silent uninstall → exe, shortcut, `Run` value and Apps entry
-  gone, history (92 lines) and keys kept. The welcome window (`--welcome-preview`, driven over DevTools): the
+  gone, history (92 lines) and keys kept. After the review: a fresh install turns Start with Windows on; a
+  reinstall (the old uninstaller run in place, as Tauri does) asks nothing and keeps the user's choice (on → on,
+  off → off); an install over the old one leaves it; a real uninstall (passive, temp copy) asked both
+  questions and No kept everything. The welcome window (`--welcome-preview`, driven over DevTools): the
   key label, "Key ready, ends in ..." for the owner's key, a wrong key refused and not saved, Done closes it
   (the app stays); dark and light, 375 / 540 px. Not checked: the first run with no key at all and the
   uninstall's Yes answers (the dry run on a fresh Windows user, Next 1), the release workflow (runs only on a
