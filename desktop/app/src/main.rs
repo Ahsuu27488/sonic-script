@@ -12,6 +12,7 @@ mod popup;
 mod popupwin;
 mod prefs;
 mod tray;
+mod update;
 mod welcome;
 
 use std::sync::{Arc, Mutex};
@@ -36,6 +37,8 @@ pub(crate) struct Tray {
     retry: MenuItem<Wry>,
     /// "Start with Windows": the settings window changes it too (`prefs::autostart_set`).
     pub(crate) autostart: CheckMenuItem<Wry>,
+    /// "Check for updates" / "Restart to update (0.2.1)" (D-053).
+    update: MenuItem<Wry>,
 }
 
 /// Dictation's events, on the tray (and on stderr, seen in a debug build).
@@ -55,6 +58,8 @@ impl Sink for TraySink {
         }
         hudwin::apply(&self.0, &e);
         popupwin::apply(&self.0, &e);
+        // An update install waits for dictation to be quiet; a waiting "Update ready" pill shows (D-053).
+        update::after_event(&self.0);
     }
 }
 
@@ -78,6 +83,8 @@ fn main() {
         }));
     }
     builder
+        // Rust side only (`update.rs`); the pages call our own commands, so no capability is needed.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             hudwin::level,
             hudwin::retry_last,
@@ -105,6 +112,9 @@ fn main() {
             popupwin::popup_not_here,
             popupwin::popup_app_on,
             welcome::welcome_done,
+            update::update_state,
+            update::update_check,
+            update::update_install,
         ])
         .setup(move |app| {
             build_tray(app.handle())?;
@@ -126,6 +136,9 @@ fn main() {
             } else if preview {
                 open_settings(app.handle());
             } else {
+                // First: an update downloaded in an earlier run is installed now (the app exits and the
+                // installer starts the new version), before dictation takes the keyboard (D-053).
+                update::start(app.handle());
                 start_dictation(app.handle().clone());
                 // First run: no Gemini key anywhere (D-044).
                 welcome::open_if_needed(app.handle());
@@ -160,6 +173,13 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         autostart::enabled(),
         None::<&str>,
     )?;
+    let update = MenuItem::with_id(
+        app,
+        "update",
+        update::Phase::Idle.menu_label(),
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Quit SonicScript", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -171,6 +191,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             &settings,
             &history,
             &start,
+            &update,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -199,6 +220,15 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
                 let _ = t.autostart.set_checked(autostart::enabled());
             }
+            "update" => {
+                if update::current(app).ready_version().is_some() {
+                    if let Err(e) = update::install(app) {
+                        problem(app, format!("Could not update: {e}"));
+                    }
+                } else {
+                    update::check_now(app);
+                }
+            }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -209,6 +239,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         pause,
         retry,
         autostart: start,
+        update,
     });
     Ok(())
 }
@@ -217,8 +248,9 @@ fn icon(s: &Status) -> Image<'static> {
     Image::new_owned(tray::icon(s.shown()), ICON_SIZE, ICON_SIZE)
 }
 
-/// Puts the status on the tray icon, its tooltip and the menu's first line.
-fn redraw(app: &AppHandle) {
+/// Puts the status on the tray icon, its tooltip and the menu's first line, and the updater's phase on its
+/// menu item.
+pub(crate) fn redraw(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         let Some(t) = handle.try_state::<Tray>() else {
@@ -227,10 +259,16 @@ fn redraw(app: &AppHandle) {
         let Ok(s) = t.status.lock().map(|s| s.clone()) else {
             return;
         };
+        let phase = update::current(&handle);
+        let extra = phase
+            .ready_version()
+            .map(|_| "Update ready: restart to update");
         if let Some(tray) = handle.tray_by_id(TRAY) {
             let _ = tray.set_icon(Some(icon(&s)));
-            let _ = tray.set_tooltip(Some(s.tooltip()));
+            let _ = tray.set_tooltip(Some(s.tooltip_with(extra)));
         }
+        let _ = t.update.set_text(phase.menu_label());
+        let _ = t.update.set_enabled(phase.menu_enabled());
         let _ = t.headline.set_text(s.headline());
         let _ = t.pause.set_checked(s.paused);
         let _ = t.retry.set_enabled(s.can_retry);

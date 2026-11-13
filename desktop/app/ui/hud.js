@@ -11,7 +11,8 @@
   // mousedown with preventDefault: the press never moves the keyboard focus.
   action.addEventListener("mousedown", (e) => {
     e.preventDefault();
-    if (invoke) invoke("retry_last");
+    // "Restart to update" (D-053) or "Try again" (D-051).
+    if (invoke) invoke(action.textContent === "Restart to update" ? "update_install" : "retry_last");
   });
   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");

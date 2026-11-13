@@ -4,7 +4,7 @@
 > renumber or delete an entry. When a decision changes, add a new entry and mark the old heading
 > *(superseded by D-NNN)*. A decision here beats anything that contradicts it elsewhere.
 
-**D-001 Project memory and workflow set up with shipshape.** (2026-10-27)
+**D-001 Project memory and workflow set up with shipshape.** (2026-10-27) *("private for now, public at launch" superseded by D-053)*
 Docs in `docs/` (STATUS, DECISIONS, ARCHITECTURE, CHANGELOG) are the project's memory and are loaded at every
 session start; code commits must update STATUS and CHANGELOG (`.githooks/commit-msg`); work happens on branches
 and lands through pull requests; the default branch is protected by `.githooks/pre-push`.
@@ -656,3 +656,35 @@ installer attached to a
 *Why:* the plan's Phase 7 and the owner's go-ahead (2026-11-07). Cost: program files and data share a folder;
 an unsigned installer needs SmartScreen's "Run anyway". *Where:* `desktop/app/tauri.conf.json` (`bundle`),
 `desktop/app/installer.nsh`, `desktop/app/src/welcome.rs`, `ui/welcome.*`, `main.rs`, `.github/workflows/release.yml`.
+
+**D-053 Auto-update from the repo's own GitHub Releases, so the repo is public now; "ask, then update".**
+(2026-11-13) Supersedes D-001's "private for now, public at launch" and the M2 plan's "auto-update out of
+scope". The owner's choices of 2026-11-11: (1) installed copies update from
+`https://github.com/Ahsuu27488/sonic-script/releases/latest/download/latest.json`, so the repo becomes public
+(after the owner reviews the history scan and flips it himself or says so). (2) The tray app checks 15 s after
+start and every 6 hours, downloads a new version quietly, then the tray menu ("Restart to update (0.2.1)"), its
+tooltip, a HUD pill with a "Restart to update" button (once per version, never over a recording or an answer on
+its way) and Settings → About say it is ready; one click installs and restarts; not clicked, it is installed at
+the next app start (before dictation starts). A click during a recording or while any text is on its way waits
+until dictation has been quiet for 3 s (the text's event comes before its history line is written). A cached
+update whose install did not finish is not tried again at the next start (an `attempted` marker), so a failing
+installer cannot end the app at every start; the updater is off in debug builds; checks and downloads give up after
+5 minutes. As built: `tauri-plugin-updater` 2.14 on the Rust side only (no capability file); the installer
+is signed with a minisign key whose public half is `plugins.updater.pubkey`, and `requireSignedVersion` is on
+(the signature names the version: an old signed installer cannot pose as a new one); the verified download is
+kept in `%LOCALAPPDATA%\SonicScript\update\` and checked again before the next-start install;
+`windows.installMode: passive` runs Tauri's NSIS installer with `/P /UPDATE /R`, which in update mode skips the
+old uninstaller (no `installer.nsh` uninstall hook runs), keeps the shortcut, the HKCU `Run` value and every user
+file, and starts the new app. The private key and its password live outside the repo
+(`%USERPROFILE%\.sonicscript-keys\`) and in two GitHub secrets the release workflow reads; the workflow writes
+`latest.json` beside the installer in the draft release. *Why:* the owner wants friends' copies to update like a
+normal Windows app; GitHub Releases is free hosting with no server of our own (D-002), and only a published
+release is "latest", so drafts never reach anyone. Asking before the restart keeps a dictation from being cut.
+*Cost:* the key is the only way to ship updates: lost = installed copies never update again (a manual
+reinstall is needed); leaked = someone could sign a fake update (still needing this repo's releases). A local
+`cargo tauri build` now needs the key in `TAURI_SIGNING_PRIVATE_KEY` (+ password), or `--no-sign` for an
+unsigned test build. The repo's history (live dictation quotes, author emails) becomes public. *Where:*
+`desktop/app/src/update.rs`, `main.rs` (menu item, `redraw`), `hud.rs` (`update_ready`, `note`, `Hud::notice`, `Hud::busy`),
+`hudwin.rs` (`notice`, `busy`), `tray.rs` (`tooltip_with`), `ui/settings.*` (About → Updates), `ui/hud.js`,
+`tauri.conf.json` (`createUpdaterArtifacts`, `plugins.updater`), `.github/workflows/release.yml`,
+`docs/plans/2026-11-13-auto-update.md`.

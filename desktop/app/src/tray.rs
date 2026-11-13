@@ -97,10 +97,15 @@ impl Status {
     }
 
     pub fn tooltip(&self) -> String {
+        self.tooltip_with(None)
+    }
+
+    /// The tooltip with one more line at its end ("Update ready: restart to update", D-053).
+    pub fn tooltip_with(&self, extra: Option<&str>) -> String {
         let mut t = format!("SonicScript: {}", self.headline());
-        if let Some(note) = &self.note {
+        for line in self.note.as_deref().into_iter().chain(extra) {
             t.push('\n');
-            t.push_str(note);
+            t.push_str(line);
         }
         if t.chars().count() > TOOLTIP_MAX {
             t = t.chars().take(TOOLTIP_MAX - 1).collect::<String>() + "…";
@@ -371,6 +376,13 @@ mod tests {
         assert_eq!(s.headline(), "Paused");
         s.state = State::Recording;
         assert_eq!(s.shown(), State::Recording);
+    }
+
+    #[test]
+    fn the_update_line_ends_the_tooltip() {
+        let s = ready();
+        let t = s.tooltip_with(Some("Update ready: restart to update"));
+        assert!(t.ends_with("\nUpdate ready: restart to update"), "{t}");
     }
 
     #[test]

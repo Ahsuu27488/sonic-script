@@ -3,6 +3,21 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-13 (feat/auto-update)
+
+- Auto-update (D-053): the tray app checks GitHub Releases (`latest.json`) 15 s after start and every 6 hours,
+  downloads a new version quietly and checks its signature (the key's public half is in `tauri.conf.json`; the
+  signature must name the version), then says "Update ready" (tray menu "Restart to update (x.y.z)", tooltip,
+  a HUD pill with a button, Settings → About). One click installs it (passive NSIS, `/UPDATE`: settings, keys,
+  history and Start with Windows untouched) and restarts; not clicked, it installs at the next start. A click
+  during a recording or while its text is on its way waits until dictation has been quiet for 3 s. New tray item and
+  About card "Check for updates". `release.yml` signs the installer with two new secrets and puts
+  `latest.json` in the draft release. The repo is to become public (the owner flips it after the history scan).
+  Review fixes: "busy" counts every clip in flight (the HUD's count; the tray's state dropped to idle when
+  an older clip answered while a newer one was on its way); the 3 s of quiet are measured from the last
+  dictation event; a cached update whose install did not finish is not re-run at every start; the updater
+  is off in debug builds; 5-minute network timeout; an "Update ready" pill blocked by dictation shows later.
+
 ## 2026-11-11 (feat/m2-release)
 
 - M2 phase 7 (D-052): a per-user Windows installer (Tauri NSIS, `SonicScript_0.2.0_x64-setup.exe`, 4.2 MB, no

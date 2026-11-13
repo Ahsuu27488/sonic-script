@@ -1,6 +1,11 @@
-# Release (M2 phase 7): on a v* tag, build the Windows installer and attach it to a DRAFT GitHub Release.
-# The owner pushes the tag and publishes the release; nothing here publishes. `workflow_dispatch` builds the
-# installer as a run artifact only (a dry build, no release).
+# Release (M2 phase 7, D-052; auto-update D-053): on a v* tag, build the Windows installer, sign it for the
+# updater and attach it with `latest.json` to a DRAFT GitHub Release. The owner pushes the tag and publishes the
+# release; nothing here publishes. Installed apps read
+# releases/latest/download/latest.json, which only a PUBLISHED release serves, so a draft never reaches them.
+# `workflow_dispatch` builds the installer as a run artifact only (a dry build, no release).
+#
+# Secrets (the owner sets them): TAURI_SIGNING_PRIVATE_KEY (the updater key file's text) and
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD. The public half is plugins.updater.pubkey in tauri.conf.json.
 name: release
 
 on:
@@ -31,19 +36,42 @@ jobs:
       # them against the new template.
       - name: Tauri CLI
         run: cargo install tauri-cli --version 2.12.4 --locked
-      - name: Build the installer
+      - name: Build and sign the installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: cargo tauri build --bundles nsis
-      - name: Find the installer
+      - name: Find the installer and write latest.json
         id: find
         shell: pwsh
+        env:
+          REPO: ${{ github.repository }}
         run: |
           $exe = Get-ChildItem ../target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
           if (-not $exe) { throw "no installer was built" }
+          $sig = "$($exe.FullName).sig"
+          if (-not (Test-Path $sig)) { throw "no updater signature: are the signing secrets set?" }
+          $version = (Get-Content tauri.conf.json -Raw | ConvertFrom-Json).version
+          # GitHub turns spaces in asset names into dots; the installer's name has none.
+          $url = "https://github.com/$env:REPO/releases/download/v$version/$($exe.Name)"
+          $latest = [ordered]@{
+            version   = $version
+            notes     = "SonicScript $version"
+            pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{ signature = (Get-Content $sig -Raw).Trim(); url = $url }
+            }
+          }
+          $json = Join-Path $exe.DirectoryName "latest.json"
+          $latest | ConvertTo-Json -Depth 5 | Set-Content -Path $json -Encoding utf8NoBOM
           "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          "latest=$json" >> $env:GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
           name: installer
-          path: ${{ steps.find.outputs.path }}
+          path: |
+            ${{ steps.find.outputs.path }}
+            ${{ steps.find.outputs.latest }}
       - name: Draft release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -51,6 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           SETUP: ${{ steps.find.outputs.path }}
+          LATEST: ${{ steps.find.outputs.latest }}
         run: |
-          gh release create $env:TAG $env:SETUP --draft --title "SonicScript $env:TAG" `
+          gh release create $env:TAG $env:SETUP $env:LATEST --draft --title "SonicScript $env:TAG" `
             --notes "Windows installer (unsigned: SmartScreen shows 'More info' then 'Run anyway'). Needs a free Gemini key."

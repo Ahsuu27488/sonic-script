@@ -4,8 +4,8 @@
 > DECISIONS.md. Updated in the same commit as every code change (the commit-msg hook checks). Keep it short:
 > it is loaded into every agent session.
 
-**Last updated:** 2026-11-11 (M2 phase 7, the installer and first run, on `feat/m2-release`, D-052) · **Code at:**
-`main` = PRs #3-#41 (M2 phases 1-6 merged 2026-11-06).
+**Last updated:** 2026-11-13 (auto-update, on `feat/auto-update`, D-053) · **Code at:**
+`main` = PRs #3-#42 (M2 phases 1-7 merged by 2026-11-11).
 **M2 is built (phases 1-7); it is done when a friend installs it and dictates within 2 minutes:** the owner's
 steps are Next 1 (dry run on a fresh Windows user, the friend test, the `v0.2.0` tag).
 **M1 is done (D-043, the owner's call on 2026-11-05):** every step is built and used live; the owner's own checks
@@ -40,6 +40,27 @@ checked, after a live paste of the whole format prompt.
 
 ## What works (verified)
 
+- **Auto-update (D-053, branch `feat/auto-update`):** the tray app checks
+  `releases/latest/download/latest.json` 15 s after start and every 6 h, downloads quietly, verifies the
+  signature (public key in `tauri.conf.json`, version-bound), then shows "Update ready" (tray item "Restart to
+  update (x.y.z)", tooltip, HUD pill with a button, Settings → About "Updates"); one click installs (passive NSIS
+  `/UPDATE`) and restarts; not clicked, it installs at the next start; an install waits until dictation (every
+  clip in flight) has been quiet for 3 s; an install that did not finish is not re-run at the next start; off in
+  debug builds. Checked 2026-11-13 on the owner's PC with signed test builds pointed at a local server
+  (`http://127.0.0.1:8765`): 0.2.0 installed → found 0.2.1, downloaded, Settings showed "Version 0.2.1 is ready"
+  and the button; its click installed 0.2.1 in ~4 s and the app came back as 0.2.1; config.toml and words.txt
+  unchanged (same SHA-1), 119 history lines kept, Run value and Start menu shortcut kept, the download cache
+  removed. Not clicked: quit and start again installed 0.2.1 from the cache with no network request. After the
+  review fixes both paths were run again (click: installed in ~6 s; next start: installed), and a start that
+  found a failed attempt's marker ran 0.2.0 normally and dropped the cache. Refused (no
+  install, no cache, Settings says why): a tampered installer ("The signature verification failed"), one signed
+  with another key ("…created with a different key…"), a tampered cached installer at start. Afterwards the test
+  copy was uninstalled (PC as before). Not checked: the HUD pill and the tray menu on screen (screen control was
+  declined; the same commands were driven through the Settings page), an install waiting for a real dictation,
+  the release workflow (runs only on a tag, needs the two secrets), a real GitHub release.
+  The updater key is in `%USERPROFILE%\.sonicscript-keys\` (outside the repo; back it up: lost = no more updates).
+  Building the installer now needs `TAURI_SIGNING_PRIVATE_KEY` (the key file's path) and
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, or `--no-sign`.
 - **Installer and first run (M2 phase 7, D-052, branch `feat/m2-release`):** `cd desktop/app && cargo tauri
   build --bundles nsis` gives `desktop/target/release/bundle/nsis/SonicScript_0.2.0_x64-setup.exe` (4.2 MB,
   unsigned, per user, no admin). Checked 2026-11-11 on the owner's account: silent install → exe and
@@ -274,7 +295,7 @@ checked, after a live paste of the whole format prompt.
 - **M0 benchmark (`eval/`):** Whisper forced to `language=ur` wrecks English words (81-86%, English ~70%); the
   word list in the Whisper prompt makes it translate (D-014); every Groq engine invents text on silence
   (D-007, handled by the voice gate). Reports per run: `eval/results/<run>/report.html` (local only).
-- **Tests (2026-11-11, `feat/m2-release`):** `eval`: 42 offline tests, ruff clean; `desktop`: 103 core + 56 `win` + 34 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
+- **Tests (2026-11-13, `feat/auto-update`):** `eval`: 42 offline tests, ruff clean; `desktop`: 103 core + 56 `win` + 43 tray-app tests (+1 manual clipboard test, +1 manual sound test, +1 manual mic test: `cargo test -p sonicscript -- --ignored`)
   tests, fmt and clippy `-D warnings` clean (with the owner's recordings present: the voice gate test reads
   the 44 M0 clips only, not `fmt-*`).
 - Code knowledge graph (D-010): works, all 39 code files (checked 2026-11-04); CLAUDE.md says which lookup
@@ -356,12 +377,20 @@ checked, after a live paste of the whole format prompt.
 
 M1 is done (D-043); the order below is from 2026-11-05 night. One branch and PR per item.
 
-1. **Owner: finish M2** (D-052): (a) dry run: make a new Windows user account, sign in, run the installer
+1. **Owner: ship the first auto-updating version** (D-053), in order: (a) back up
+   `%USERPROFILE%\.sonicscript-keys\` (key + password file) somewhere safe off this PC; (b) read the history
+   scan (no secrets found; personal items: author emails, live dictation quotes in STATUS / CHANGELOG / tests,
+   one person's name in Next 3) and flip the repo to public (GitHub → Settings → Danger zone, or tell the agent);
+   (c) let the agent store the two secrets (`gh secret set TAURI_SIGNING_PRIVATE_KEY < key file`, and the
+   password); (d) merge the auto-update PR; (e) `git tag v0.2.0 && git push origin v0.2.0`, check the draft
+   release has the installer + `latest.json`, publish it, send that installer to the friend; (f) later, bump
+   the version to 0.2.1 in `desktop/app/tauri.conf.json` and `desktop/app/Cargo.toml`, tag `v0.2.1`, publish:
+   the friend's copy should say "Update ready" within 6 hours (or at its next start + 15 s).
+   **Owner: finish M2** (D-052): (a) dry run: make a new Windows user account, sign in, run the installer
    (SmartScreen: More info → Run anyway), paste a Gemini key in the welcome window, dictate into the try box,
    then uninstall from Settings → Apps and answer Yes to both questions (history and keys gone); (b) the friend
-   test: send `SonicScript_0.2.0_x64-setup.exe` directly (the repo is private), time install → first dictation
-   (target under 2 minutes); (c) when happy: `git tag v0.2.0 && git push origin v0.2.0` builds the draft
-   release, which the owner publishes. History of the M2 build:
+   test: send the installer from the published release (Next 1 above), time install → first dictation
+   (target under 2 minutes); the `v0.2.0` tag and release are step (e) above. History of the M2 build:
    **M2** (plan `docs/plans/2026-11-06-m2-windows-polish.md`, written 2026-11-06): 7 phases, one PR each
    (settings + keys + events, tray, HUD Voice Ring, settings window, pop-up mic, reliability, release). Go-ahead
    and the 5 decisions given 2026-11-06 (D-044). Phase 1 done on `feat/m2-settings` (PR #36, base PR #35): `config.toml` settings (D-045), the main model + fallbacks from them, keys in Credential Manager (`--key`, D-046), dictation events (`events.rs`); review fixes in. Not checked live yet: a paste through the new event path (the owner's next dictation). Phase 2 (tray) built on `feat/m2-tray` (PR based on `feat/m2-settings`): the tray app `sonicscript-tray.exe` (D-047). Not checked yet: a dictation by the real key through the tray, Start with Windows after a real sign-in (the owner). Phase 3 (HUD Voice Ring, D-048) built on `feat/m2-hud`; not checked yet: a real dictation with the HUD (the owner). Phase 4 (settings window, D-049) built on `feat/m2-settings-ui` (PR based on `feat/m2-hud`); not checked yet: a dictation after a settings change in the running tray app (the owner). Phase 5 (pop-up mic, D-050) built on `feat/m2-popup-mic` (PR based on `feat/m2-settings-ui`); not checked yet: the pill in the owner's apps (Chrome, VS Code, Claude, WhatsApp) and a dictation started by a click. Phase 6 (reliability, D-051) built on `feat/m2-reliability` (PR based on `feat/m2-popup-mic`); not checked yet: Try again with the network off and on, history clean-up after N days in daily use (the owner). Phase 7 (release and first run, D-052) built on `feat/m2-release`. C: had 26 GB free after the Tauri builds (2026-11-06).
