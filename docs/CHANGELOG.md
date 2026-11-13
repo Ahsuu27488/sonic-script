@@ -3,6 +3,16 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-13 (fix/updater-key)
+
+- Fix: the release workflow could not sign (`incorrect updater private key password`). Root cause: the updater
+  key's password file ended in a lone carriage return, the key was locked with it, and a GitHub secret does not
+  keep a trailing carriage return. A new key pair with a plain 32-letter password replaces it (no installed copy
+  used the old one: no release was published); the new public key is in `tauri.conf.json`, both GitHub secrets
+  hold the new key. The old key is kept at `%USERPROFILE%\.sonicscript-keys.old-crlf-password\` (unused).
+  Checked: the new key signs with its password raw and with line endings stripped; the workflow on this branch
+  (manual run) signs the installer.
+
 ## 2026-11-13 (feat/auto-update)
 
 - Auto-update (D-053): the tray app checks GitHub Releases (`latest.json`) 15 s after start and every 6 hours,
