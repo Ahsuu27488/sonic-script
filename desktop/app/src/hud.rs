@@ -57,6 +57,11 @@ pub const FAILED_MS: u64 = 6000;
 /// The failure with its "Try again" button stays longer: the user has to reach it.
 pub const RETRY_MS: u64 = 12_000;
 pub const TRY_AGAIN: &str = "Try again";
+/// The update pill's button (D-053); `hud.js` sends it to `update_install`.
+pub const RESTART: &str = "Restart to update";
+/// How long the "Update ready" pill stays, and a short update note ("up to date").
+pub const UPDATE_MS: u64 = 10_000;
+pub const NOTE_MS: u64 = 3000;
 /// The longest label the pill shows; longer ones are cut with "…".
 pub const LABEL_MAX: usize = 72;
 
@@ -82,6 +87,23 @@ fn view(kind: Kind, tone: Tone, label: &str, hide_after_ms: Option<u64>) -> View
         hide_after_ms,
         action: None,
     }
+}
+
+/// "Update 0.2.1 ready" with its "Restart to update" button (D-053).
+pub fn update_ready(version: &str) -> View {
+    let mut v = view(
+        Kind::Problem,
+        Tone::Accent,
+        &format!("Update {version} ready"),
+        Some(UPDATE_MS),
+    );
+    v.action = Some(RESTART);
+    v
+}
+
+/// A short note that is not about dictation ("SonicScript 0.2.0 is up to date").
+pub fn note(label: &str) -> View {
+    view(Kind::Problem, Tone::Accent, label, Some(NOTE_MS))
 }
 
 fn writing() -> View {
@@ -178,6 +200,19 @@ impl Hud {
         v
     }
 
+    /// A note from outside dictation (an update): never over a recording or an answer on its way, and after
+    /// a passing view ends.
+    pub fn notice(&mut self, v: View) -> Change {
+        if self.recording || self.jobs > 0 {
+            Change::None
+        } else if self.passing {
+            self.queue.push_back(v);
+            Change::None
+        } else {
+            self.show(v)
+        }
+    }
+
     /// Forgets everything (dictation stopped: no recording or answer is coming any more).
     pub fn reset(&mut self) {
         *self = Self::default();
@@ -265,6 +300,21 @@ mod tests {
             Change::Show(v) => v,
             other => panic!("expected a view, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn an_update_note_never_covers_a_recording_or_an_answer() {
+        let mut h = Hud::default();
+        assert_eq!(shown(h.notice(update_ready("0.2.1"))).action, Some(RESTART));
+        h.apply(&listening());
+        assert_eq!(h.notice(update_ready("0.2.1")), Change::None);
+        h.apply(&Event::Processing);
+        assert_eq!(h.notice(note("up to date")), Change::None);
+        // After the "Done" tick it waits its turn.
+        h.apply(&text(Paste::Pasted(1)));
+        assert_eq!(h.notice(update_ready("0.2.1")), Change::None);
+        let next = h.next().expect("the update pill follows the tick");
+        assert_eq!(next.label, "Update 0.2.1 ready");
     }
 
     #[test]

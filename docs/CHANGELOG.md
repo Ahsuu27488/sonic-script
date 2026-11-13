@@ -3,6 +3,17 @@
 > Newest first. Each entry: date, commit (or "uncommitted"), what changed, and for fixes the root cause.
 > This is the history; STATUS.md holds only the current truth.
 
+## 2026-11-13 (feat/auto-update)
+
+- Auto-update (D-053): the tray app checks GitHub Releases (`latest.json`) 15 s after start and every 6 hours,
+  downloads a new version quietly and checks its signature (the key's public half is in `tauri.conf.json`; the
+  signature must name the version), then says "Update ready" (tray menu "Restart to update (x.y.z)", tooltip,
+  a HUD pill with a button, Settings → About). One click installs it (passive NSIS, `/UPDATE`: settings, keys,
+  history and Start with Windows untouched) and restarts; not clicked, it installs at the next start. A click
+  during a recording or while its text is on its way waits for dictation to stay idle for 3 s. New tray item and
+  About card "Check for updates". `release.yml` signs the installer with two new secrets and puts
+  `latest.json` in the draft release. The repo is to become public (the owner flips it after the history scan).
+
 ## 2026-11-11 (feat/m2-release)
 
 - M2 phase 7 (D-052): a per-user Windows installer (Tauri NSIS, `SonicScript_0.2.0_x64-setup.exe`, 4.2 MB, no

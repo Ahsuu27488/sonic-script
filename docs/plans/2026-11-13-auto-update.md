@@ -4,6 +4,10 @@
 
 **Progress:**
 - 2026-11-13: plan written. The owner's two choices (2026-11-11) are given, so building follows the plan's commit.
+- 2026-11-13: built and checked end to end with signed test builds and a local server (STATUS "Auto-update"). Change
+  from the plan: an install that waited for dictation runs after 3 s of idle, not on the next event (the text's
+  event comes before the history line is written). Left for the owner: key backup, the public flip, the secrets,
+  the first tagged releases.
 
 ## Goal
 

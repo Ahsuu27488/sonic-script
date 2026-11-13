@@ -404,6 +404,43 @@
     );
   }
 
+  // ---- updates (D-053) ----
+  let updatePoll = 0;
+  async function renderUpdate() {
+    let u;
+    try {
+      u = await call("update_state");
+    } catch (e) {
+      return;
+    }
+    // The installer's version (what the updater compares).
+    $("version").textContent = u.version;
+    $("update-line").textContent = u.line;
+    $("update-install").hidden = !u.can_install;
+    const busy = ["checking", "downloading", "waiting"].includes(u.phase.phase);
+    $("update-check").disabled = busy;
+    // While a check or a download runs, look again each second.
+    clearTimeout(updatePoll);
+    if (busy) updatePoll = setTimeout(renderUpdate, 1000);
+  }
+  $("update-check").addEventListener("click", async () => {
+    try {
+      await call("update_check");
+    } catch (e) {
+      fail(e);
+    }
+    setTimeout(renderUpdate, 300);
+  });
+  $("update-install").addEventListener("click", async () => {
+    try {
+      // Installs and restarts (the app exits); during a dictation it waits for it to end.
+      await call("update_install");
+    } catch (e) {
+      fail(e);
+    }
+    renderUpdate();
+  });
+
   // ---- render ----
   function render() {
     renderOffApps();
@@ -428,6 +465,7 @@
     renderKey();
     renderKeys();
     render();
+    renderUpdate();
   }
   start();
 })();

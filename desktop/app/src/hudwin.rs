@@ -63,6 +63,18 @@ pub fn apply(app: &AppHandle, e: &Event) {
     put(app, &state, change);
 }
 
+/// Shows a note that is not a dictation event (an update), unless dictation has the pill.
+pub fn notice(app: &AppHandle, v: crate::hud::View) {
+    let Some(state) = app.try_state::<HudState>() else {
+        return;
+    };
+    let Ok(mut hud) = state.hud.lock() else {
+        return;
+    };
+    let change = hud.notice(v);
+    put(app, &state, change);
+}
+
 /// Forgets the recording and answers in flight (dictation stopped), so its failure can show.
 pub fn reset(app: &AppHandle) {
     if let Some(state) = app.try_state::<HudState>()
