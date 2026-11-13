@@ -36,7 +36,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDExMUE3MUM0NkJEREM5MDIKUldRQ3lkMXJ4SEVhRVpadS9idUgxV2llMW4zUDcwSnY2TG9jS3dzSHVGY3JoMUUxeWltdThvYzIK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI3OTM3NTE1MkZBQjY1RkQKUldUOVphc3ZGWFdUSjk5QkRReGp3eFFGUzkvQ2hVZUEwYVpGdHR3cUxndFg3U09Mb2dCY1Z1bDgK",
       "endpoints": [
         "https://github.com/Ahsuu27488/sonic-script/releases/latest/download/latest.json"
       ],

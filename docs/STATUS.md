@@ -59,6 +59,8 @@ checked, after a live paste of the whole format prompt.
   declined; the same commands were driven through the Settings page), an install waiting for a real dictation,
   the release workflow (runs only on a tag, needs the two secrets), a real GitHub release.
   The updater key is in `%USERPROFILE%\.sonicscript-keys\` (outside the repo; back it up: lost = no more updates).
+  The key was replaced on 2026-11-13 (`fix/updater-key`: the first one's password ended in a carriage return that
+  GitHub secrets drop); the GitHub secrets hold the new one.
   Building the installer now needs `TAURI_SIGNING_PRIVATE_KEY` (the key file's path) and
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, or `--no-sign`.
 - **Installer and first run (M2 phase 7, D-052, branch `feat/m2-release`):** `cd desktop/app && cargo tauri
