@@ -10,9 +10,13 @@
   signature must name the version), then says "Update ready" (tray menu "Restart to update (x.y.z)", tooltip,
   a HUD pill with a button, Settings → About). One click installs it (passive NSIS, `/UPDATE`: settings, keys,
   history and Start with Windows untouched) and restarts; not clicked, it installs at the next start. A click
-  during a recording or while its text is on its way waits for dictation to stay idle for 3 s. New tray item and
+  during a recording or while its text is on its way waits until dictation has been quiet for 3 s. New tray item and
   About card "Check for updates". `release.yml` signs the installer with two new secrets and puts
   `latest.json` in the draft release. The repo is to become public (the owner flips it after the history scan).
+  Review fixes: "busy" counts every clip in flight (the HUD's count; the tray's state dropped to idle when
+  an older clip answered while a newer one was on its way); the 3 s of quiet are measured from the last
+  dictation event; a cached update whose install did not finish is not re-run at every start; the updater
+  is off in debug builds; 5-minute network timeout; an "Update ready" pill blocked by dictation shows later.
 
 ## 2026-11-11 (feat/m2-release)
 

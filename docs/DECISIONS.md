@@ -665,8 +665,11 @@ scope". The owner's choices of 2026-11-11: (1) installed copies update from
 start and every 6 hours, downloads a new version quietly, then the tray menu ("Restart to update (0.2.1)"), its
 tooltip, a HUD pill with a "Restart to update" button (once per version, never over a recording or an answer on
 its way) and Settings → About say it is ready; one click installs and restarts; not clicked, it is installed at
-the next app start (before dictation starts). A click during a recording or while its text is on its way waits
-for it to end. As built: `tauri-plugin-updater` 2.14 on the Rust side only (no capability file); the installer
+the next app start (before dictation starts). A click during a recording or while any text is on its way waits
+until dictation has been quiet for 3 s (the text's event comes before its history line is written). A cached
+update whose install did not finish is not tried again at the next start (an `attempted` marker), so a failing
+installer cannot end the app at every start; the updater is off in debug builds; checks and downloads give up after
+5 minutes. As built: `tauri-plugin-updater` 2.14 on the Rust side only (no capability file); the installer
 is signed with a minisign key whose public half is `plugins.updater.pubkey`, and `requireSignedVersion` is on
 (the signature names the version: an old signed installer cannot pose as a new one); the verified download is
 kept in `%LOCALAPPDATA%\SonicScript\update\` and checked again before the next-start install;
@@ -681,7 +684,7 @@ release is "latest", so drafts never reach anyone. Asking before the restart kee
 reinstall is needed); leaked = someone could sign a fake update (still needing this repo's releases). A local
 `cargo tauri build` now needs the key in `TAURI_SIGNING_PRIVATE_KEY` (+ password), or `--no-sign` for an
 unsigned test build. The repo's history (live dictation quotes, author emails) becomes public. *Where:*
-`desktop/app/src/update.rs`, `main.rs` (menu item, `redraw`), `hud.rs` (`update_ready`, `note`, `Hud::notice`),
-`hudwin.rs` (`notice`), `tray.rs` (`busy`, `tooltip_with`), `ui/settings.*` (About → Updates), `ui/hud.js`,
+`desktop/app/src/update.rs`, `main.rs` (menu item, `redraw`), `hud.rs` (`update_ready`, `note`, `Hud::notice`, `Hud::busy`),
+`hudwin.rs` (`notice`, `busy`), `tray.rs` (`tooltip_with`), `ui/settings.*` (About → Updates), `ui/hud.js`,
 `tauri.conf.json` (`createUpdaterArtifacts`, `plugins.updater`), `.github/workflows/release.yml`,
 `docs/plans/2026-11-13-auto-update.md`.

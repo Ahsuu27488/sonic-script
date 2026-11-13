@@ -200,10 +200,16 @@ impl Hud {
         v
     }
 
+    /// A recording runs or a text is still on its way (counting every clip in flight, not only the last one):
+    /// an update must not end the app now (D-053).
+    pub fn busy(&self) -> bool {
+        self.recording || self.jobs > 0
+    }
+
     /// A note from outside dictation (an update): never over a recording or an answer on its way, and after
     /// a passing view ends.
     pub fn notice(&mut self, v: View) -> Change {
-        if self.recording || self.jobs > 0 {
+        if self.busy() {
             Change::None
         } else if self.passing {
             self.queue.push_back(v);
@@ -300,6 +306,24 @@ mod tests {
             Change::Show(v) => v,
             other => panic!("expected a view, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn busy_lasts_until_the_last_clip_in_flight_has_answered() {
+        let mut h = Hud::default();
+        assert!(!h.busy());
+        h.apply(&listening());
+        assert!(h.busy());
+        h.apply(&Event::Processing); // clip A on its way (slow)
+        h.apply(&listening());
+        h.apply(&Event::Processing); // clip B on its way
+        h.apply(&text(Paste::Pasted(1))); // A answers
+        assert!(h.busy(), "clip B is still on its way");
+        h.apply(&text(Paste::Pasted(1))); // B answers
+        assert!(!h.busy());
+        h.apply(&listening());
+        h.apply(&Event::Cancelled);
+        assert!(!h.busy());
     }
 
     #[test]

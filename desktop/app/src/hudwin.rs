@@ -63,6 +63,13 @@ pub fn apply(app: &AppHandle, e: &Event) {
     put(app, &state, change);
 }
 
+/// A recording runs or a text is on its way (`Hud::busy`); false without a HUD.
+pub fn busy(app: &AppHandle) -> bool {
+    app.try_state::<HudState>()
+        .and_then(|s| s.hud.lock().ok().map(|h| h.busy()))
+        .unwrap_or(false)
+}
+
 /// Shows a note that is not a dictation event (an update), unless dictation has the pill.
 pub fn notice(app: &AppHandle, v: crate::hud::View) {
     let Some(state) = app.try_state::<HudState>() else {

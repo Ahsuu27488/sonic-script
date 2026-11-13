@@ -58,8 +58,8 @@ impl Sink for TraySink {
         }
         hudwin::apply(&self.0, &e);
         popupwin::apply(&self.0, &e);
-        // "Restart to update" clicked during a dictation: installs once it has ended (D-053).
-        update::install_if_waiting(&self.0);
+        // An update install waits for dictation to be quiet; a waiting "Update ready" pill shows (D-053).
+        update::after_event(&self.0);
     }
 }
 

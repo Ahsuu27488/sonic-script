@@ -12,13 +12,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
-
-use crate::Tray;
 
 /// The first check waits for the app to settle (dictation ready, the network up after sign-in).
 const FIRST_CHECK: Duration = Duration::from_secs(15);
@@ -29,6 +27,12 @@ const CACHE_SETUP: &str = "setup.exe";
 const CACHE_RELEASE: &str = "release.json";
 /// How long dictation must stay idle before an install that waited for it runs.
 const SETTLE: Duration = Duration::from_secs(3);
+/// A check or a download that takes longer is given up (a sleeping PC, a half-open connection); the next
+/// check tries again. 5 minutes lets a 5 MB installer through at ~17 KB/s.
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+/// Written before a cached update is installed: a start that finds it does not try again (an installer that
+/// fails would otherwise run, and end the app, at every start).
+const CACHE_ATTEMPT: &str = "attempted";
 
 /// Where the updater is; the tray menu, the HUD and Settings → About show it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -128,7 +132,18 @@ impl Cache {
         Some((release, setup))
     }
 
+    /// Notes an install attempt; false when one was already noted (the last one did not finish).
+    pub fn begin_attempt(&self) -> bool {
+        let marker = self.dir.join(CACHE_ATTEMPT);
+        if marker.exists() {
+            return false;
+        }
+        let _ = std::fs::write(marker, b"");
+        true
+    }
+
     pub fn clear(&self) {
+        let _ = std::fs::remove_file(self.dir.join(CACHE_ATTEMPT));
         let _ = std::fs::remove_file(self.dir.join(CACHE_RELEASE));
         let _ = std::fs::remove_file(self.dir.join(CACHE_SETUP));
         let _ = std::fs::remove_dir(&self.dir);
@@ -146,8 +161,12 @@ pub struct Updates {
     ready: Mutex<Option<(Update, Vec<u8>)>>,
     /// An install was asked for while dictation was busy.
     waiting: AtomicBool,
-    /// A thread is waiting for dictation to stay idle (`install_if_waiting`).
+    /// A thread is waiting for dictation to stay quiet (`install`).
     settling: AtomicBool,
+    /// When dictation last sent an event (`after_event`): an install waits for `SETTLE` of quiet after it.
+    last_event: Mutex<Instant>,
+    /// The "Update ready" pill could not show (dictation had the HUD): shown after the next quiet event.
+    notice_pending: Mutex<Option<String>>,
     /// The version whose "Update ready" pill was shown (once per version, unless asked).
     noticed: Mutex<Option<String>>,
     /// Asks the checking thread for a check now (true = the user asked: show the result).
@@ -188,18 +207,29 @@ pub fn current(app: &AppHandle) -> Phase {
 }
 
 /// Starts the updater: installs an update downloaded in an earlier run (this exits the app and the installer
-/// starts the new one), then checks on a thread of its own.
+/// starts the new one), then checks on a thread of its own. Off in debug builds: a `cargo run` must never
+/// download a release or install the one the installed app left in the cache.
 pub fn start(app: &AppHandle) {
     let (tx, rx) = mpsc::channel::<bool>();
+    let dev = cfg!(debug_assertions);
     app.manage(Updates {
-        phase: Mutex::new(Phase::Idle),
+        phase: Mutex::new(if dev {
+            Phase::Failed("updates are off in development builds".into())
+        } else {
+            Phase::Idle
+        }),
         ready: Mutex::new(None),
         waiting: AtomicBool::new(false),
         settling: AtomicBool::new(false),
+        last_event: Mutex::new(Instant::now()),
+        notice_pending: Mutex::new(None),
         noticed: Mutex::new(None),
         ask: Mutex::new(tx),
         cache: Cache::default_dir().map(Cache::new),
     });
+    if dev {
+        return;
+    }
     install_cached(app);
     let app = app.clone();
     std::thread::spawn(move || {
@@ -240,12 +270,20 @@ fn install_cached(app: &AppHandle) {
     let Some((release, setup)) = cache.load() else {
         return;
     };
-    let restored = app
-        .updater()
-        .map_err(|e| e.to_string())
-        .and_then(|up| up.restore_update(release).map_err(|e| e.to_string()));
+    let restored =
+        updater(app).and_then(|up| up.restore_update(release).map_err(|e| e.to_string()));
     match restored {
         Ok(Some(update)) => {
+            if !cache.begin_attempt() {
+                // The last start tried and the app is still this version: the installer failed or was
+                // cancelled. Start normally; the next check downloads it again and asks.
+                eprintln!(
+                    "update: the last install of {} did not finish",
+                    update.version
+                );
+                cache.clear();
+                return;
+            }
             eprintln!("update: installing {} downloaded earlier", update.version);
             // Verifies the bytes first; on success the app exits here.
             if let Err(e) = update.install(&setup) {
@@ -259,6 +297,14 @@ fn install_cached(app: &AppHandle) {
             cache.clear();
         }
     }
+}
+
+/// The updater from `tauri.conf.json`, with a time limit on its requests.
+fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    app.updater_builder()
+        .timeout(NETWORK_TIMEOUT)
+        .build()
+        .map_err(|e| e.to_string())
 }
 
 fn set_phase(app: &AppHandle, phase: Phase) {
@@ -282,9 +328,7 @@ fn run_check(app: &AppHandle, manual: bool) {
         return;
     }
     set_phase(app, Phase::Checking);
-    let found = app
-        .updater()
-        .map_err(|e| e.to_string())
+    let found = updater(app)
         .and_then(|up| tauri::async_runtime::block_on(up.check()).map_err(|e| e.to_string()));
     let update = match found {
         Ok(Some(update)) => update,
@@ -342,16 +386,28 @@ fn notice_ready(app: &AppHandle, version: &str, again: bool) {
     let Some(u) = app.try_state::<Updates>() else {
         return;
     };
-    if let Ok(mut n) = u.noticed.lock() {
-        if !again && n.as_deref() == Some(version) {
-            return;
+    if let Ok(n) = u.noticed.lock()
+        && !again
+        && n.as_deref() == Some(version)
+    {
+        return;
+    }
+    // Dictation has the HUD: the pill waits for `after_event` to find it quiet.
+    if crate::hudwin::busy(app) {
+        if let Ok(mut p) = u.notice_pending.lock() {
+            *p = Some(version.to_string());
         }
+        return;
+    }
+    if let Ok(mut n) = u.noticed.lock() {
         *n = Some(version.to_string());
     }
     crate::hudwin::notice(app, crate::hud::update_ready(version));
 }
 
-/// "Restart to update": installs now, or when the running dictation ends.
+/// "Restart to update": installs once dictation has been quiet for `SETTLE` (at once when it already has):
+/// never during a recording or while a text is on its way, and never between a text's event and its history
+/// line (dictation sends the event first, `dictate::transcribe`; the install ends the app).
 pub fn install(app: &AppHandle) -> Result<(), String> {
     let Some(u) = app.try_state::<Updates>() else {
         return Err("Updates are off in this window.".into());
@@ -359,49 +415,56 @@ pub fn install(app: &AppHandle) -> Result<(), String> {
     let Some(version) = current(app).ready_version().map(str::to_string) else {
         return Err("No update is ready.".into());
     };
-    if dictation_busy(app) {
-        u.waiting.store(true, Ordering::SeqCst);
-        set_phase(app, Phase::Waiting(version));
+    u.waiting.store(true, Ordering::SeqCst);
+    if u.settling.swap(true, Ordering::SeqCst) {
         return Ok(());
-    }
-    install_ready(app)
-}
-
-/// After each dictation event: an install that waited runs once dictation has been idle for `SETTLE`. Not at
-/// once: dictation sends the text's event before it writes the history line (`dictate::transcribe`), and the
-/// install ends the app.
-pub fn install_if_waiting(app: &AppHandle) {
-    let Some(u) = app.try_state::<Updates>() else {
-        return;
-    };
-    if !u.waiting.load(Ordering::SeqCst)
-        || dictation_busy(app)
-        || u.settling.swap(true, Ordering::SeqCst)
-    {
-        return;
     }
     let app = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(SETTLE);
-        let Some(u) = app.try_state::<Updates>() else {
+        let mut told = false;
+        loop {
+            let Some(u) = app.try_state::<Updates>() else {
+                return;
+            };
+            let quiet = u.last_event.lock().map(|t| t.elapsed()).unwrap_or(SETTLE);
+            if crate::hudwin::busy(&app) || quiet < SETTLE {
+                if !told {
+                    set_phase(&app, Phase::Waiting(version.clone()));
+                    told = true;
+                }
+                std::thread::sleep(SETTLE.saturating_sub(quiet).max(Duration::from_millis(250)));
+                continue;
+            }
+            u.settling.store(false, Ordering::SeqCst);
+            if u.waiting.swap(false, Ordering::SeqCst)
+                && let Err(e) = install_ready(&app)
+            {
+                eprintln!("update: {e}");
+            }
             return;
-        };
-        u.settling.store(false, Ordering::SeqCst);
-        // A new recording started meanwhile: the next event after it tries again.
-        if dictation_busy(&app) || !u.waiting.swap(false, Ordering::SeqCst) {
-            return;
-        }
-        if let Err(e) = install_ready(&app) {
-            eprintln!("update: {e}");
         }
     });
+    Ok(())
 }
 
-/// A recording runs or its text is on its way.
-fn dictation_busy(app: &AppHandle) -> bool {
-    app.try_state::<Tray>()
-        .and_then(|t| t.status.lock().ok().map(|s| s.busy()))
-        .unwrap_or(false)
+/// After each dictation event: notes when dictation was last active (an install waits for quiet), and shows
+/// an "Update ready" pill that had to wait.
+pub fn after_event(app: &AppHandle) {
+    let Some(u) = app.try_state::<Updates>() else {
+        return;
+    };
+    if let Ok(mut t) = u.last_event.lock() {
+        *t = Instant::now();
+    }
+    if crate::hudwin::busy(app) {
+        return;
+    }
+    let pending = u.notice_pending.lock().ok().and_then(|mut p| p.take());
+    if let Some(v) = pending
+        && current(app).ready_version() == Some(v.as_str())
+    {
+        notice_ready(app, &v, false);
+    }
 }
 
 fn install_ready(app: &AppHandle) -> Result<(), String> {
@@ -411,7 +474,13 @@ fn install_ready(app: &AppHandle) -> Result<(), String> {
     let result = match u.ready.lock() {
         // Verifies the bytes again, starts the installer and exits the app (it never returns on success).
         Ok(r) => match r.as_ref() {
-            Some((update, setup)) => update.install(setup).map_err(|e| e.to_string()),
+            Some((update, setup)) => {
+                // If this installer fails after the app has exited, the next start does not run it again.
+                if let Some(cache) = &u.cache {
+                    cache.begin_attempt();
+                }
+                update.install(setup).map_err(|e| e.to_string())
+            }
             None => Err("No update is ready.".into()),
         },
         Err(_) => Err("No update is ready.".into()),
@@ -518,6 +587,9 @@ mod tests {
         std::fs::remove_file(cache.dir().join(CACHE_RELEASE)).unwrap();
         assert!(cache.load().is_none());
         cache.save(&release, b"MZ").unwrap();
+        // One install attempt per download: a second start does not run a failed installer again.
+        assert!(cache.begin_attempt());
+        assert!(!cache.begin_attempt());
         cache.clear();
         assert!(cache.load().is_none());
         assert!(!cache.dir().exists());

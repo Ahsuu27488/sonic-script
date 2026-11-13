@@ -44,12 +44,15 @@ checked, after a live paste of the whole format prompt.
   `releases/latest/download/latest.json` 15 s after start and every 6 h, downloads quietly, verifies the
   signature (public key in `tauri.conf.json`, version-bound), then shows "Update ready" (tray item "Restart to
   update (x.y.z)", tooltip, HUD pill with a button, Settings → About "Updates"); one click installs (passive NSIS
-  `/UPDATE`) and restarts; not clicked, it installs at the next start; a click during dictation waits until it
-  has been idle 3 s. Checked 2026-11-13 on the owner's PC with signed test builds pointed at a local server
+  `/UPDATE`) and restarts; not clicked, it installs at the next start; an install waits until dictation (every
+  clip in flight) has been quiet for 3 s; an install that did not finish is not re-run at the next start; off in
+  debug builds. Checked 2026-11-13 on the owner's PC with signed test builds pointed at a local server
   (`http://127.0.0.1:8765`): 0.2.0 installed → found 0.2.1, downloaded, Settings showed "Version 0.2.1 is ready"
   and the button; its click installed 0.2.1 in ~4 s and the app came back as 0.2.1; config.toml and words.txt
   unchanged (same SHA-1), 119 history lines kept, Run value and Start menu shortcut kept, the download cache
-  removed. Not clicked: quit and start again installed 0.2.1 from the cache with no network request. Refused (no
+  removed. Not clicked: quit and start again installed 0.2.1 from the cache with no network request. After the
+  review fixes both paths were run again (click: installed in ~6 s; next start: installed), and a start that
+  found a failed attempt's marker ran 0.2.0 normally and dropped the cache. Refused (no
   install, no cache, Settings says why): a tampered installer ("The signature verification failed"), one signed
   with another key ("…created with a different key…"), a tampered cached installer at start. Afterwards the test
   copy was uninstalled (PC as before). Not checked: the HUD pill and the tray menu on screen (screen control was

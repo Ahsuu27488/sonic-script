@@ -42,8 +42,8 @@ clicked. Settings, keys, history and "Start with Windows" are kept. A recording 
     against the signature and the version again); not newer any more, or a bad file: the cache is deleted.
   - a thread: check 15 s after start, then every 6 hours; a manual check on request. An update found is
     downloaded (verified by the plugin), saved to the cache, then shown as ready.
-  - `install(app)`: when dictation is busy, waits for it to end (`TraySink` calls `install_if_waiting` after
-    each event); otherwise `Update::install` (the plugin starts the installer and exits the app).
+  - `install(app)`: a thread waits until dictation is quiet (no recording, no clip in flight, no event for
+    3 s), then `Update::install` (the plugin starts the installer and exits the app).
 - Tray: one menu item "Check for updates" whose label follows the phase ("Checking for updates…",
   "Downloading update 0.2.1…", "Restart to update (0.2.1)"); the tooltip gets "Update ready" while ready.
 - HUD: once per ready version, when idle, a pill "Update 0.2.1 ready" with a "Restart to update" button
@@ -76,7 +76,7 @@ Code signing of the installer (M4), release notes UI, a beta channel, delta upda
 3. A tampered installer (one byte changed) and an unsigned one (signature from another key) are refused: no
    install, the cache is not kept, the Settings line says why.
 4. Not interrupting: an install requested while the tray says Recording / Working waits for the end (unit test
-   of `busy` plus the `install_if_waiting` path).
+   of `Hud::busy` with two clips in flight, and the quiet wait).
 
 ## Risks and rollback
 

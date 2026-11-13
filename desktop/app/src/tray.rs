@@ -57,11 +57,6 @@ impl Status {
         }
     }
 
-    /// A recording runs or its text is on its way: an update must not cut it (D-053).
-    pub fn busy(&self) -> bool {
-        matches!(self.state, State::Recording | State::Working)
-    }
-
     /// The state to go back to after a recording.
     fn rest(&self) -> State {
         if self.problem.is_some() {
@@ -381,29 +376,6 @@ mod tests {
         assert_eq!(s.headline(), "Paused");
         s.state = State::Recording;
         assert_eq!(s.shown(), State::Recording);
-    }
-
-    #[test]
-    fn busy_is_a_recording_or_an_answer_on_its_way() {
-        let mut s = ready();
-        assert!(!s.busy());
-        apply(
-            &mut s,
-            &Event::Listening {
-                device: "Mic".into(),
-                rate: 48000,
-                mic_ms: 2,
-                prepared: true,
-            },
-        );
-        assert!(s.busy());
-        apply(&mut s, &Event::Processing);
-        assert!(s.busy());
-        apply(&mut s, &Event::NoSpeech { seconds: 1.0 });
-        assert!(!s.busy());
-        // Paused is not busy: an update may install.
-        s.paused = true;
-        assert!(!s.busy());
     }
 
     #[test]
